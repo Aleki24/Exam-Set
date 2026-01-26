@@ -2,8 +2,11 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
     reactStrictMode: true,
+    serverExternalPackages: ['puppeteer', '@sparticuz/chromium', 'pdf-parse', 'pdfjs-dist'],
     experimental: {
-        serverComponentsExternalPackages: ['puppeteer', '@sparticuz/chromium'],
+        serverActions: {
+            bodySizeLimit: '50mb',
+        },
     },
 };
 

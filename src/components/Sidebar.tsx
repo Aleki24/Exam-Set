@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ViewState, ExamPaper } from '@/types';
+import { createClient } from '@/utils/supabase/client';
 
 interface SidebarProps {
     currentView: ViewState;
@@ -12,9 +14,60 @@ interface SidebarProps {
     recentExams?: ExamPaper[];
 }
 
+interface UserData {
+    email?: string;
+    full_name?: string;
+    avatar_url?: string;
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose }) => {
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const router = useRouter();
+    const [user, setUser] = useState<UserData | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
+
+    // Fetch user on mount
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const supabase = createClient();
+                const { data: { user: authUser } } = await supabase.auth.getUser();
+
+                if (authUser) {
+                    setUser({
+                        email: authUser.email,
+                        full_name: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
+                        avatar_url: authUser.user_metadata?.avatar_url,
+                    });
+                } else {
+                    setUser(null);
+                }
+            } catch (error) {
+                console.error('Error fetching user:', error);
+                setUser(null);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchUser();
+
+        // Listen for auth changes
+        const supabase = createClient();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (session?.user) {
+                setUser({
+                    email: session.user.email,
+                    full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name,
+                    avatar_url: session.user.user_metadata?.avatar_url,
+                });
+            } else {
+                setUser(null);
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     const navItems = [
         {
@@ -48,10 +101,30 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose
         setShowAccountMenu(!showAccountMenu);
     };
 
-    const handleLoginLogout = () => {
-        setIsLoggedIn(!isLoggedIn);
+    const handleLogin = () => {
+        router.push('/auth/login');
         setShowAccountMenu(false);
     };
+
+    const handleLogout = async () => {
+        try {
+            const supabase = createClient();
+            await supabase.auth.signOut();
+            router.push('/');
+            router.refresh();
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+        setShowAccountMenu(false);
+    };
+
+    // Get display name and initials
+    const displayName = user?.full_name || user?.email?.split('@')[0] || 'User';
+    const initials = displayName
+        .split(' ')
+        .slice(0, 2)
+        .map(n => n[0]?.toUpperCase())
+        .join('');
 
     return (
         <>
@@ -63,7 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose
             {/* Sidebar Container - Slim fixed width */}
             <div
                 className={`
-                    fixed inset-y-0 left-0 z-50 w-[72px] bg-card flex flex-col items-center transition-transform duration-300 ease-in-out border-r border-border
+                    fixed inset-y-0 left-0 z-50 w-[72px] glass-sidebar flex flex-col items-center transition-transform duration-300 ease-in-out
                     lg:relative lg:translate-x-0 
                     ${isOpen ? 'translate-x-0' : '-translate-x-full'}
                 `}
@@ -95,48 +168,62 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose
                     ))}
                 </nav>
 
-                {/* Bottom Section - Notification & User Profile */}
+                {/* Bottom Section - User Profile */}
                 <div className="pb-4 px-2 flex flex-col items-center gap-3">
-                    {/* Notification */}
-                    <button className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                    </button>
-
                     {/* User Avatar with Dropdown */}
                     <div className="relative">
                         <button
                             onClick={handleAccountClick}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold transition-all shadow-sm ${isLoggedIn ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                            disabled={isLoading}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold transition-all shadow-sm ${user
+                                ? 'bg-primary text-primary-foreground hover:opacity-90'
+                                : 'bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent'
+                                }`}
                         >
-                            {isLoggedIn ? 'HA' : (
+                            {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : user?.avatar_url ? (
+                                <img src={user.avatar_url} alt={displayName} className="w-full h-full rounded-full object-cover" />
+                            ) : user ? (
+                                initials
+                            ) : (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                             )}
                         </button>
 
                         {/* Account Dropdown */}
                         {showAccountMenu && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-card border border-border rounded-xl shadow-lg overflow-hidden z-50">
-                                {isLoggedIn ? (
+                            <div className="absolute left-full bottom-0 ml-2 w-44 bg-card border border-border rounded-xl shadow-lg overflow-hidden z-50">
+                                {user ? (
                                     <>
                                         <div className="px-3 py-2 border-b border-border">
-                                            <p className="text-xs font-bold text-foreground">Haris Ahmed</p>
-                                            <p className="text-[10px] text-muted-foreground">Admin</p>
+                                            <p className="text-xs font-bold text-foreground truncate">{displayName}</p>
+                                            {user.email && (
+                                                <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                                            )}
                                         </div>
+                                        <a
+                                            href="/admin"
+                                            className="w-full px-3 py-2 text-left text-xs text-foreground hover:bg-accent transition-colors flex items-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                            Admin Panel
+                                        </a>
                                         <button
-                                            onClick={handleLoginLogout}
+                                            onClick={handleLogout}
                                             className="w-full px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-2"
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                                            Logout
+                                            Sign Out
                                         </button>
                                     </>
                                 ) : (
                                     <button
-                                        onClick={handleLoginLogout}
+                                        onClick={handleLogin}
                                         className="w-full px-3 py-2.5 text-left text-xs text-foreground hover:bg-accent transition-colors flex items-center gap-2"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                                        Login
+                                        Sign In
                                     </button>
                                 )}
                             </div>
@@ -154,4 +241,3 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose
 };
 
 export default Sidebar;
-

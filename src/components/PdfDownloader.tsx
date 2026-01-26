@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
 
@@ -8,13 +9,16 @@ interface PdfDownloaderProps {
     filename?: string;
     children: React.ReactNode;
     className?: string;
+    // Optional callback to save exam after PDF is generated
+    onPdfGenerated?: (pdfBlob: Blob) => Promise<void>;
 }
 
 export default function PdfDownloader({
     elementId,
     filename = 'document.pdf',
     children,
-    className = ''
+    className = '',
+    onPdfGenerated
 }: PdfDownloaderProps) {
     const [loading, setLoading] = useState(false);
 
@@ -23,7 +27,7 @@ export default function PdfDownloader({
 
         const element = elementId ? document.getElementById(elementId) : null;
         if (!element) {
-            alert('Content not found. Please ensure questions are added.');
+            toast.error('Content not found. Please ensure questions are added.');
             return;
         }
 
@@ -130,12 +134,27 @@ export default function PdfDownloader({
                 heightLeft -= pdfHeight;
             }
 
+            // Get PDF as blob for potential upload
+            const pdfBlob = pdf.output('blob');
+
+            // Save locally
             pdf.save(filename);
+
+            // Call optional callback to save to database/R2
+            if (onPdfGenerated) {
+                try {
+                    await onPdfGenerated(pdfBlob);
+                } catch (uploadError) {
+                    console.error('Failed to save exam to database:', uploadError);
+                    // Don't alert - PDF was still generated successfully
+                }
+            }
+
 
         } catch (error: any) {
             console.error('PDF generation detailed error:', error);
             // Show more detailed error to user
-            alert(`PDF generation failed: ${error.message || 'Unknown error'}`);
+            toast.error(`PDF generation failed: ${error.message || 'Unknown error'}`);
         } finally {
             setLoading(false);
         }

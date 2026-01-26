@@ -104,19 +104,30 @@ const QuestionCreator: React.FC<QuestionCreatorProps> = ({ onSave, onCancel, ini
             {activeTab === 'manual' ? (
                 <div className="p-6 space-y-6">
                     {/* Type Selector */}
-                    <div className="bg-secondary/50 border border-border rounded-xl flex flex-wrap gap-1 p-2">
-                        {(['Multiple Choice', 'Structured', 'Essay'] as const).map(type => (
-                            <button
-                                key={type}
-                                onClick={() => setDraft({ ...draft, type })}
-                                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${draft.type === type
-                                    ? 'bg-primary text-primary-foreground shadow-md'
-                                    : 'text-muted-foreground hover:bg-card hover:text-primary'
-                                    }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-muted-foreground px-1 tracking-widest">Question Type</label>
+                        <select
+                            value={draft.type}
+                            onChange={e => setDraft({ ...draft, type: e.target.value as any })}
+                            className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer"
+                        >
+                            <optgroup label="Objective">
+                                <option value="Multiple Choice">Multiple Choice</option>
+                                <option value="True/False">True/False</option>
+                                <option value="Matching">Matching</option>
+                                <option value="Fill-in-the-blank">Gap Fill (Fill-in-the-blank)</option>
+                                <option value="Numeric">Numeric</option>
+                            </optgroup>
+                            <optgroup label="Constructed">
+                                <option value="Structured">Structured (Space)</option>
+                                <option value="Short Answer">Short Answer</option>
+                                <option value="Essay">Essay (Long Lines)</option>
+                            </optgroup>
+                            <optgroup label="Performance">
+                                <option value="Practical">Practical Assessment</option>
+                                <option value="Oral">Oral Assessment</option>
+                            </optgroup>
+                        </select>
                     </div>
 
                     {/* Question Content */}
@@ -161,7 +172,7 @@ const QuestionCreator: React.FC<QuestionCreatorProps> = ({ onSave, onCancel, ini
                         <div className="space-y-4 bg-secondary/30 p-5 rounded-2xl border border-border">
                             <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Answer Options</label>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {draft.options?.map((opt, idx) => (
+                                {(draft.options && draft.options.length > 0 ? draft.options : ['', '', '', '']).map((opt, idx) => (
                                     <div key={idx} className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-lg bg-secondary border border-border text-primary flex items-center justify-center text-xs font-black shadow-sm">
                                             {String.fromCharCode(65 + idx)}
@@ -169,7 +180,7 @@ const QuestionCreator: React.FC<QuestionCreatorProps> = ({ onSave, onCancel, ini
                                         <input
                                             value={opt}
                                             onChange={e => {
-                                                const newOpts = [...(draft.options || [])];
+                                                const newOpts = [...(draft.options || ['', '', '', ''])];
                                                 newOpts[idx] = e.target.value;
                                                 setDraft({ ...draft, options: newOpts });
                                             }}
@@ -179,6 +190,99 @@ const QuestionCreator: React.FC<QuestionCreatorProps> = ({ onSave, onCancel, ini
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Specialized fields for True/False */}
+                    {draft.type === 'True/False' && (
+                        <div className="p-5 bg-secondary/30 rounded-2xl border border-border">
+                            <label className="block text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-3">Correct Answer</label>
+                            <div className="flex gap-4">
+                                {(['True', 'False'] as const).map((choice) => (
+                                    <button
+                                        key={choice}
+                                        onClick={() => {
+                                            setDraft({
+                                                ...draft,
+                                                markingScheme: `Correct Answer: ${choice}`
+                                            });
+                                        }}
+                                        className={`flex-1 py-3 rounded-xl border text-xs font-black uppercase tracking-widest transition-all ${draft.markingScheme?.includes(choice)
+                                                ? 'bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/20'
+                                                : 'bg-card border-border text-muted-foreground hover:border-primary hover:text-primary'
+                                            }`}
+                                    >
+                                        {choice}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Specialized fields for Matching */}
+                    {draft.type === 'Matching' && (
+                        <div className="space-y-4 bg-secondary/30 p-5 rounded-2xl border border-border">
+                            <div className="flex justify-between items-center">
+                                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Matching Pairs</label>
+                                <button
+                                    onClick={() => setDraft({
+                                        ...draft,
+                                        matchingPairs: [...(draft.matchingPairs || []), { left: '', right: '' }]
+                                    })}
+                                    className="text-primary text-[10px] font-black uppercase hover:underline"
+                                >
+                                    + Add Pair
+                                </button>
+                            </div>
+                            <div className="space-y-3">
+                                {(draft.matchingPairs && draft.matchingPairs.length > 0 ? draft.matchingPairs : [{ left: '', right: '' }]).map((pair, idx) => (
+                                    <div key={idx} className="flex items-center gap-3">
+                                        <input
+                                            value={pair.left}
+                                            onChange={e => {
+                                                const newPairs = [...(draft.matchingPairs || [])];
+                                                newPairs[idx] = { ...newPairs[idx], left: e.target.value };
+                                                setDraft({ ...draft, matchingPairs: newPairs });
+                                            }}
+                                            placeholder="Left side"
+                                            className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-card text-xs font-bold focus:border-primary outline-none shadow-sm"
+                                        />
+                                        <div className="text-muted-foreground">→</div>
+                                        <input
+                                            value={pair.right}
+                                            onChange={e => {
+                                                const newPairs = [...(draft.matchingPairs || [])];
+                                                newPairs[idx] = { ...newPairs[idx], right: e.target.value };
+                                                setDraft({ ...draft, matchingPairs: newPairs });
+                                            }}
+                                            placeholder="Right side"
+                                            className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-card text-xs font-bold focus:border-primary outline-none shadow-sm"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const newPairs = (draft.matchingPairs || []).filter((_, i) => i !== idx);
+                                                setDraft({ ...draft, matchingPairs: newPairs });
+                                            }}
+                                            className="text-rose-500 hover:text-rose-700"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Specialized fields for Numeric */}
+                    {draft.type === 'Numeric' && (
+                        <div className="p-5 bg-secondary/30 rounded-2xl border border-border">
+                            <label className="block text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-2">Answer Unit (optional)</label>
+                            <input
+                                value={draft.unit || ''}
+                                onChange={e => setDraft({ ...draft, unit: e.target.value })}
+                                placeholder="e.g. cm, kg, m/s²"
+                                className="w-full px-4 py-2.5 rounded-xl border border-border bg-card text-xs font-bold focus:border-primary outline-none shadow-sm"
+                            />
                         </div>
                     )}
 

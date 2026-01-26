@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Question, Difficulty, BloomsLevel } from '@/types';
-
+import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { Question, Difficulty, DBCurriculum, DBGrade, DBSubject } from '@/types';
+import { getCurriculums, getSubjects, getGrades } from '@/services/questionService';
 import { generateQuestionsByFilter, generateQuestionsFromMaterial } from '@/services/aiService';
 
 interface AutoGenerateModalProps {
@@ -10,7 +11,7 @@ interface AutoGenerateModalProps {
     onClose: () => void;
     onGenerated: (questions: Question[]) => void;
     availableTopics: string[];
-    availableSubjects: string[];
+    availableSubjects: string[]; // Keeping primarily for fallback or mock compatibility
 }
 
 interface GenerationParams {
@@ -19,13 +20,10 @@ interface GenerationParams {
     mediumCount: number;
     hardCount: number;
     topics: string[];
-    subject: string;
-    curriculum: string;
-    grade: string;
+    subjectId: string;
+    curriculumId: string;
+    gradeId: string;
 }
-
-const CURRICULUMS = ['IGCSE', 'CBC', 'Pearson', 'Cambridge', 'National', 'IB'];
-const GRADES = ['Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12', 'Year 9', 'Year 10', 'Year 11', 'Year 12'];
 
 const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
     isOpen,
@@ -40,17 +38,62 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
         mediumCount: 4,
         hardCount: 2,
         topics: [],
-        subject: 'Mathematics',
-        curriculum: 'IGCSE',
-        grade: 'Grade 10',
+        subjectId: '',
+        curriculumId: '',
+        gradeId: '',
     });
+
+    // Database Lookup States
+    const [dbCurriculums, setDbCurriculums] = useState<DBCurriculum[]>([]);
+    const [dbSubjects, setDbSubjects] = useState<DBSubject[]>([]);
+    const [dbGrades, setDbGrades] = useState<DBGrade[]>([]);
 
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
     const [step, setStep] = useState<'config' | 'preview'>('config');
-    const [mode, setMode] = useState<'filters' | 'text'>('filters');
+    const [mode, setMode] = useState<'filters' | 'text' | 'url'>('filters');
     const [materialText, setMaterialText] = useState('');
+    const [sourceUrl, setSourceUrl] = useState('');
     const [textCount, setTextCount] = useState(10);
+
+    // Initial Data Fetch
+    useEffect(() => {
+        if (isOpen) {
+            const fetchData = async () => {
+                const [curriculums, subjects] = await Promise.all([
+                    getCurriculums(),
+                    getSubjects()
+                ]);
+                setDbCurriculums(curriculums);
+                setDbSubjects(subjects);
+
+                // Set defaults if data exists and not already set
+                if (curriculums.length > 0 && !params.curriculumId) {
+                    setParams(p => ({ ...p, curriculumId: curriculums[0].id }));
+                }
+                if (subjects.length > 0 && !params.subjectId) {
+                    setParams(p => ({ ...p, subjectId: subjects[0].id }));
+                }
+            };
+            fetchData();
+        }
+    }, [isOpen]);
+
+    // Fetch grades when curriculum changes
+    useEffect(() => {
+        if (params.curriculumId) {
+            getGrades(params.curriculumId).then(grades => {
+                setDbGrades(grades);
+                if (grades.length > 0) {
+                    setParams(p => ({ ...p, gradeId: grades[0].id }));
+                } else {
+                    setParams(p => ({ ...p, gradeId: '' }));
+                }
+            });
+        } else {
+            setDbGrades([]);
+        }
+    }, [params.curriculumId]);
 
     const updateDifficultyCount = (difficulty: 'easyCount' | 'mediumCount' | 'hardCount', value: number) => {
         const newValue = Math.max(0, value);
@@ -66,14 +109,27 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
         try {
             let allQuestions: Question[] = [];
 
+            // Get names for prompting (fallback to empty string if not found)
+            const curriculumName = dbCurriculums.find(c => c.id === params.curriculumId)?.name || 'General';
+            const subjectName = dbSubjects.find(s => s.id === params.subjectId)?.name || 'General';
+            const gradeName = dbGrades.find(g => g.id === params.gradeId)?.name || 'Any';
+
             if (mode === 'filters') {
+                const commonFilter = {
+                    curriculum: curriculumName,
+                    subject: subjectName,
+                    term: 'Mid Term 1', // Default, could be made selectable
+                    grade: gradeName,
+                    topic: params.topics.length > 0 ? params.topics[0] : 'General',
+                    // Pass IDs for database saving
+                    curriculum_id: params.curriculumId,
+                    subject_id: params.subjectId,
+                    grade_id: params.gradeId,
+                };
+
                 if (params.easyCount > 0) {
                     const easyQuestions = await generateQuestionsByFilter({
-                        curriculum: params.curriculum,
-                        subject: params.subject,
-                        term: 'All',
-                        grade: params.grade,
-                        topic: params.topics.length > 0 ? params.topics[0] : 'General',
+                        ...commonFilter,
                         blooms: 'Knowledge',
                     }, params.easyCount);
                     allQuestions.push(...easyQuestions.map(q => ({ ...q, difficulty: 'Easy' as Difficulty })));
@@ -81,11 +137,7 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
 
                 if (params.mediumCount > 0) {
                     const mediumQuestions = await generateQuestionsByFilter({
-                        curriculum: params.curriculum,
-                        subject: params.subject,
-                        term: 'All',
-                        grade: params.grade,
-                        topic: params.topics.length > 0 ? params.topics[0] : 'General',
+                        ...commonFilter,
                         blooms: 'Application',
                     }, params.mediumCount);
                     allQuestions.push(...mediumQuestions.map(q => ({ ...q, difficulty: 'Medium' as Difficulty })));
@@ -93,18 +145,18 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
 
                 if (params.hardCount > 0) {
                     const hardQuestions = await generateQuestionsByFilter({
-                        curriculum: params.curriculum,
-                        subject: params.subject,
-                        term: 'All',
-                        grade: params.grade,
-                        topic: params.topics.length > 0 ? params.topics[0] : 'General',
+                        ...commonFilter,
                         blooms: 'Analysis',
                     }, params.hardCount);
                     allQuestions.push(...hardQuestions.map(q => ({ ...q, difficulty: 'Difficult' as Difficulty })));
                 }
-            } else {
+            } else if (mode === 'text') {
                 // Text Mode
                 const result = await generateQuestionsFromMaterial(materialText, [], textCount);
+                allQuestions = result.questions;
+            } else {
+                // URL Mode
+                const result = await generateQuestionsFromMaterial('', [], textCount, sourceUrl);
                 allQuestions = result.questions;
             }
 
@@ -112,7 +164,7 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
             setStep('preview');
         } catch (error) {
             console.error('Generation failed:', error);
-            alert('Question generation failed. Please try again.');
+            toast.error('Question generation failed. Please try again.');
         } finally {
             setIsGenerating(false);
         }
@@ -169,6 +221,12 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
                             >
                                 From Text
                             </button>
+                            <button
+                                onClick={() => setMode('url')}
+                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${mode === 'url' ? 'bg-background text-primary shadow-sm' : 'text-primary-foreground/60 hover:bg-background/10'}`}
+                            >
+                                From URL
+                            </button>
                         </div>
                     )}
                 </div>
@@ -184,21 +242,23 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
                                         <div>
                                             <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Subject</label>
                                             <select
-                                                value={params.subject}
-                                                onChange={e => setParams(p => ({ ...p, subject: e.target.value }))}
+                                                value={params.subjectId}
+                                                onChange={e => setParams(p => ({ ...p, subjectId: e.target.value }))}
                                                 className="w-full p-3 bg-secondary border border-border rounded-xl text-sm font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none"
                                             >
-                                                {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                                                {dbSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                {dbSubjects.length === 0 && <option value="">Loading subjects...</option>}
                                             </select>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Curriculum</label>
                                             <select
-                                                value={params.curriculum}
-                                                onChange={e => setParams(p => ({ ...p, curriculum: e.target.value }))}
+                                                value={params.curriculumId}
+                                                onChange={e => setParams(p => ({ ...p, curriculumId: e.target.value }))}
                                                 className="w-full p-3 bg-secondary border border-border rounded-xl text-sm font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none"
                                             >
-                                                {CURRICULUMS.map(c => <option key={c} value={c}>{c}</option>)}
+                                                {dbCurriculums.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                {dbCurriculums.length === 0 && <option value="">Loading curriculums...</option>}
                                             </select>
                                         </div>
                                     </div>
@@ -207,11 +267,12 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
                                     <div>
                                         <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Grade / Year</label>
                                         <select
-                                            value={params.grade}
-                                            onChange={e => setParams(p => ({ ...p, grade: e.target.value }))}
+                                            value={params.gradeId}
+                                            onChange={e => setParams(p => ({ ...p, gradeId: e.target.value }))}
                                             className="w-full p-3 bg-secondary border border-border rounded-xl text-sm font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none"
                                         >
-                                            {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                                            {dbGrades.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                            {dbGrades.length === 0 && <option value="">{params.curriculumId ? 'No grades found' : 'Select curriculum first'}</option>}
                                         </select>
                                     </div>
 
@@ -267,7 +328,7 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
                                         </p>
                                     </div>
                                 </>
-                            ) : (
+                            ) : mode === 'text' ? (
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Learning Material (Syllabus, Notes)</label>
@@ -278,6 +339,58 @@ const AutoGenerateModal: React.FC<AutoGenerateModalProps> = ({
                                             className="w-full h-48 p-4 bg-secondary border border-border rounded-xl text-sm font-medium focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none resize-none"
                                         />
                                     </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Number of Questions</label>
+                                        <div className="flex items-center gap-4">
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="30"
+                                                value={textCount}
+                                                onChange={e => setTextCount(Number(e.target.value))}
+                                                className="flex-1 accent-primary"
+                                            />
+                                            <span className="text-xl font-black text-foreground w-8 text-center">{textCount}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Resource URL (e.g. PapaCambridge, Syllabus PDF)</label>
+                                        <div className="relative">
+                                            <input
+                                                type="url"
+                                                value={sourceUrl}
+                                                onChange={e => setSourceUrl(e.target.value)}
+                                                placeholder="https://pastpapers.papacambridge.com/..."
+                                                className="w-full p-4 bg-secondary border border-border rounded-xl text-sm font-medium focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none"
+                                            />
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-primary">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-[10px] text-muted-foreground leading-relaxed">
+                                            Enter a URL to a past paper page, syllabus document, or educational article. Our AI will fetch the content and generate curriculum-aligned questions.
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-primary/5 rounded-2xl p-4 border border-primary/10">
+                                        <h4 className="text-[10px] font-bold uppercase text-primary mb-3">Suggested Sources</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            <a href="https://pastpapers.papacambridge.com/" target="_blank" rel="noreferrer" className="text-[10px] font-medium bg-background border border-border px-3 py-1.5 rounded-lg hover:border-primary transition-colors flex items-center gap-1">
+                                                <span>PapaCambridge</span>
+                                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6m4-3h6m0 0v6m0-6L10 14" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                            </a>
+                                            <a href="https://www.savemyexams.com/igcse/" target="_blank" rel="noreferrer" className="text-[10px] font-medium bg-background border border-border px-3 py-1.5 rounded-lg hover:border-primary transition-colors flex items-center gap-1">
+                                                <span>SaveMyExams</span>
+                                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6m4-3h6m0 0v6m0-6L10 14" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                            </a>
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-2">Number of Questions</label>
                                         <div className="flex items-center gap-4">

@@ -97,6 +97,12 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
                     <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wide bg-primary/10 text-primary">
                         {question.topic}
                     </span>
+                    {/* Sub-parts badge */}
+                    {question.subParts && question.subParts.length > 0 && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wide bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                            {question.subParts.length} parts
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="text-xs font-black text-muted-foreground/50">
@@ -110,9 +116,9 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
 
             {/* Question Body */}
             <div className="flex-1 mb-6">
-                <h3 className="text-foreground text-sm font-semibold leading-relaxed mb-4">
+                <div className="text-foreground text-sm font-semibold leading-relaxed mb-4">
                     <LatexRenderer content={question.text} />
-                </h3>
+                </div>
 
                 {question.graphSvg && (
                     <div className="my-4 p-6 bg-secondary/50 rounded-2xl flex justify-center border border-border" dangerouslySetInnerHTML={{ __html: question.graphSvg }} />

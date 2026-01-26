@@ -99,6 +99,26 @@ export interface CustomField {
     value: string;
 }
 
+// Question sub-part interface for questions with multiple parts (a, b, c, etc.)
+export interface QuestionSubPart {
+    id: string;
+    label: string;       // "a", "b", "c", etc.
+    text: string;        // The sub-part question text (can be HTML/rich text)
+    marks: number;       // Marks for this specific part
+}
+
+export type QuestionType =
+    | 'Multiple Choice'
+    | 'True/False'
+    | 'Matching'
+    | 'Fill-in-the-blank'
+    | 'Numeric'
+    | 'Structured'
+    | 'Short Answer'
+    | 'Essay'
+    | 'Practical'
+    | 'Oral';
+
 export interface Question {
     id: string;
     text: string;
@@ -111,8 +131,14 @@ export interface Question {
     term?: string;
     grade?: string;
     answerSchema?: string;
-    type: 'Multiple Choice' | 'Structured' | 'Essay';
+    type: QuestionType;
     options?: string[];
+    // For Matching questions
+    matchingPairs?: { left: string; right: string }[];
+    // For Numeric / Short Answer
+    unit?: string;
+    expectedLength?: 'lines' | 'words' | 'pages';
+
     markingScheme?: string;
     graphSvg?: string;
     bloomsLevel?: BloomsLevel;
@@ -121,8 +147,12 @@ export interface Question {
     // Media/Image Support
     imagePath?: string;
     imageCaption?: string;
+    // Layout & Spacing
+    customSpacing?: string;
     // Tracking for duplication
     usedInExamIds?: string[];
+    // Sub-parts for questions with multiple labeled parts (a, b, c, etc.)
+    subParts?: QuestionSubPart[];
 }
 
 export interface LayoutConfig {
@@ -155,6 +185,7 @@ export interface ExamMetadata {
     // Version tracking for duplication check
     versionLabel?: string;
     previousVersionId?: string;
+    grade?: string;
 }
 
 export interface ExamPaper {
@@ -165,3 +196,121 @@ export interface ExamPaper {
 
 export type ViewState = 'materials' | 'bank' | 'builder' | 'library';
 export type MobileTab = 'editor' | 'preview' | 'selected';
+
+// ============================================================================
+// DATABASE TYPES
+// ============================================================================
+
+// Term filter type for exams and questions
+export type ExamTerm =
+    | 'opener'
+    | 'mid_term_1'
+    | 'end_term_1'
+    | 'mid_term_2'
+    | 'end_term_2'
+    | 'mid_term_3'
+    | 'end_term_3';
+
+// Display names for terms
+export const EXAM_TERM_LABELS: Record<ExamTerm, string> = {
+    opener: 'Opener',
+    mid_term_1: 'Mid Term 1',
+    end_term_1: 'End of Term 1',
+    mid_term_2: 'Mid Term 2',
+    end_term_2: 'End of Term 2',
+    mid_term_3: 'Mid Term 3',
+    end_term_3: 'End of Term 3'
+};
+
+// Curriculum from database
+export interface DBCurriculum {
+    id: string;
+    name: string;
+    description?: string;
+    country?: string;
+    created_at: string;
+}
+
+// Grade from database
+export interface DBGrade {
+    id: string;
+    curriculum_id: string;
+    name: string;
+    level_order: number;
+    created_at: string;
+}
+
+// Subject from database
+export interface DBSubject {
+    id: string;
+    name: string;
+    description?: string;
+    created_at: string;
+}
+
+// Database question type (extends existing Question with DB fields)
+export interface DBQuestion extends Question {
+    curriculum_id?: string;
+    grade_id?: string;
+    subject_id?: string;
+    is_ai_generated?: boolean;
+    ai_quality_score?: number;
+    usage_count?: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
+// Stored exam type (for dashboard/search)
+export interface StoredExam {
+    id: string;
+    title: string;
+    subject: string;
+    code?: string;
+    curriculum_id?: string;
+    grade_id?: string;
+    subject_id?: string;
+    term?: ExamTerm;
+    total_marks: number;
+    time_limit?: string;
+    institution?: string;
+    exam_board?: string;
+    pdf_storage_key?: string;
+    pdf_url?: string;
+    thumbnail_url?: string;
+    question_ids: string[];
+    question_count: number;
+    is_public: boolean;
+    created_by?: string;
+    created_at: string;
+    updated_at: string;
+    // Joined data for display
+    curriculum_name?: string;
+    grade_name?: string;
+    subject_name?: string;
+}
+
+// Filters for searching questions
+export interface QuestionFilters {
+    curriculum_id?: string;
+    grade_id?: string;
+    subject_id?: string;
+    term?: ExamTerm;
+    topic?: string;
+    difficulty?: Difficulty;
+    type?: QuestionType;
+    blooms_level?: BloomsLevel;
+    search?: string;
+    limit?: number;
+    offset?: number;
+}
+
+// Filters for searching exams
+export interface ExamFilters {
+    curriculum_id?: string;
+    grade_id?: string;
+    subject_id?: string;
+    term?: ExamTerm;
+    search?: string;
+    limit?: number;
+    offset?: number;
+}

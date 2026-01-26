@@ -29,10 +29,9 @@ const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }
         while ((match = latexRegex.exec(remaining)) !== null) {
             // Add text before the match
             if (match.index > lastIndex) {
+                const textSegment = remaining.slice(lastIndex, match.index);
                 parts.push(
-                    <span key={key++}>
-                        {remaining.slice(lastIndex, match.index)}
-                    </span>
+                    <span key={key++} dangerouslySetInnerHTML={{ __html: textSegment }} />
                 );
             }
 
@@ -76,10 +75,9 @@ const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }
 
         // Add remaining text after last match
         if (lastIndex < remaining.length) {
+            const textSegment = remaining.slice(lastIndex);
             parts.push(
-                <span key={key++}>
-                    {remaining.slice(lastIndex)}
-                </span>
+                <span key={key++} dangerouslySetInnerHTML={{ __html: textSegment }} />
             );
         }
 
@@ -90,7 +88,7 @@ const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }
     const hasLatex = /\$/.test(content);
 
     if (!hasLatex) {
-        return <span className={className}>{content}</span>;
+        return <span className={className} dangerouslySetInnerHTML={{ __html: content }} />;
     }
 
     return (
