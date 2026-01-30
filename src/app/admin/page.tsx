@@ -8,91 +8,49 @@ import { createClient } from '@/utils/supabase/client';
 import {
     FileQuestion,
     BookOpen,
-    Users,
-    Settings,
     BarChart3,
-    Database,
     ChevronRight,
     LogOut,
     Loader2,
     ArrowLeft,
-    Plus,
+    Search,
     Tag,
-    FileText
+    FileText,
+    Layers
 } from 'lucide-react';
 
-// Components
-import GridBackground from '@/components/landing/GridBackground';
-import SectionWrapper from '@/components/SectionWrapper';
-
-const adminSections = [
+const adminModules = [
     {
         title: 'Question Bank',
-        description: 'Add, edit, and manage exam questions for all levels.',
+        description: 'Choose the content and composition for your question bank.',
         href: '/admin/questions',
         icon: FileQuestion,
-        color: 'from-blue-500 to-indigo-600',
-        size: 'md:col-span-2'
+        gradient: 'from-[#FF6B35]/20 to-[#FF8C5A]/10',
+        iconBg: 'from-[#FF6B35] to-[#FF8C5A]',
     },
     {
         title: 'Topics & Strands',
-        description: 'Manage subject topics, strands, and themes.',
+        description: 'Manage your data with research-backed topics & strands.',
         href: '/admin/topics',
         icon: Tag,
-        color: 'from-teal-500 to-cyan-600',
-        size: 'md:col-span-1'
+        gradient: 'from-[#00D9FF]/20 to-[#00B8E6]/10',
+        iconBg: 'from-[#00D9FF] to-[#00B8E6]',
     },
     {
-        title: 'Paper Templates',
-        description: 'Create exam paper structures and section rules.',
+        title: 'Exam Builder',
+        description: 'Create your exam for seamless flow and exam builder.',
         href: '/admin/templates',
-        icon: FileText,
-        color: 'from-violet-500 to-purple-600',
-        size: 'md:col-span-1'
+        icon: Layers,
+        gradient: 'from-[#8B5CF6]/20 to-[#A78BFA]/10',
+        iconBg: 'from-[#8B5CF6] to-[#A78BFA]',
     },
     {
         title: 'Analytics',
-        description: 'Usage statistics and reports.',
+        description: 'Manage your analytics and gain insights on performance.',
         href: '/admin/analytics',
         icon: BarChart3,
-        color: 'from-pink-500 to-rose-600',
-        size: 'md:col-span-1',
-        disabled: true,
-    },
-    {
-        title: 'Curriculums',
-        description: 'Manage grade levels.',
-        href: '/admin/curriculums',
-        icon: BookOpen,
-        color: 'from-purple-500 to-fuchsia-600',
-        size: 'md:col-span-1',
-        disabled: true,
-    },
-    {
-        title: 'Users',
-        description: 'Accounts and permissions.',
-        href: '/admin/users',
-        icon: Users,
-        color: 'from-orange-500 to-amber-600',
-        size: 'md:col-span-1',
-        disabled: true,
-    },
-    {
-        title: 'Subjects',
-        description: 'Topics and tagging.',
-        href: '/admin/subjects',
-        icon: Database,
-        color: 'from-emerald-500 to-teal-600',
-        size: 'md:col-span-1',
-        disabled: true,
-    },
-    {
-        title: 'Settings',
-        description: 'System configuration.',
-        href: '/admin/settings',
-        icon: Settings,
-        color: 'from-slate-500 to-slate-700',
-        size: 'md:col-span-1',
+        gradient: 'from-[#EC4899]/20 to-[#F472B6]/10',
+        iconBg: 'from-[#EC4899] to-[#F472B6]',
         disabled: true,
     },
 ];
@@ -102,6 +60,7 @@ export default function AdminPage() {
     const [user, setUser] = useState<any>(null);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         const supabase = createClient();
@@ -121,11 +80,11 @@ export default function AdminPage() {
 
     if (isLoading) {
         return (
-            <div className="h-screen w-full flex items-center justify-center bg-white">
+            <div className="h-screen w-full flex items-center justify-center bg-[#FAFAFA]">
                 <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                    className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"
+                    className="w-8 h-8 border-4 border-[#FF6B35] border-t-transparent rounded-full"
                 />
             </div>
         );
@@ -134,140 +93,212 @@ export default function AdminPage() {
     const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Admin';
 
     return (
-        <div className="relative min-h-screen bg-[#fafafa] selection:bg-blue-500/30 overflow-x-hidden">
-            <GridBackground />
+        <div className="relative min-h-screen bg-[#FAFAFA] overflow-hidden">
+            {/* Animated Atmospheric Gradients */}
+            <div className="fixed inset-0 overflow-hidden pointer-events-none">
+                <motion.div
+                    animate={{
+                        x: [0, 50, 0],
+                        y: [0, 30, 0],
+                        scale: [1, 1.1, 1],
+                    }}
+                    transition={{
+                        duration: 20,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                    }}
+                    className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-gradient-radial from-[#FF6B35]/10 via-[#FF6B35]/5 to-transparent blur-3xl"
+                />
+                <motion.div
+                    animate={{
+                        x: [0, -30, 0],
+                        y: [0, 50, 0],
+                        scale: [1, 1.15, 1],
+                    }}
+                    transition={{
+                        duration: 25,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: 5,
+                    }}
+                    className="absolute -bottom-40 -right-40 w-[700px] h-[700px] rounded-full bg-gradient-radial from-[#00D9FF]/10 via-[#00D9FF]/5 to-transparent blur-3xl"
+                />
+                <motion.div
+                    animate={{
+                        x: [0, 40, 0],
+                        y: [0, -40, 0],
+                    }}
+                    transition={{
+                        duration: 18,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: 2,
+                    }}
+                    className="absolute top-1/3 right-1/4 w-[400px] h-[400px] rounded-full bg-gradient-radial from-[#8B5CF6]/8 via-transparent to-transparent blur-3xl"
+                />
+            </div>
 
-            {/* Header / Navbar */}
-            <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-white/60 backdrop-blur-xl">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            {/* Glassmorphism Header */}
+            <header className="sticky top-0 z-50 w-full bg-[#FFFFFF80] backdrop-blur-[20px] border-b border-gray-200/50">
+                <div className="max-w-7xl mx-auto px-6 lg:px-8 h-20 flex items-center justify-between">
+                    {/* Left: Back + Title */}
                     <div className="flex items-center gap-4">
                         <Link
                             href="/app"
-                            className="p-2 hover:bg-black/5 rounded-full transition-colors group"
+                            className="p-2.5 hover:bg-gray-100 rounded-full transition-colors group"
                         >
-                            <ArrowLeft className="w-5 h-5 text-muted-foreground group-hover:text-foreground" />
+                            <ArrowLeft className="w-5 h-5 text-gray-500 group-hover:text-gray-900 transition-colors" />
                         </Link>
-                        <div>
-                            <h1 className="text-xl font-bold text-foreground tracking-tight">Admin Console</h1>
-                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">System Overview</p>
+                        <span className="text-lg font-semibold text-gray-900 tracking-tight">Admin Console</span>
+                    </div>
+
+                    {/* Center: Search Bar */}
+                    <div className="hidden md:flex flex-1 max-w-md mx-8">
+                        <div className="relative w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 bg-gray-100/80 border-0 rounded-full text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/30 transition-all"
+                            />
                         </div>
                     </div>
 
+                    {/* Right: Profile + Sign Out */}
                     <div className="flex items-center gap-4">
-                        <div className="hidden md:flex items-center gap-3 pr-4 border-r border-border/40">
-                            <div className="text-right">
-                                <p className="text-sm font-semibold text-foreground leading-none">{displayName}</p>
-                                <p className="text-xs text-muted-foreground mt-1">Super Admin</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-purple-600 flex items-center justify-center text-primary-foreground font-bold shadow-md shadow-primary/20">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FF6B35] to-[#EC4899] flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#FF6B35]/20">
                                 {displayName[0].toUpperCase()}
+                            </div>
+                            <div className="hidden sm:block text-right">
+                                <p className="text-sm font-semibold text-gray-900 leading-none">{displayName}</p>
+                                <p className="text-xs text-[#FF6B35] font-medium mt-0.5">Super Admin</p>
                             </div>
                         </div>
 
-                        <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
+                        <button
                             onClick={handleLogout}
                             disabled={isLoggingOut}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-primary-foreground bg-primary hover:opacity-90 rounded-full transition-all disabled:opacity-50 shadow-lg shadow-primary/20"
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-full transition-all disabled:opacity-50 bg-white/50 hover:bg-white"
                         >
                             {isLoggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
-                            <span>Sign Out</span>
-                        </motion.button>
+                            <span className="hidden sm:inline">Sign Out</span>
+                        </button>
                     </div>
                 </div>
             </header>
 
-            <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                {/* Welcome Heading */}
-                <SectionWrapper>
-                    <div className="mb-12">
-                        <h2 className="text-3xl md:text-4xl font-black text-foreground tracking-tight gradient-text inline-block">
-                            Welcome back, {displayName.split(' ')[0]}
-                        </h2>
-                        <p className="text-muted-foreground mt-2 text-lg font-medium">What would you like to manage today?</p>
-                    </div>
-                </SectionWrapper>
+            {/* Main Content */}
+            <main className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 py-16">
+                {/* Hero Section */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="mb-16"
+                >
+                    <h1
+                        className="text-4xl md:text-5xl font-black tracking-tight"
+                        style={{
+                            fontFamily: "'Archivo Black', sans-serif",
+                            background: 'linear-gradient(135deg, #1F2937 0%, #FF6B35 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                        }}
+                    >
+                        Welcome back, {displayName.split(' ')[0]}
+                    </h1>
+                    <p
+                        className="text-gray-500 mt-3 text-lg"
+                        style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 400 }}
+                    >
+                        What would you like to manage today?
+                    </p>
+                </motion.div>
 
-                {/* Bento Grid Sections */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Module Grid - 4 columns on desktop */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <AnimatePresence>
-                        {adminSections.map((section, index) => (
-                            <SectionWrapper key={section.title} delay={index * 0.1} className={section.size}>
+                        {adminModules.map((module, index) => (
+                            <motion.div
+                                key={module.title}
+                                initial={{ opacity: 0, y: 30 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.4, delay: index * 0.1 }}
+                            >
                                 <Link
-                                    href={section.disabled ? '#' : section.href}
-                                    onClick={(e) => section.disabled && e.preventDefault()}
-                                    className={`group relative block h-full p-8 glass-card transition-all overflow-hidden ${section.disabled
-                                        ? 'cursor-not-allowed opacity-60'
-                                        : 'hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 hover:scale-[1.01]'
+                                    href={module.disabled ? '#' : module.href}
+                                    onClick={(e) => module.disabled && e.preventDefault()}
+                                    className={`group relative block h-full bg-white rounded-xl p-5 transition-all duration-300 ${module.disabled
+                                            ? 'cursor-not-allowed opacity-60'
+                                            : 'hover:-translate-y-1.5 hover:shadow-xl'
                                         }`}
+                                    style={{
+                                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                                        borderRadius: '12px',
+                                    }}
                                 >
-                                    <div className="relative z-10 flex flex-col h-full">
-                                        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${section.color} flex items-center justify-center text-white mb-6 shadow-lg shadow-inherit opacity-90 group-hover:opacity-100 transition-opacity`}>
-                                            <section.icon className="w-6 h-6" />
-                                        </div>
-
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="text-xl font-bold text-foreground">{section.title}</h3>
-                                            {!section.disabled && (
-                                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                                            )}
-                                        </div>
-
-                                        <p className="text-muted-foreground leading-relaxed font-medium text-sm">
-                                            {section.description}
-                                        </p>
-
-                                        {section.disabled && (
-                                            <div className="mt-4">
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-secondary text-secondary-foreground border border-border">
-                                                    Coming Soon
-                                                </span>
-                                            </div>
-                                        )}
+                                    {/* Icon Container */}
+                                    <div
+                                        className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${module.iconBg} flex items-center justify-center text-white mb-5 transition-transform duration-300 ${!module.disabled ? 'group-hover:rotate-[15deg]' : ''
+                                            }`}
+                                        style={{
+                                            boxShadow: `0 8px 20px -4px ${module.iconBg.includes('FF6B35') ? 'rgba(255,107,53,0.3)' :
+                                                module.iconBg.includes('00D9FF') ? 'rgba(0,217,255,0.3)' :
+                                                    module.iconBg.includes('8B5CF6') ? 'rgba(139,92,246,0.3)' :
+                                                        'rgba(236,72,153,0.3)'}`
+                                        }}
+                                    >
+                                        <module.icon className="w-7 h-7" />
                                     </div>
 
-                                    {/* Hover background effect */}
-                                    <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    {/* Title */}
+                                    <h3
+                                        className="text-lg font-bold text-gray-900 mb-2"
+                                        style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}
+                                    >
+                                        {module.title}
+                                    </h3>
+
+                                    {/* Description - 2 lines */}
+                                    <p
+                                        className="text-gray-500 text-sm leading-relaxed line-clamp-2 mb-4"
+                                        style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 300 }}
+                                    >
+                                        {module.description}
+                                    </p>
+
+                                    {/* Explore Link */}
+                                    {!module.disabled ? (
+                                        <div className="flex items-center justify-end">
+                                            <span
+                                                className="text-sm font-medium text-gray-400 group-hover:text-[#FF6B35] transition-colors flex items-center gap-1"
+                                                style={{ fontFamily: "'Outfit', sans-serif" }}
+                                            >
+                                                Explore
+                                                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-end">
+                                            <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+                                                Coming Soon
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Subtle gradient overlay on hover */}
+                                    <div
+                                        className={`absolute inset-0 rounded-xl bg-gradient-to-br ${module.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`}
+                                    />
                                 </Link>
-                            </SectionWrapper>
+                            </motion.div>
                         ))}
                     </AnimatePresence>
                 </div>
-
-                {/* Quick Actions Bar */}
-                <SectionWrapper delay={0.4}>
-                    <div className="mt-12 p-8 bg-black rounded-[2.5rem] text-white overflow-hidden relative shadow-2xl shadow-primary/20">
-                        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                            <div>
-                                <h3 className="text-2xl font-bold">Quick Actions</h3>
-                                <p className="text-white/60 mt-1 font-medium">Jump straight into high-priority tasks.</p>
-                            </div>
-                            <div className="flex flex-wrap gap-4">
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => router.push('/admin/questions?new=true')}
-                                    className="flex items-center gap-2 px-6 py-3 bg-white text-black hover:bg-white/90 rounded-full font-bold transition-all shadow-lg shadow-white/10"
-                                >
-                                    <Plus className="w-5 h-5" />
-                                    New Question
-                                </motion.button>
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-full font-bold backdrop-blur-sm transition-all text-white border border-white/10"
-                                >
-                                    <BarChart3 className="w-5 h-5" />
-                                    System Health
-                                </motion.button>
-                            </div>
-                        </div>
-
-                        {/* Decorative Background for Quick Actions */}
-                        <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-96 h-96 bg-gradient-to-br from-primary to-purple-600 blur-[100px] rounded-full opacity-50" />
-                    </div>
-                </SectionWrapper>
             </main>
         </div>
     );
