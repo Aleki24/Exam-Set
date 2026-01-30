@@ -6,11 +6,11 @@ import { Globe, BookOpen, GraduationCap } from 'lucide-react';
 
 export default function LogoScroll() {
     const logos = [
-        { name: "Cambridge International", icon: GraduationCap },
-        { name: "Pearson Edexcel", icon: BookOpen },
-        { name: "IGCSE Board", icon: Globe },
-        { name: "IB World School", icon: Globe },
-        { name: "Ministry of Education", icon: BookOpen },
+        { name: "CBC / KNEC", icon: GraduationCap },
+        { name: "Top National Schools", icon: BookOpen },
+        { name: "Ministry of Education", icon: Globe },
+        { name: "TSC Approved", icon: Globe },
+        { name: "Private Academies", icon: BookOpen },
     ];
 
     return (

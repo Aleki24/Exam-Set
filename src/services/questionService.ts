@@ -326,6 +326,11 @@ export async function updateQuestion(
     if (updates.matchingPairs !== undefined) dbUpdates.matching_pairs = updates.matchingPairs;
     if (updates.markingScheme !== undefined) dbUpdates.marking_scheme = updates.markingScheme;
     if (updates.bloomsLevel !== undefined) dbUpdates.blooms_level = updates.bloomsLevel;
+    // Support for assignment fields
+    if ((updates as any).curriculum_id !== undefined) dbUpdates.curriculum_id = (updates as any).curriculum_id;
+    if ((updates as any).grade_id !== undefined) dbUpdates.grade_id = (updates as any).grade_id;
+    if ((updates as any).subject_id !== undefined) dbUpdates.subject_id = (updates as any).subject_id;
+    if ((updates as any).term !== undefined) dbUpdates.term = (updates as any).term;
 
     const { data, error } = await supabase
         .from('questions')

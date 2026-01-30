@@ -59,11 +59,30 @@ export async function PATCH(
             matchingPairs: 'matching_pairs',
             expectedLength: 'expected_length',
             isAiGenerated: 'is_ai_generated',
+            answerLines: 'answer_lines',
+            // Pass-through fields (same name in frontend and database)
+            grade_id: 'grade_id',
+            subject_id: 'subject_id',
+            curriculum_id: 'curriculum_id',
+            term: 'term',
+            topic: 'topic',
+            subtopic: 'subtopic',
+            text: 'text',
+            marks: 'marks',
+            difficulty: 'difficulty',
+            type: 'type',
+            options: 'options',
         };
 
         for (const [key, value] of Object.entries(updates)) {
             const dbKey = fieldMap[key] || key;
-            dbUpdates[dbKey] = value;
+
+            // Normalize empty strings to null for UUID and enum fields
+            if (['grade_id', 'subject_id', 'curriculum_id', 'term'].includes(dbKey) && value === '') {
+                dbUpdates[dbKey] = null;
+            } else {
+                dbUpdates[dbKey] = value;
+            }
         }
 
         const { data, error } = await supabase

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
                 curriculums:curriculum_id(name),
                 grades:grade_id(name),
                 subjects:subject_id(name)
-            `)
+            `, { count: 'exact' })
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         if (type) query = query.eq('type', type);
         if (search) query = query.ilike('text', `%${search}%`);
 
-        const { data, error } = await query;
+        const { data, error, count } = await query;
 
         if (error) {
             console.error('Error fetching questions:', error);
@@ -56,12 +56,14 @@ export async function GET(request: NextRequest) {
             curriculum_name: q.curriculums?.name,
             grade_name: q.grades?.name,
             subject_name: q.subjects?.name,
+            answerLines: q.answer_lines,
+
             curriculums: undefined,
             grades: undefined,
             subjects: undefined,
         }));
 
-        return NextResponse.json({ questions, count: questions.length });
+        return NextResponse.json({ questions, count: count || 0 });
     } catch (error: any) {
         console.error('Questions GET error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -78,28 +80,32 @@ export async function POST(request: NextRequest) {
         const questions = Array.isArray(body.questions) ? body.questions : [body];
 
         // Map to database format
-        const dbQuestions = questions.map((q: any) => ({
-            text: q.text,
-            marks: q.marks || 1,
-            difficulty: q.difficulty || 'Medium',
-            topic: q.topic || 'General',
-            subtopic: q.subtopic || null,
-            curriculum_id: q.curriculum_id || null,
-            grade_id: q.grade_id || null,
-            subject_id: q.subject_id || null,
-            term: q.term || null,
-            type: q.type || 'Structured',
-            options: q.options || [],
-            matching_pairs: q.matchingPairs || q.matching_pairs || [],
-            unit: q.unit || null,
-            expected_length: q.expectedLength || q.expected_length || null,
-            marking_scheme: q.markingScheme || q.marking_scheme || null,
-            blooms_level: q.bloomsLevel || q.blooms_level || 'Knowledge',
-            image_path: q.imagePath || q.image_path || null,
-            image_caption: q.imageCaption || q.image_caption || null,
-            has_latex: q.hasLatex || q.has_latex || false,
-            is_ai_generated: q.isAiGenerated || q.is_ai_generated || false,
-        }));
+        const dbQuestions = questions.map((q: any) => {
+            const row: any = {
+                text: q.text,
+                marks: q.marks || 1,
+                difficulty: q.difficulty || 'Medium',
+                topic: q.topic || 'General',
+                subtopic: q.subtopic || null,
+                curriculum_id: q.curriculum_id === '' ? null : (q.curriculum_id || null),
+                grade_id: q.grade_id === '' ? null : (q.grade_id || null),
+                subject_id: q.subject_id === '' ? null : (q.subject_id || null),
+                term: q.term || null,
+                type: q.type || 'Structured',
+                options: q.options || [],
+                matching_pairs: q.matchingPairs || q.matching_pairs || [],
+                unit: q.unit || null,
+                expected_length: q.expectedLength || q.expected_length || null,
+                marking_scheme: q.markingScheme || q.marking_scheme || null,
+                blooms_level: q.bloomsLevel || q.blooms_level || 'Knowledge',
+                image_path: q.imagePath || q.image_path || null,
+                image_caption: q.imageCaption || q.image_caption || null,
+                has_latex: q.hasLatex || q.has_latex || false,
+                is_ai_generated: q.isAiGenerated || q.is_ai_generated || false,
+                answer_lines: q.answerLines || q.answer_lines || null,
+            };
+            return row;
+        });
 
         const { data, error } = await supabase
             .from('questions')

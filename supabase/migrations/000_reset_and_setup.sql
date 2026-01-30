@@ -262,13 +262,7 @@ CREATE POLICY "Public Write Exams" ON exams FOR ALL USING (true);
 -- 7. SEED DATA
 
 -- Curriculums
-INSERT INTO curriculums (name, description, country) VALUES
-    ('IGCSE', 'International General Certificate of Secondary Education', 'International'),
-    ('CBC', 'Competency Based Curriculum', 'Kenya'),
-    ('Pearson', 'Pearson Edexcel International', 'UK/International'),
-    ('Cambridge', 'Cambridge Assessment International Education', 'International'),
-    ('National', 'National Curriculum', 'Various'),
-    ('IB', 'International Baccalaureate', 'International');
+    ('CBC', 'Competency Based Curriculum', 'Kenya');
 
 -- Subjects
 INSERT INTO subjects (name, description) VALUES
@@ -287,11 +281,7 @@ DO $$
 DECLARE
     curr_id UUID;
 BEGIN
-    -- IGCSE
-    SELECT id INTO curr_id FROM curriculums WHERE name = 'IGCSE';
-    INSERT INTO grades (curriculum_id, name, level_order) VALUES
-        (curr_id, 'Year 9', 1), (curr_id, 'Year 10', 2), (curr_id, 'Year 11', 3);
-        
+
     -- CBC
     SELECT id INTO curr_id FROM curriculums WHERE name = 'CBC';
     INSERT INTO grades (curriculum_id, name, level_order) VALUES

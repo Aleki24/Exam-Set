@@ -16,7 +16,9 @@ import {
     LogOut,
     Loader2,
     ArrowLeft,
-    Plus
+    Plus,
+    Tag,
+    FileText
 } from 'lucide-react';
 
 // Components
@@ -31,6 +33,22 @@ const adminSections = [
         icon: FileQuestion,
         color: 'from-blue-500 to-indigo-600',
         size: 'md:col-span-2'
+    },
+    {
+        title: 'Topics & Strands',
+        description: 'Manage subject topics, strands, and themes.',
+        href: '/admin/topics',
+        icon: Tag,
+        color: 'from-teal-500 to-cyan-600',
+        size: 'md:col-span-1'
+    },
+    {
+        title: 'Paper Templates',
+        description: 'Create exam paper structures and section rules.',
+        href: '/admin/templates',
+        icon: FileText,
+        color: 'from-violet-500 to-purple-600',
+        size: 'md:col-span-1'
     },
     {
         title: 'Analytics',

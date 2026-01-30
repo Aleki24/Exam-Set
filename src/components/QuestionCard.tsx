@@ -9,12 +9,13 @@ interface QuestionCardProps {
     onAdd?: (q: Question) => void;
     onRemove?: (id: string) => void;
     onUpdate?: (id: string, updates: Partial<Question>) => void;
-    variant?: 'bank' | 'selected' | 'exam';
+    variant?: 'bank' | 'exam' | 'selected';
+    addedToExam?: boolean;
 }
 
 const BLOOMS_LEVELS: BloomsLevel[] = ['Knowledge', 'Understanding', 'Application', 'Analysis', 'Evaluation', 'Creation'];
 
-const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, onUpdate, variant = 'bank' }) => {
+const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, onUpdate, variant = 'bank', addedToExam }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [showAnswer, setShowAnswer] = useState(false);
     const [editState, setEditState] = useState(question);
@@ -55,15 +56,16 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
                         />
                     </div>
 
+                    <div>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground">Topic</label>
+                        <input
+                            value={editState.topic}
+                            onChange={e => setEditState({ ...editState, topic: e.target.value })}
+                            className="w-full p-3 border border-border bg-background rounded-xl text-xs font-bold mb-2"
+                        />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-[10px] font-bold uppercase text-muted-foreground">Topic</label>
-                            <input
-                                value={editState.topic}
-                                onChange={e => setEditState({ ...editState, topic: e.target.value })}
-                                className="w-full p-3 border border-border bg-background rounded-xl text-xs font-bold"
-                            />
-                        </div>
                         <div>
                             <label className="text-[10px] font-bold uppercase text-muted-foreground">Marks</label>
                             <input
@@ -71,6 +73,16 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
                                 value={editState.marks}
                                 onChange={e => setEditState({ ...editState, marks: parseInt(e.target.value) || 0 })}
                                 className="w-full p-3 border border-border bg-background rounded-xl text-xs font-bold"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground">Answer Lines</label>
+                            <input
+                                type="number"
+                                value={editState.answerLines || 0}
+                                onChange={e => setEditState({ ...editState, answerLines: parseInt(e.target.value) || 0 })}
+                                className="w-full p-3 border border-border bg-background rounded-xl text-xs font-bold"
+                                placeholder="Auto"
                             />
                         </div>
                     </div>
@@ -151,34 +163,24 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
                 {variant === 'bank' && onAdd && (
                     <button
                         onClick={() => onAdd(question)}
-                        className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-3 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-primary/20 active:scale-95 flex items-center justify-center gap-2"
+                        disabled={addedToExam}
+                        className={`flex-1 text-xs font-bold py-3 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${addedToExam ? 'bg-green-500/10 text-green-600 cursor-default opacity-100 shadow-none' : 'bg-primary text-primary-foreground hover:opacity-90 shadow-primary/20'}`}
                     >
-                        <span>Add to Selection</span>
-                        <svg className="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                        {addedToExam ? (
+                            <>
+                                <span>Added</span>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                            </>
+                        ) : (
+                            <>
+                                <span>Add to Exam</span>
+                                <svg className="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                            </>
+                        )}
                     </button>
                 )}
 
-                {variant === 'selected' && (
-                    <>
-                        {onRemove && (
-                            <button
-                                onClick={() => onRemove(question.id)}
-                                className="w-10 h-10 flex items-center justify-center rounded-xl text-destructive hover:bg-destructive/10 transition-colors"
-                                title="Remove"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
-                        )}
-                        {onAdd && (
-                            <button
-                                onClick={() => onAdd(question)}
-                                className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-3 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-primary/20 active:scale-95"
-                            >
-                                Move to Exam
-                            </button>
-                        )}
-                    </>
-                )}
+
 
                 {variant === 'exam' && onRemove && (
                     <button

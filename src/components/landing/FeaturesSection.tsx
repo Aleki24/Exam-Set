@@ -13,7 +13,7 @@ import {
 const features = [
     {
         title: "Verified Exam Repository",
-        description: "Access thousands of ready-to-use questions and exams. Pre-vetted for CBC, IGCSE, and Cambridge standards.",
+        description: "Access thousands of ready-to-use questions and exams. Pre-vetted for CBC and KNEC standards.",
         icon: <Shield className="w-6 h-6 text-blue-500" />,
         className: "md:col-span-2 md:row-span-2 bg-blue-50/50",
     },
@@ -37,7 +37,7 @@ const features = [
     },
     {
         title: "Curriculum Aligned",
-        description: "Strict adherence to CBC, IGCSE, Cambridge, and National standards.",
+        description: "Strict adherence to CBC and National standards.",
         icon: <Sparkles className="w-6 h-6 text-rose-500" />,
         className: "md:col-span-2 md:row-span-1 bg-rose-50/50",
     },
@@ -63,7 +63,7 @@ export default function FeaturesSection() {
                         <div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center mb-6 text-blue-600"><Shield className="w-6 h-6" /></div>
                             <h3 className="text-xl font-bold text-slate-900 mb-2">Verified Repository</h3>
-                            <p className="text-slate-500">Thousands of IGCSE & CBC questions.</p>
+                            <p className="text-slate-500">Thousands of CBC & KNEC questions.</p>
                         </div>
 
                         {/* Visual: File List */}

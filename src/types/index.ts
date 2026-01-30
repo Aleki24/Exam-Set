@@ -1,19 +1,11 @@
 export type Difficulty = 'Easy' | 'Medium' | 'Difficult';
 export type BloomsLevel = 'Knowledge' | 'Understanding' | 'Application' | 'Analysis' | 'Evaluation' | 'Creation';
-export type TemplateId = 'cambridge' | 'pearson' | 'cbc' | 'modern' | 'minimalist';
+export type TemplateId = 'cbc' | 'modern' | 'minimalist' | 'pearson';
 export type FontFamily = 'serif' | 'sans' | 'mono';
 export type LogoPlacement = 'left' | 'center' | 'right';
 
 // Exam Board Types
-export type ExamBoard =
-    | 'cambridge'      // Cambridge Assessment International Education (CAIE)
-    | 'knec'           // Kenya National Examinations Council
-    | 'pearson'        // Pearson Edexcel
-    | 'aqa'            // AQA (UK)
-    | 'ocr'            // OCR (UK)
-    | 'ib'             // International Baccalaureate
-    | 'collegeboard'   // College Board (AP)
-    | 'custom';        // Custom/Generic
+export type ExamBoard = 'knec' | 'custom';
 
 // Exam Board Configuration
 export interface ExamBoardConfig {
@@ -27,14 +19,6 @@ export interface ExamBoardConfig {
 
 // Pre-defined exam board configurations
 export const EXAM_BOARD_CONFIGS: Record<ExamBoard, ExamBoardConfig> = {
-    cambridge: {
-        id: 'cambridge',
-        name: 'Cambridge Assessment (CAIE)',
-        country: 'International',
-        primaryColor: '#0066B3',
-        accentColor: '#AC145A',
-        description: 'IGCSE, O Level, A Level'
-    },
     knec: {
         id: 'knec',
         name: 'KNEC / CBC',
@@ -42,46 +26,6 @@ export const EXAM_BOARD_CONFIGS: Record<ExamBoard, ExamBoardConfig> = {
         primaryColor: '#006600',
         accentColor: '#BB0000',
         description: 'KPSEA, KCPE, KCSE'
-    },
-    pearson: {
-        id: 'pearson',
-        name: 'Pearson Edexcel',
-        country: 'UK / International',
-        primaryColor: '#650E51',
-        accentColor: '#007FA3',
-        description: 'International GCSE, A Level'
-    },
-    aqa: {
-        id: 'aqa',
-        name: 'AQA',
-        country: 'UK',
-        primaryColor: '#461D7C',
-        accentColor: '#00A2E8',
-        description: 'GCSE, A Level'
-    },
-    ocr: {
-        id: 'ocr',
-        name: 'OCR',
-        country: 'UK',
-        primaryColor: '#1E4D2B',
-        accentColor: '#FFD700',
-        description: 'GCSE, A Level'
-    },
-    ib: {
-        id: 'ib',
-        name: 'International Baccalaureate',
-        country: 'International',
-        primaryColor: '#003DA5',
-        accentColor: '#FFFFFF',
-        description: 'PYP, MYP, DP, CP'
-    },
-    collegeboard: {
-        id: 'collegeboard',
-        name: 'College Board',
-        country: 'USA',
-        primaryColor: '#00274C',
-        accentColor: '#F0AB00',
-        description: 'SAT, AP Exams'
     },
     custom: {
         id: 'custom',
@@ -153,6 +97,8 @@ export interface Question {
     usedInExamIds?: string[];
     // Sub-parts for questions with multiple labeled parts (a, b, c, etc.)
     subParts?: QuestionSubPart[];
+    // Answer space configuration
+    answerLines?: number;
 }
 
 export interface LayoutConfig {
@@ -194,8 +140,8 @@ export interface ExamPaper {
     updatedAt: number;
 }
 
-export type ViewState = 'materials' | 'bank' | 'builder' | 'library';
-export type MobileTab = 'editor' | 'preview' | 'selected';
+export type ViewState = 'bank' | 'builder' | 'library';
+export type MobileTab = 'editor' | 'preview';
 
 // ============================================================================
 // DATABASE TYPES
@@ -313,4 +259,126 @@ export interface ExamFilters {
     search?: string;
     limit?: number;
     offset?: number;
+}
+
+// ============================================================================
+// SUBJECT TOPICS (STRANDS) AND PAPER TEMPLATES
+// ============================================================================
+
+// Subject topic/strand for categorizing questions
+export interface SubjectTopic {
+    id: string;
+    subject_id: string;
+    topic_number: number;
+    name: string;
+    description?: string;
+    parent_topic_id?: string;
+    created_at?: string;
+    // Joined data
+    subject_name?: string;
+}
+
+// Question section types for paper templates
+export type QuestionSectionType =
+    | 'map_analysis'
+    | 'spatial_awareness'
+    | 'visual_identification'
+    | 'conceptual_knowledge'
+    | 'skills_drawing'
+    | 'true_false'
+    | 'matching'
+    | 'multiple_choice'
+    | 'fill_blanks'
+    | 'structured'
+    | 'essay'
+    | 'practical'
+    | 'calculation'
+    | 'word_puzzle'
+    | 'diagram_labeling'
+    | 'comprehension'
+    | 'general';
+
+// Display labels for section types
+export const SECTION_TYPE_LABELS: Record<QuestionSectionType, string> = {
+    map_analysis: 'Map Analysis',
+    spatial_awareness: 'Spatial Awareness',
+    visual_identification: 'Visual Identification',
+    conceptual_knowledge: 'Conceptual Knowledge',
+    skills_drawing: 'Skills & Drawing',
+    true_false: 'True/False',
+    matching: 'Matching',
+    multiple_choice: 'Multiple Choice',
+    fill_blanks: 'Fill in the Blanks',
+    structured: 'Structured',
+    essay: 'Essay',
+    practical: 'Practical',
+    calculation: 'Calculation',
+    word_puzzle: 'Word Puzzle',
+    diagram_labeling: 'Diagram Labeling',
+    comprehension: 'Comprehension',
+    general: 'General'
+};
+
+// Paper template section configuration
+export interface TemplateSectionConfig {
+    section_label: string;           // "A", "B", "C", etc.
+    name: string;                    // "Map Analysis"
+    section_type: QuestionSectionType;
+    question_count: number;
+    marks_per_question: number;
+    topics?: number[];               // Topic numbers to draw from (optional)
+    instructions?: string;           // Section-specific instructions
+}
+
+// Paper template for generating exams
+export interface PaperTemplate {
+    id: string;
+    name: string;
+    description?: string;
+    subject_id?: string;
+    grade_id?: string;
+    total_marks: number;
+    time_limit?: string;
+    sections: TemplateSectionConfig[];
+    shuffle_within_sections: boolean;
+    shuffle_sections: boolean;
+    is_default: boolean;
+    created_by?: string;
+    created_at?: string;
+    updated_at?: string;
+    // Joined data
+    subject_name?: string;
+    grade_name?: string;
+}
+
+// Image bank entry for visual content
+export type ImageType = 'map' | 'diagram' | 'photo' | 'puzzle' | 'chart' | 'illustration' | 'general';
+
+export interface ImageBankEntry {
+    id: string;
+    name: string;
+    description?: string;
+    subject_id?: string;
+    topic_id?: string;
+    storage_key: string;
+    image_url?: string;
+    thumbnail_url?: string;
+    image_type: ImageType;
+    tags: string[];
+    width?: number;
+    height?: number;
+    file_size?: number;
+    mime_type?: string;
+    created_by?: string;
+    created_at?: string;
+    // Joined data
+    subject_name?: string;
+    topic_name?: string;
+}
+
+// Extended question filters with topic support
+export interface ExtendedQuestionFilters extends QuestionFilters {
+    topic_id?: string;
+    section_type?: QuestionSectionType;
+    requires_image?: boolean;
 }

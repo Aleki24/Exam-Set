@@ -36,7 +36,7 @@ export default function HeroSection() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
                     </span>
-                    #1 Platform for CBC & International Exams
+                    #1 Platform for CBC Exams
                 </motion.div>
 
                 {/* The Headline with Gradient Shimmer */}
@@ -48,7 +48,7 @@ export default function HeroSection() {
                 </motion.h1>
 
                 <motion.p variants={itemVariants} className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-                    Download thousands of expert-verified CBC, IGCSE, and Cambridge past papers instantly. Or build your own custom exams manually using our massive question bank.
+                    Download thousands of expert-verified CBC and KNEC past papers instantly. Or build your own custom exams manually using our massive question bank.
                 </motion.p>
 
                 {/* Buttons with Micro-interactions */}

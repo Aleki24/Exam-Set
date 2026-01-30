@@ -157,10 +157,17 @@ export default function ClientQuestionForm({
     const levels = useMemo(() => Array.from(new Set(grades.map(g => g.level).filter(Boolean))), [grades]);
     const bands = useMemo(() => Array.from(new Set(grades.filter(g => g.level === selectedLevel).map(g => g.band).filter(Boolean))), [grades, selectedLevel]);
 
+    // Auto-select curriculum if only one exists
+    useEffect(() => {
+        if (curriculums.length === 1 && !formData.curriculum_id) {
+            setFormData(prev => ({ ...prev, curriculum_id: curriculums[0].id }));
+        }
+    }, [curriculums, formData.curriculum_id]);
+
     // Check if current curriculum is CBC
     const isCBC = useMemo(() => {
         const curr = curriculums.find(c => c.id === formData.curriculum_id);
-        return curr?.name === 'CBC';
+        return curr?.name === 'CBC' || (curriculums.length === 1 && curriculums[0].name === 'CBC');
     }, [formData.curriculum_id, curriculums]);
 
     // Fetch subjects when grade changes
@@ -497,21 +504,23 @@ export default function ClientQuestionForm({
 
                     {/* Curriculum, Grade, Subject */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Curriculum
-                            </label>
-                            <select
-                                value={formData.curriculum_id}
-                                onChange={(e) => setFormData({ ...formData, curriculum_id: e.target.value, grade_id: '' })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                            >
-                                <option value="">Select...</option>
-                                {curriculums.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {curriculums.length > 1 && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Curriculum
+                                </label>
+                                <select
+                                    value={formData.curriculum_id}
+                                    onChange={(e) => setFormData({ ...formData, curriculum_id: e.target.value, grade_id: '' })}
+                                    className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800 rounded-lg bg-blue-50/50 dark:bg-blue-900/20 text-gray-900 dark:text-white"
+                                >
+                                    <option value="">Select...</option>
+                                    {curriculums.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Grade

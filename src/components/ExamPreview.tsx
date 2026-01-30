@@ -41,7 +41,7 @@ const ExamPreview: React.FC<ExamPreviewProps> = ({ paper, onEdit }) => {
     );
 
     // Get board config for styling
-    const boardConfig = EXAM_BOARD_CONFIGS[metadata.examBoard || 'cambridge'];
+    const boardConfig = EXAM_BOARD_CONFIGS[metadata.examBoard || 'knec'];
     const primaryColor = metadata.primaryColor || boardConfig.primaryColor;
     const accentColor = metadata.accentColor || boardConfig.accentColor;
 
@@ -219,66 +219,11 @@ const ExamPreview: React.FC<ExamPreviewProps> = ({ paper, onEdit }) => {
         const isCentered = metadata.logoPlacement === 'center';
         const isRight = metadata.logoPlacement === 'right';
 
-        // === PEARSON STYLE ===
-        if (metadata.templateId === 'pearson') {
-            return (
-                <div className="mb-8">
-                    <div className="bg-secondary p-4 border-b-2 border-border flex justify-between items-center mb-6">
-                        <div>
-                            <p className="font-bold text-muted-foreground text-xs uppercase tracking-widest">Candidate Number</p>
-                            <div className="flex gap-1 mt-1">
-                                {[1, 2, 3, 4].map(i => <div key={i} className="w-8 h-8 border border-border bg-white"></div>)}
-                            </div>
-                        </div>
-                        <div className="text-right">
-                            <h1 className="text-xl font-bold uppercase">{renderEditable(metadata.institution, 'metadata', '', 'institution')}</h1>
-                            <p className="text-xs text-muted-foreground">{renderEditable(metadata.title, 'metadata', '', 'title')}</p>
-                        </div>
-                    </div>
+        // Default to CBC header - Pearson depreciated
 
-                    <div className="flex items-start gap-6 mb-8">
-                        <div className="flex-1">
-                            <div className="bg-foreground text-background p-3 text-center uppercase font-bold text-sm mb-4">
-                                Paper Reference: {renderEditable(metadata.code || 'CODE/01', 'metadata', '', 'code')}
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex justify-between border-b border-border pb-1">
-                                    <span className="font-bold uppercase text-xs">Surname</span>
-                                    <span className="text-sm">{renderEditable(' ', 'metadata', '', 'surname_placeholder')}</span>
-                                </div>
-                                <div className="flex justify-between border-b border-border pb-1">
-                                    <span className="font-bold uppercase text-xs">Other Names</span>
-                                    <span className="text-sm">{renderEditable(' ', 'metadata', '', 'othernames_placeholder')}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="w-32 flex flex-col items-center justify-center space-y-1">
-                            {/* Fake Barcode */}
-                            <div className="h-24 w-full flex items-end justify-center gap-[2px] overflow-hidden">
-                                {Array.from({ length: 40 }).map((_, i) => (
-                                    <div key={i} className="bg-black" style={{ width: i % 3 === 0 ? '2px' : '4px', height: `${(i % 5) * 10 + 50}%` }}></div>
-                                ))}
-                            </div>
-                            <p className="text-[10px] font-mono tracking-widest">P49832A</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-8 text-sm mb-8">
-                        <div>
-                            <p className="font-bold mb-1">Time: {renderEditable(metadata.timeLimit, 'metadata', '', 'timeLimit')}</p>
-                            <p className="text-muted-foreground italic">You must have: Ruler, Calculator</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="font-bold">Total Marks: {metadata.totalMarks}</p>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
 
         // === CBC (Competency Based Curriculum) STYLE ===
-        if (metadata.templateId === 'cbc') {
+        if (metadata.templateId === 'cbc' || metadata.templateId === 'pearson') {
             return (
                 <div className="mb-8 font-sans">
                     <div className="text-center border-b-4 border-double border-foreground pb-6 mb-6">
@@ -366,88 +311,18 @@ const ExamPreview: React.FC<ExamPreviewProps> = ({ paper, onEdit }) => {
         );
     };
 
-    // For Cambridge template, render cover page + question pages
-    if (metadata.templateId === 'cambridge' || !metadata.templateId) {
-        return (
-            <div id="exam-paper-content" className="exam-container print:bg-white bg-secondary/50 flex flex-col items-center">
-                {/* Cover Page (First Page - No Questions) */}
-                {renderCoverPage()}
-
-                {/* Question Pages (Starting from Page 2) */}
-                <div className={pageBaseClass}>
-                    {/* Simple header for question pages */}
-                    <div className="border-b-2 pb-4 mb-6 border-gray-300 flex justify-between items-center">
-                        <div className="text-sm text-gray-600">
-                            {metadata.subject || 'Science'} - {metadata.code || 'Paper 2'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                            {metadata.title || 'Stage 6'}
-                        </div>
-                    </div>
-
-                    <div className="flex-1 space-y-8">
-                        {questions.map((q, index) => (
-                            <div key={q.id} className="page-break-inside-avoid relative flex gap-6 pt-4 first:pt-0">
-                                <span className="font-bold text-lg text-gray-700 w-8 shrink-0">{index + 1}</span>
-                                <div className="flex-1">
-                                    <div className="font-medium leading-relaxed mb-6 text-[15px] text-black whitespace-pre-wrap">
-                                        <LatexRenderer content={q.text} />
-                                    </div>
-
-                                    {/* Image Support */}
-                                    {q.imagePath && (
-                                        <div className="my-4 border border-border rounded-lg overflow-hidden">
-                                            <img src={q.imagePath} alt={q.imageCaption || 'Question diagram'} className="w-full max-h-64 object-contain" />
-                                            {q.imageCaption && (
-                                                <p className="text-xs text-muted-foreground text-center p-2 bg-secondary border-t border-border">{q.imageCaption}</p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {q.type === 'Multiple Choice' && q.options && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4 ml-2 mb-4">
-                                            {q.options.map((opt, i) => (
-                                                <div key={i} className="flex items-start gap-3 text-[14px] text-black">
-                                                    <span className="font-bold border border-gray-400 rounded w-6 h-6 flex items-center justify-center text-[11px] shrink-0 text-gray-600">{String.fromCharCode(65 + i)}</span>
-                                                    <span className="flex-1 pt-0.5">{opt}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {(q.type === 'Structured' || q.type === 'Essay') && (
-                                        <div className="mt-6 space-y-6">
-                                            {Array.from({ length: q.type === 'Essay' ? 8 : 4 }).map((_, i) => (
-                                                <div key={i} className="border-b border-gray-300 w-full h-6"></div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="shrink-0 w-16 text-right">
-                                    <span className="font-bold text-sm text-gray-700">
-                                        [{q.marks}]
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="mt-16 pt-8 text-center border-t-2 border-gray-300 page-break-inside-avoid">
-                        <p className="font-bold uppercase tracking-[0.2em] text-[10px] text-gray-500">End of Examination</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // For other templates, use the original single-page layout
+    // Use a universal layout for all templates (CBC-focused)
     return (
         <div className="exam-container print:bg-white bg-secondary/50 flex flex-col items-center">
+            {/* Optionally render cover page for CBC */}
+            {renderCoverPage()}
+
+            {/* Question Pages */}
             <div id="exam-paper-content" className={pageBaseClass}>
                 {renderHeader()}
 
                 {metadata.instructions && (
-                    <div className={`mb-8 p-6 border-y-2 border-border italic text-muted-foreground relative overflow-hidden text-sm ${metadata.templateId === 'pearson' ? 'bg-secondary' : ''}`}>
+                    <div className={`mb-8 p-6 border-y-2 border-border italic text-muted-foreground relative overflow-hidden text-sm`}>
                         <p className="not-italic font-black uppercase text-[10px] tracking-widest mb-2 text-foreground">Instructions to Candidates:</p>
                         <div className="whitespace-pre-wrap leading-relaxed opacity-90">
                             {renderEditable(metadata.instructions, 'metadata', '', 'instructions')}

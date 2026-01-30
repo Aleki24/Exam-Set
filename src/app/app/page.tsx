@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Question, ViewState, ExamMetadata, ExamPaper, TemplateId, CustomField, MobileTab, ExamBoard, EXAM_BOARD_CONFIGS } from '@/types';
+import { Question, ViewState, ExamMetadata, ExamPaper, TemplateId, MobileTab, ExamBoard, EXAM_BOARD_CONFIGS } from '@/types';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import QuestionCard from '@/components/QuestionCard';
@@ -10,16 +10,13 @@ import MiniPreview from '@/components/MiniPreview';
 import QuestionCreator from '@/components/QuestionCreator';
 import MarkingSchemePreview from '@/components/MarkingSchemePreview';
 import BalanceCharts from '@/components/BalanceCharts';
-import AutoGenerateModal from '@/components/AutoGenerateModal';
-import DashboardView from '@/components/DashboardView';
+
 import PdfDownloader from '@/components/PdfDownloader';
 import QuestionEntryModal from '@/components/QuestionEntryModal';
-import DocumentUploadModal from '@/components/DocumentUploadModal';
 import ClientQuestionForm from '@/components/ClientQuestionForm';
 import SubPartsSelector from '@/components/SubPartsSelector';
 
 import { TemplateEditor } from '@/exam-engine/editor/TemplateEditor';
-import { generateQuestionsFromMaterial, generateQuestionsByFilter } from '@/services/aiService';
 import { getCurriculums, getGrades, getSubjects } from '@/services/questionService';
 import { DBCurriculum, DBGrade, DBSubject } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -35,7 +32,7 @@ const DEFAULT_METADATA: ExamMetadata = {
   totalMarks: 0,
   institution: 'Cambridge Primary Progression Test',
   instructions: '1. Answer all questions.\n2. Do not use external materials.',
-  templateId: 'cambridge',
+  templateId: 'cbc',
   layoutConfig: {
     fontSize: 'text-base',
     fontFamily: 'sans'
@@ -45,7 +42,7 @@ const DEFAULT_METADATA: ExamMetadata = {
   footerColor: '#0f172a',
   customFields: [],
   // New exam board fields
-  examBoard: 'cambridge',
+  examBoard: 'knec',
   primaryColor: '#0066B3',
   accentColor: '#AC145A',
   additionalMaterials: 'Ruler'
@@ -62,16 +59,14 @@ interface FilterState {
 }
 
 // Static Data for Filters
-const STATIC_CURRICULUMS = ['CBC', 'IGCSE', 'Pearson', 'Cambridge', 'National', 'IB'];
+const STATIC_CURRICULUMS = ['CBC'];
 const STATIC_SUBJECTS = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Integrated Science', 'English', 'History', 'Geography', 'Computer Science'];
 const STATIC_TERMS = ['Opener', 'Mid Term 1', 'End of Term 1', 'Mid Term 2', 'End of Term 2', 'Mid Term 3', 'End of Term 3'];
 const BLOOMS_LEVELS = ['Knowledge', 'Understanding', 'Application', 'Analysis', 'Evaluation', 'Creation'];
 
 export default function Home() {
-  const [currentView, setCurrentView] = useState<ViewState>('materials');
-  const [materialText, setMaterialText] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<{ data: string; mimeType: string }[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [currentView, setCurrentView] = useState<ViewState>('bank');
+
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [displayDate, setDisplayDate] = useState('');
 
@@ -81,7 +76,6 @@ export default function Home() {
 
   // Modal states
   const [showQuestionEntryModal, setShowQuestionEntryModal] = useState(false);
-  const [showDocumentUploadModal, setShowDocumentUploadModal] = useState(false);
   const [showClientQuestionForm, setShowClientQuestionForm] = useState(false);
 
   // Lookup data for filters
@@ -89,8 +83,7 @@ export default function Home() {
   const [grades, setGrades] = useState<DBGrade[]>([]);
   const [subjects, setSubjects] = useState<DBSubject[]>([]);
 
-  // STAGING STATE (The "Selected" tab)
-  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
+
 
   // FINAL EXAM STATE (The actual paper)
   const [examQuestions, setExamQuestions] = useState<Question[]>([]);
@@ -119,19 +112,18 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // View State for Right Sidebar (Desktop) and Mobile Tabs
-  const [rightPanelTab, setRightPanelTab] = useState<'selected' | 'preview'>('selected');
+  const [rightPanelTab, setRightPanelTab] = useState<'preview'>('preview');
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
 
-  // Replenish Loading State
-  const [isReplenishing, setIsReplenishing] = useState(false);
 
-  // Download Dropdown
+
+  // Dropdown States
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showPreviewActions, setShowPreviewActions] = useState(false);
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [previewZoomed, setPreviewZoomed] = useState(false);
 
-  // Auto Generate Modal
-  const [showAutoGenerateModal, setShowAutoGenerateModal] = useState(false);
+
 
   // Sub-parts selector modal state
   const [showSubPartsSelector, setShowSubPartsSelector] = useState(false);
@@ -306,6 +298,13 @@ export default function Home() {
     setCurrentView('builder');
   };
 
+  const loadFromLibrary = (paper: ExamPaper) => {
+    setMetadata(paper.metadata);
+    setExamQuestions(paper.questions);
+    setCurrentView('bank');
+    toast.success("Exam loaded");
+  };
+
   const deleteFromLibrary = (id: string) => {
     toast("Are you sure you want to delete this exam paper?", {
       action: {
@@ -324,49 +323,7 @@ export default function Home() {
     });
   };
 
-  // Generation Logic
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    try {
-      if (materialText.trim() || uploadedImages.length > 0) {
-        // Generate from Material
-        const { questions, suggestedTitle } = await generateQuestionsFromMaterial(materialText, uploadedImages, 20);
-        const taggedQuestions = questions.map(q => ({
-          ...q,
-          curriculum: filters.curriculum !== 'All' ? filters.curriculum : 'Generated',
-          subject: filters.subject !== 'All' ? filters.subject : 'General',
-        }));
-        setQuestionBank(prev => [...taggedQuestions, ...prev]);
-        if (!metadata.title || metadata.title === DEFAULT_METADATA.title) {
-          setMetadata(prev => ({ ...prev, title: suggestedTitle }));
-        }
-      } else {
-        // Generate from Filters
-        const questions = await generateQuestionsByFilter(filters, 20);
-        setQuestionBank(questions);
-      }
-      setCurrentView('bank');
-    } catch (err) {
-      console.error(err);
-      toast.error("AI Generation failed. Please try again.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
-  const replenishOneQuestion = async () => {
-    setIsReplenishing(true);
-    try {
-      const newQuestions = await generateQuestionsByFilter(filters, 1);
-      if (newQuestions.length > 0) {
-        setQuestionBank(prev => [...prev, ...newQuestions]);
-      }
-    } catch (e) {
-      console.error("Auto-replenish failed", e);
-    } finally {
-      setIsReplenishing(false);
-    }
-  };
 
   const downloadPDF = async (type: 'paper' | 'answers') => {
     setIsGeneratingPDF(true);
@@ -438,17 +395,17 @@ export default function Home() {
     }
   };
 
-  // BANK -> SHORTLIST (SELECTED QUESTIONS TAB)
-  const addToShortlist = (q: Question) => {
-    if (!selectedQuestions.some(sq => sq.id === q.id) && !examQuestions.some(eq => eq.id === q.id)) {
+  // BANK -> EXAM (DIRECT ADD)
+  const addToExam = (q: Question) => {
+    if (!examQuestions.some(eq => eq.id === q.id)) {
       // Check if question has sub-parts - show selector modal
       if (q.subParts && q.subParts.length > 0) {
         setSubPartsSelectorQuestion(q);
         setShowSubPartsSelector(true);
       } else {
-        setSelectedQuestions(prev => [...prev, q]);
+        setExamQuestions(prev => [...prev, q]);
+        toast.success("Added to exam");
       }
-      // Do not remove from bank - keep it permanent
     }
   };
 
@@ -458,7 +415,7 @@ export default function Home() {
 
     // If all parts selected, add the original question
     if (selectedPartIds.length === question.subParts.length) {
-      setSelectedQuestions(prev => [...prev, question]);
+      setExamQuestions(prev => [...prev, question]);
     } else {
       // Create a modified question with only selected parts
       const selectedParts = question.subParts.filter(p => selectedPartIds.includes(p.id));
@@ -471,35 +428,21 @@ export default function Home() {
         marks: newMarks,
       };
 
-      setSelectedQuestions(prev => [...prev, modifiedQuestion]);
+      setExamQuestions(prev => [...prev, modifiedQuestion]);
     }
 
     setShowSubPartsSelector(false);
     setSubPartsSelectorQuestion(null);
+    toast.success("Added to exam");
   };
 
   const handleManualSave = (q: Question) => {
-    setSelectedQuestions(prev => [q, ...prev]);
+    setExamQuestions(prev => [q, ...prev]);
     setIsCreatingManual(false);
+    toast.success("Question created and added to exam");
   };
 
-  // SHORTLIST -> EXAM (ADD TO PAPER)
-  const moveToPaper = (q: Question) => {
-    if (!examQuestions.some(eq => eq.id === q.id)) {
-      setExamQuestions(prev => [...prev, q]);
-      setSelectedQuestions(prev => prev.filter(sq => sq.id !== q.id));
-    }
-  };
 
-  const moveAllToPaper = () => {
-    setExamQuestions(prev => [...prev, ...selectedQuestions.filter(sq => !prev.some(eq => eq.id === sq.id))]);
-    setSelectedQuestions([]);
-  };
-
-  // REMOVE FROM SHORTLIST
-  const removeFromShortlist = (id: string) => {
-    setSelectedQuestions(prev => prev.filter(q => q.id !== id));
-  };
 
   // REMOVE FROM EXAM
   const removeFromExam = (id: string) => {
@@ -579,7 +522,7 @@ export default function Home() {
     return result;
   }, [questionBank, searchQuery, filters, sortBy, sortOrder]);
 
-  const gradeLabel = (filters.curriculum === 'IGCSE' || filters.curriculum === 'Pearson' || filters.curriculum === 'Cambridge') ? 'Year' : 'Grade';
+  const gradeLabel = 'Grade';
 
   const currentPaper: ExamPaper = { metadata: { ...metadata, totalMarks }, questions: examQuestions, updatedAt: 0 };
 
@@ -656,8 +599,7 @@ export default function Home() {
               </button>
               <div>
                 <h1 className="text-3xl font-black gradient-text tracking-tight">
-                  {currentView === 'materials' && 'Dashboard'}
-                  {currentView === 'bank' && 'Questions'}
+                  {currentView === 'bank' && 'Question Bank'}
                   {currentView === 'builder' && 'Templates'}
                   {currentView === 'library' && 'Library'}
                 </h1>
@@ -704,14 +646,7 @@ export default function Home() {
           {/* Scrollable Main Area */}
           <div className="flex-1 overflow-y-auto px-6 pb-20 scroll-smooth">
 
-            {/* View: Materials (Dashboard) */}
-            {currentView === 'materials' && (
-              <DashboardView
-                onNavigate={(view: ViewState) => setCurrentView(view)}
-                onMagicGenerate={() => setShowAutoGenerateModal(true)}
-                recentExams={library.slice(0, 5)} // Show top 5 recent exams
-              />
-            )}
+
 
 
             {/* View: Question Bank */}
@@ -756,16 +691,9 @@ export default function Home() {
 
                     <div className="ml-auto flex items-center gap-2">
                       {/* Actions Buttons */}
-                      <button onClick={() => setShowDocumentUploadModal(true)} className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        Upload Document
-                      </button>
-                      <button onClick={() => setShowAutoGenerateModal(true)} className="px-4 py-2 bg-gradient-to-r from-primary to-purple-600 text-primary-foreground rounded-xl text-xs font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-                        AI Generate
-                      </button>
-                      <button onClick={() => setShowClientQuestionForm(true)} className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-xs font-bold hover:bg-primary/20 transition-colors">
-                        + Add Question
+                      <button onClick={() => setShowClientQuestionForm(true)} className="px-4 py-2 bg-gradient-to-r from-primary to-purple-600 text-primary-foreground rounded-xl text-xs font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                        Add Question
                       </button>
                     </div>
                   </div>
@@ -786,9 +714,10 @@ export default function Home() {
                             <QuestionCard
                               key={q.id}
                               question={q}
-                              onAdd={addToShortlist}
+                              onAdd={addToExam}
                               onUpdate={(id, u) => updateQuestion('bank', id, u)}
                               variant="bank"
+                              addedToExam={examQuestions.some(eq => eq.id === q.id)}
                             />
                           ))}
                         </div>
@@ -832,11 +761,16 @@ export default function Home() {
                                   <td className="px-6 py-4 font-medium">{q.marks}</td>
                                   <td className="px-6 py-4 text-right">
                                     <button
-                                      onClick={() => addToShortlist(q)}
-                                      className="inline-flex items-center justify-center p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                                      title="Add to Shortlist"
+                                      onClick={() => addToExam(q)}
+                                      disabled={examQuestions.some(eq => eq.id === q.id)}
+                                      className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors ${examQuestions.some(eq => eq.id === q.id) ? 'bg-green-500/10 text-green-600 cursor-default' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
+                                      title={examQuestions.some(eq => eq.id === q.id) ? "Added to exam" : "Add to exam"}
                                     >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                                      {examQuestions.some(eq => eq.id === q.id) ? (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                                      ) : (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                                      )}
                                     </button>
                                   </td>
                                 </tr>
@@ -948,18 +882,12 @@ export default function Home() {
           </div>
         </main>
 
-        {/* RIGHT: Persistent Panel (Desktop) / Drawer (Mobile) */}
-        {currentView !== 'materials' && currentView !== 'builder' && (
+        {currentView !== 'builder' && (
           <aside className={`fixed inset-y-0 right-0 w-[350px] glass-sidebar transform transition-transform duration-300 ease-in-out z-30 flex flex-col xl:translate-x-0 ${mobileTab !== 'editor' ? 'translate-x-0' : 'translate-x-full'} xl:relative xl:flex xl:w-[400px]`}>
             {/* Right Panel Header */}
             <div className="px-6 py-5 border-b border-white/20 flex items-center justify-between shrink-0 bg-transparent">
               <div className="flex gap-1 bg-secondary p-1 rounded-xl">
-                <button
-                  onClick={() => setRightPanelTab('selected')}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${rightPanelTab === 'selected' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Selection ({selectedQuestions.length})
-                </button>
+
                 <button
                   onClick={() => setRightPanelTab('preview')}
                   className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${rightPanelTab === 'preview' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
@@ -976,34 +904,7 @@ export default function Home() {
 
             {/* Right Panel Content */}
             <div className="flex-1 overflow-y-auto p-6 bg-transparent">
-              {rightPanelTab === 'selected' && (
-                <div className="space-y-4">
-                  {selectedQuestions.length === 0 ? (
-                    <div className="text-center py-10 opacity-50">
-                      <div className="w-16 h-16 bg-muted rounded-full mx-auto mb-4 flex items-center justify-center text-muted-foreground">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" /></svg>
-                      </div>
-                      <p className="text-sm font-bold text-muted-foreground">No questions selected</p>
-                      <p className="text-xs text-muted-foreground mt-1">Browse the bank and select questions</p>
-                    </div>
-                  ) : (
-                    <>
-                      {selectedQuestions.map(q => (
-                        <QuestionCard
-                          key={q.id}
-                          question={q}
-                          onRemove={removeFromShortlist}
-                          onAdd={moveToPaper}
-                          variant="selected"
-                        />
-                      ))}
-                      <button onClick={moveAllToPaper} className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all text-xs uppercase tracking-wide">
-                        Add All to Exam Paper
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+
 
               {
                 rightPanelTab === 'preview' && (
@@ -1014,42 +915,61 @@ export default function Home() {
                         <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Marks</p>
                         <p className="text-2xl font-black text-foreground">{totalMarks}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {/* Download Button - Server Side PDF */}
-                        <PdfDownloader
-                          elementId="exam-paper-content"
-                          filename={`${metadata.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`}
-                          className="p-2.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors hidden md:block"
-                          onPdfGenerated={handleExamSave}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowPreviewActions(!showPreviewActions)}
+                          className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all shadow-md shadow-primary/20"
                         >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                        </PdfDownloader>
+                          Actions
+                          <svg className={`w-4 h-4 transition-transform ${showPreviewActions ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
 
+                        {showPreviewActions && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setShowPreviewActions(false)}></div>
+                            <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
+                              {/* Download PDF */}
+                              <PdfDownloader
+                                elementId="exam-paper-content"
+                                filename={`${metadata.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`}
+                                className="w-full text-left px-4 py-2.5 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2"
+                                onPdfGenerated={handleExamSave}
+                              >
+                                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Download PDF
+                              </PdfDownloader>
 
-                        {/* Native Print Button (Reliable Fallback) */}
-                        <button
-                          onClick={() => window.print()}
-                          className="p-2.5 bg-secondary text-foreground rounded-lg hover:bg-accent transition-colors border border-border"
-                          title="Print / Save as PDF (Recommended for large files)"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                        </button>
-                        {/* Open Full Editor */}
-                        <button
-                          onClick={() => setCurrentView('builder')}
-                          className="p-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                          title="Open in Editor"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-                        </button>
-                        {/* Save Button */}
-                        <button
-                          onClick={saveToLibrary}
-                          className="p-2.5 bg-accent/20 text-foreground rounded-lg hover:bg-accent/40 transition-colors"
-                          title="Save to Library"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
-                        </button>
+                              {/* Print */}
+                              <button
+                                onClick={() => { window.print(); setShowPreviewActions(false); }}
+                                className="w-full text-left px-4 py-2.5 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                                Print Paper
+                              </button>
+
+                              <div className="h-px bg-border my-1"></div>
+
+                              {/* Open Editor */}
+                              <button
+                                onClick={() => { setCurrentView('builder'); setShowPreviewActions(false); }}
+                                className="w-full text-left px-4 py-2.5 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                Open Editor
+                              </button>
+
+                              {/* Save to Library */}
+                              <button
+                                onClick={() => { saveToLibrary(); setShowPreviewActions(false); }}
+                                className="w-full text-left px-4 py-2.5 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                                Save to Library
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -1077,12 +997,7 @@ export default function Home() {
           <button onClick={() => setMobileTab('editor')} className={`p-3 rounded-full transition-all ${mobileTab === 'editor' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
           </button>
-          <button onClick={() => setMobileTab('selected')} className={`p-3 rounded-full transition-all ${mobileTab === 'selected' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}>
-            <div className="relative">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-              {selectedQuestions.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-destructive rounded-full border-2 border-card"></span>}
-            </div>
-          </button>
+
           <button onClick={() => setMobileTab('preview')} className={`p-3 rounded-full transition-all ${mobileTab === 'preview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
           </button>
@@ -1127,17 +1042,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Auto Generate Modal */}
-      <AutoGenerateModal
-        isOpen={showAutoGenerateModal}
-        onClose={() => setShowAutoGenerateModal(false)}
-        onGenerated={(questions) => {
-          setQuestionBank(prev => [...questions, ...prev]);
-          setShowAutoGenerateModal(false);
-        }}
-        availableTopics={availableTopics}
-        availableSubjects={availableSubjects}
-      />
+
 
       {/* Manual Question Entry Modal */}
       <QuestionEntryModal
@@ -1149,18 +1054,6 @@ export default function Home() {
         }}
       />
 
-      {/* Document Upload Modal */}
-      <DocumentUploadModal
-        isOpen={showDocumentUploadModal}
-        onClose={() => setShowDocumentUploadModal(false)}
-        onSaveQuestions={(questions) => {
-          setQuestionBank(prev => [...questions, ...prev]);
-          toast.success(`${questions.length} questions added to bank!`);
-        }}
-        curriculums={curriculums}
-        grades={grades}
-        subjects={subjects}
-      />
 
       {/* Client Question Form (Admin-style) */}
       <ClientQuestionForm

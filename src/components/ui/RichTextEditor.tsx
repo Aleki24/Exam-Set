@@ -584,6 +584,9 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
 };
 
 const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeholder }) => {
+    // Track the last value we set to the editor to prevent infinite loops
+    const [lastSetValue, setLastSetValue] = useState<string>('');
+
     const editor = useEditor({
         immediatelyRender: false,
         extensions: [
@@ -620,7 +623,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
         ],
         content: value,
         onUpdate: ({ editor }) => {
-            onChange(editor.getHTML());
+            const html = editor.getHTML();
+            setLastSetValue(html);
+            onChange(html);
         },
         editorProps: {
             attributes: {
@@ -629,11 +634,17 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
         },
     });
 
+    // Sync editor content when prop value changes externally (e.g., opening edit modal with new question)
     useEffect(() => {
-        if (editor && value && editor.isEmpty) {
-            editor.commands.setContent(value);
+        if (editor && value !== lastSetValue) {
+            // Only update if the value is meaningfully different from what we last set
+            const currentContent = editor.getHTML();
+            if (value !== currentContent) {
+                editor.commands.setContent(value || '');
+                setLastSetValue(value || '');
+            }
         }
-    }, [editor, value]);
+    }, [editor, value, lastSetValue]);
 
     return (
         <div className="border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
