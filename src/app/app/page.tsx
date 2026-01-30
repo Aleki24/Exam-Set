@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Question, ViewState, ExamMetadata, ExamPaper, TemplateId, MobileTab, ExamBoard, EXAM_BOARD_CONFIGS } from '@/types';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
@@ -291,12 +292,7 @@ export default function Home() {
     toast.success("Exam successfully saved to library!");
   };
 
-  const loadFromLibrary = (paper: ExamPaper) => {
-    setMetadata(paper.metadata);
-    setExamQuestions(paper.questions);
-    setSelectedQuestions([]);
-    setCurrentView('builder');
-  };
+
 
   const loadFromLibrary = (paper: ExamPaper) => {
     setMetadata(paper.metadata);
@@ -451,37 +447,12 @@ export default function Home() {
 
   const updateQuestion = (source: 'bank' | 'selected' | 'exam', id: string, updates: Partial<Question>) => {
     if (source === 'bank') setQuestionBank(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
-    if (source === 'selected') setSelectedQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
     if (source === 'exam') setExamQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
-  };
-
-  const addCustomField = () => {
-    const newField: CustomField = { id: Date.now().toString(), label: 'Field Name', value: 'Value' };
-    setMetadata(prev => ({ ...prev, customFields: [...prev.customFields, newField] }));
-  };
-
-  const updateCustomField = (id: string, label: string, value: string) => {
-    setMetadata(prev => ({
-      ...prev,
-      customFields: prev.customFields.map(f => f.id === id ? { ...f, label, value } : f)
-    }));
-  };
-
-  const removeCustomField = (id: string) => {
-    setMetadata(prev => ({
-      ...prev,
-      customFields: prev.customFields.filter(f => f.id !== id)
-    }));
   };
 
   const handleInlineEdit = (type: 'metadata' | 'question', id: string, key: string, value: string) => {
     if (type === 'metadata') {
-      if (key.startsWith('custom_')) {
-        const fieldId = key.replace('custom_', '');
-        updateCustomField(fieldId, metadata.customFields.find(f => f.id === fieldId)?.label || '', value);
-      } else {
-        setMetadata(prev => ({ ...prev, [key as keyof ExamMetadata]: value }));
-      }
+      setMetadata(prev => ({ ...prev, [key as keyof ExamMetadata]: value }));
     } else {
       updateQuestion('exam', id, { [key as keyof Question]: value });
     }
@@ -592,7 +563,7 @@ export default function Home() {
         <main className="flex-1 flex flex-col min-w-0 transition-all duration-300 relative">
 
           {/* Header */}
-          <header className="px-6 py-5 flex items-center justify-between shrink-0 bg-transparent backdrop-blur-sm z-10">
+          <header className="px-8 py-6 flex items-center justify-between shrink-0 bg-white/40 backdrop-blur-xl border-b border-white/20 z-20 sticky top-0 shadow-sm transition-all">
             <div className="flex items-center gap-4">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-muted-foreground hover:text-foreground">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>

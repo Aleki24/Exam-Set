@@ -98,7 +98,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
 
     // --- VIEW MODE ---
     return (
-        <div className={`group bg-card rounded-[2rem] p-6 transition-all relative flex flex-col h-full ${variant === 'selected' ? 'shadow-lg border-2 border-transparent hover:border-primary/20' : 'shadow-sm hover:shadow-md border border-border'}`}>
+        <div className={`group bg-card rounded-[2rem] p-6 transition-all duration-300 relative flex flex-col h-full ${variant === 'selected' ? 'shadow-lg border-2 border-transparent ring-2 ring-primary/20' : 'shadow-sm hover:shadow-xl hover:-translate-y-1 border border-border/50 hover:border-primary/20'}`}>
 
             {/* Header: Tags & Marks */}
             <div className="flex justify-between items-start mb-5">
