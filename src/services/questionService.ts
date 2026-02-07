@@ -226,12 +226,24 @@ export async function getQuestions(filters: QuestionFilters = {}): Promise<DBQue
         .select(`
             *,
             curriculums:curriculum_id(name),
-            grades:grade_id(name),
+            grades:grade_id(name, level, band),
             subjects:subject_id(name)
         `)
         .order('created_at', { ascending: false });
 
     // Apply filters
+    // If filtering by level or band, we need to use inner join on grades
+    if (filters.level || filters.band) {
+        // Force inner join behavior by filtering on relationship
+        query = query.not('grade_id', 'is', null);
+    }
+
+    if (filters.level) {
+        query = query.eq('grades.level', filters.level);
+    }
+    if (filters.band) {
+        query = query.eq('grades.band', filters.band);
+    }
     if (filters.curriculum_id) {
         query = query.eq('curriculum_id', filters.curriculum_id);
     }

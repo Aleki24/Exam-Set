@@ -65,6 +65,14 @@ const STATIC_SUBJECTS = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Inte
 const STATIC_TERMS = ['Opener', 'Mid Term 1', 'End of Term 1', 'Mid Term 2', 'End of Term 2', 'Mid Term 3', 'End of Term 3'];
 const BLOOMS_LEVELS = ['Knowledge', 'Understanding', 'Application', 'Analysis', 'Evaluation', 'Creation'];
 
+// CBC Level display names - Static for instant loading
+const CBC_LEVELS = ['primary', 'junior', 'senior'] as const;
+const LEVEL_LABELS: Record<string, string> = {
+  'primary': 'Primary',
+  'junior': 'JSS',
+  'senior': 'SSS',
+};
+
 export default function Home() {
   const [currentView, setCurrentView] = useState<ViewState>('bank');
 
@@ -83,6 +91,7 @@ export default function Home() {
   const [curriculums, setCurriculums] = useState<DBCurriculum[]>([]);
   const [grades, setGrades] = useState<DBGrade[]>([]);
   const [subjects, setSubjects] = useState<DBSubject[]>([]);
+  const [filteredSubjects, setFilteredSubjects] = useState<DBSubject[]>([]);
 
 
 
@@ -104,6 +113,9 @@ export default function Home() {
     topic: 'All',
     blooms: 'All'
   });
+
+  const [filterLevel, setFilterLevel] = useState('');
+  const [filterBand, setFilterBand] = useState('');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'topic' | 'marks' | 'difficulty' | 'none'>('none');
@@ -157,6 +169,7 @@ export default function Home() {
       setCurriculums(currData);
       setGrades(gradeData);
       setSubjects(subData);
+      setFilteredSubjects(subData); // Initialize filtered with all
     } catch (error) {
       console.error('Failed to load lookup data:', error);
     }
@@ -182,6 +195,10 @@ export default function Home() {
       if (filters.grade && filters.grade !== 'All') {
         const g = grades.find(gr => gr.name === filters.grade);
         if (g) params.set('grade_id', g.id);
+      } else {
+        // If grade is All, check for Level/Band filters
+        if (filterLevel) params.set('level', filterLevel);
+        if (filterBand) params.set('band', filterBand);
       }
 
       if (filters.topic && filters.topic !== 'All') params.set('topic', filters.topic);
@@ -200,7 +217,7 @@ export default function Home() {
     } finally {
       setIsLoadingQuestions(false);
     }
-  }, [filters, searchQuery, curriculums, grades, subjects]);
+  }, [filters, searchQuery, curriculums, grades, subjects, filterLevel, filterBand]);
 
   // Initial Data Load
   useEffect(() => {
@@ -218,7 +235,7 @@ export default function Home() {
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [fetchQuestions, curriculums.length]);
+  }, [fetchQuestions, curriculums.length, filterLevel, filterBand]);
 
   // User & LocalStorage Init
   useEffect(() => {
@@ -461,9 +478,67 @@ export default function Home() {
   const totalMarks = examQuestions.reduce((sum, q) => sum + q.marks, 0);
 
   // --- Filtering Logic ---
+  // --- Filtering Logic ---
 
-  const availableCurriculums = useMemo(() => Array.from(new Set([...STATIC_CURRICULUMS, ...questionBank.map(q => q.curriculum || 'General')])).sort(), [questionBank]);
-  const availableSubjects = useMemo(() => Array.from(new Set([...STATIC_SUBJECTS, ...questionBank.map(q => q.subject || 'General')])).sort(), [questionBank]);
+  const levels = CBC_LEVELS;
+  const bands = useMemo(() => Array.from(new Set(grades.filter(g => g.level === filterLevel).map(g => g.band).filter(Boolean))), [grades, filterLevel]);
+
+  // Filter grades based on Level and Band
+  const availableGrades = useMemo(() => {
+    if (!grades.length) return [];
+    const filtered = grades.filter(g => {
+      if (filterLevel && g.level !== filterLevel) return false;
+      if (filterBand && g.band !== filterBand) return false;
+      return true;
+    }).map(g => g.name);
+    return Array.from(new Set(filtered));
+  }, [grades, filterLevel, filterBand]);
+
+  // Filter subjects based on grade if selected
+  const availableSubjects = useMemo(() => {
+    // Show unique subject names from the filtered list
+    return Array.from(new Set(filteredSubjects.map(s => s.name))).sort();
+  }, [filteredSubjects]);
+
+  // Dynamic Subject Fetching Effect
+  useEffect(() => {
+    const fetchFilteredSubjects = async () => {
+      // If no grade selected, show all subjects
+      if (!filters.grade || filters.grade === 'All') {
+        setFilteredSubjects(subjects);
+        return;
+      }
+
+      // Find grade ID
+      const grade = grades.find(g => g.name === filters.grade);
+      if (!grade) {
+        setFilteredSubjects(subjects);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/lookup?type=subjects&grade_id=${grade.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setFilteredSubjects(data.subjects || []);
+
+          // Reset selected subject if not in new list
+          if (filters.subject && filters.subject !== 'All') {
+            const isValid = (data.subjects || []).some((s: DBSubject) => s.name === filters.subject);
+            if (!isValid) {
+              setFilters(p => ({ ...p, subject: 'All' }));
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching filtered subjects:', err);
+      }
+    };
+
+    fetchFilteredSubjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.grade]); // Only re-run when grade changes
+
   const availableTerms = STATIC_TERMS;
   const availableTopics = useMemo(() => Array.from(new Set(questionBank.map(q => q.topic))).sort(), [questionBank]);
 
@@ -626,19 +701,61 @@ export default function Home() {
                 <div className="space-y-8">
                   {/* Filters Bar */}
                   <div className="glass-card p-3 flex flex-wrap gap-2 items-center sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <select className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary" value={filters.curriculum} onChange={e => setFilters(p => ({ ...p, curriculum: e.target.value }))}>
-                      <option value="All">All Curriculums</option>
-                      {availableCurriculums.map(c => <option key={c} value={c}>{c}</option>)}
+                    {/* Level Filter */}
+                    <select
+                      value={filterLevel}
+                      onChange={(e) => {
+                        setFilterLevel(e.target.value);
+                        setFilterBand('');
+                        setFilters(p => ({ ...p, grade: 'All', subject: 'All', topic: 'All' }));
+                      }}
+                      className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary"
+                    >
+                      <option value="">All Levels</option>
+                      {levels.map(l => (
+                        <option key={l} value={l as string}>{LEVEL_LABELS[l as string] || l}</option>
+                      ))}
                     </select>
                     <div className="h-4 w-px bg-border"></div>
+
+                    {/* Band Filter */}
+                    {filterLevel === 'primary' && bands.length > 0 && (
+                      <>
+                        <select
+                          value={filterBand}
+                          onChange={(e) => {
+                            setFilterBand(e.target.value);
+                            setFilters(p => ({ ...p, grade: 'All', subject: 'All', topic: 'All' }));
+                          }}
+                          className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary"
+                        >
+                          <option value="">All Bands</option>
+                          {bands.map(b => (
+                            <option key={b} value={b as string}>{(b as string)?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                          ))}
+                        </select>
+                        <div className="h-4 w-px bg-border"></div>
+                      </>
+                    )}
+
+                    {/* Grade Filter */}
+                    <select className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary" value={filters.grade} onChange={e => setFilters(p => ({ ...p, grade: e.target.value }))}>
+                      <option value="All">All Grades</option>
+                      {availableGrades.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <div className="h-4 w-px bg-border"></div>
+
+                    {/* Subject Filter */}
                     <select className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary" value={filters.subject} onChange={e => setFilters(p => ({ ...p, subject: e.target.value }))}>
                       <option value="All">All Subjects</option>
                       {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <div className="h-4 w-px bg-border"></div>
-                    <select className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary" value={filters.grade} onChange={e => setFilters(p => ({ ...p, grade: e.target.value }))}>
-                      <option value="All">All Grades</option>
-                      {[7, 8, 9, 10, 11, 12].map(g => <option key={g} value={'Grade ' + g}>Grade {g}</option>)}
+
+                    {/* Topic Filter */}
+                    <select className="bg-transparent text-xs font-bold text-muted-foreground px-3 py-2 outline-none cursor-pointer hover:text-primary" value={filters.topic} onChange={e => setFilters(p => ({ ...p, topic: e.target.value }))}>
+                      <option value="All">All Topics</option>
+                      {availableTopics.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
 
                     {/* View Toggle */}

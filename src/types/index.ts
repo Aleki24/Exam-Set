@@ -183,6 +183,8 @@ export interface DBGrade {
     curriculum_id: string;
     name: string;
     level_order: number;
+    level?: string;
+    band?: string;
     created_at: string;
 }
 
@@ -248,6 +250,9 @@ export interface QuestionFilters {
     search?: string;
     limit?: number;
     offset?: number;
+    // Added for Level/Band filtering
+    level?: string;
+    band?: string;
 }
 
 // Filters for searching exams

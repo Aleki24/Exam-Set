@@ -367,6 +367,25 @@ const ExamPreview: React.FC<ExamPreviewProps> = ({ paper, onEdit }) => {
                                         ))}
                                     </div>
                                 )}
+
+                                {/* Sub-parts for PDF/Preview */}
+                                {q.subParts && q.subParts.length > 0 && (
+                                    <div className="mt-4 space-y-3">
+                                        {q.subParts.map((part, pIdx) => (
+                                            <div key={pIdx} className="flex gap-3">
+                                                <span className="font-bold text-sm w-6 shrink-0">({part.label})</span>
+                                                <div className="flex-1">
+                                                    <div className="text-[14px] leading-relaxed mb-1 text-foreground">
+                                                        <LatexRenderer content={part.text} />
+                                                    </div>
+                                                </div>
+                                                <div className="w-12 text-right">
+                                                    <span className="text-xs font-bold text-muted-foreground">[{part.marks}]</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="shrink-0 w-16 text-right">
                                 <span className="font-bold text-sm bg-secondary px-2 py-1 rounded text-foreground">
@@ -374,6 +393,8 @@ const ExamPreview: React.FC<ExamPreviewProps> = ({ paper, onEdit }) => {
                                 </span>
                             </div>
                         </div>
+
+
                     ))}
                 </div>
 

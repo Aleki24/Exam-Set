@@ -180,10 +180,38 @@ export default function AdminQuestionsPage() {
     const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
     const [formTopics, setFormTopics] = useState<Topic[]>([]);
 
-    // Load initial subjects
+    // Load available subjects dynamically based on filters
     useEffect(() => {
-        setAvailableSubjects(subjects);
-    }, [subjects]);
+        const fetchFilteredSubjects = async () => {
+            let url = '/api/admin/lookup?type=subjects';
+            if (filters.grade_id) {
+                url += `&grade_id=${filters.grade_id}`;
+            } else if (filterLevel) {
+                url += `&level=${filterLevel}`;
+            }
+
+            try {
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableSubjects(data.subjects || []);
+
+                    // If currently selected subject is not in the new list, clear it
+                    if (filters.subject_id) {
+                        const isValid = (data.subjects || []).some((s: Subject) => s.id === filters.subject_id);
+                        if (!isValid) {
+                            setFilters(prev => ({ ...prev, subject_id: '' }));
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching subjects:', err);
+            }
+        };
+
+        fetchFilteredSubjects();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters.grade_id, filterLevel]);
 
     // Pagination
     const [page, setPage] = useState(0);
@@ -236,10 +264,10 @@ export default function AdminQuestionsPage() {
     }, [bulkSubjectId]);
 
     // Show notification
-    const showNotification = (type: 'success' | 'error', message: string) => {
+    const showNotification = useCallback((type: 'success' | 'error', message: string) => {
         setNotification({ type, message });
         setTimeout(() => setNotification(null), 4000);
-    };
+    }, []);
 
     // Fetch lookup data
     const fetchLookupData = useCallback(async () => {
@@ -292,6 +320,16 @@ export default function AdminQuestionsPage() {
         setFilters(prev => ({ ...prev, topic_id: '' }));
     }, [filters.subject_id]);
 
+    // Reset pagination to page 0 when any filter changes
+    const prevFiltersRef = useRef(filters);
+    useEffect(() => {
+        // Only reset page if filters actually changed (not on initial mount)
+        if (JSON.stringify(prevFiltersRef.current) !== JSON.stringify(filters)) {
+            setPage(0);
+            prevFiltersRef.current = filters;
+        }
+    }, [filters]);
+
     // Fetch questions
     const fetchQuestions = useCallback(async () => {
         setIsLoading(true);
@@ -332,13 +370,40 @@ export default function AdminQuestionsPage() {
         fetchLookupData();
     }, [fetchLookupData]);
 
-    // Debounced fetch when filters change (300ms delay to batch rapid changes)
+    // Debounced fetch when filters or page change (300ms delay to batch rapid changes)
     useEffect(() => {
         if (debounceTimer.current) {
             clearTimeout(debounceTimer.current);
         }
-        debounceTimer.current = setTimeout(() => {
-            fetchQuestions();
+        debounceTimer.current = setTimeout(async () => {
+            setIsLoading(true);
+            try {
+                const params = new URLSearchParams();
+                params.set('limit', limit.toString());
+                params.set('offset', (page * limit).toString());
+
+                if (filters.curriculum_id) params.set('curriculum_id', filters.curriculum_id);
+                if (filters.grade_id) params.set('grade_id', filters.grade_id);
+                if (filters.subject_id) params.set('subject_id', filters.subject_id);
+                if (filters.topic_id) params.set('topic_id', filters.topic_id);
+                if (filters.difficulty) params.set('difficulty', filters.difficulty);
+                if (filters.type) params.set('type', filters.type);
+                if (filters.search) params.set('search', filters.search);
+
+                const res = await fetch(`/api/questions?${params.toString()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setQuestions(data.questions || []);
+                    setTotalCount(data.count || 0);
+                } else {
+                    showNotification('error', 'Failed to fetch questions');
+                }
+            } catch (error) {
+                console.error('Error fetching questions:', error);
+                showNotification('error', 'Error loading questions');
+            } finally {
+                setIsLoading(false);
+            }
         }, 300);
 
         return () => {
@@ -346,7 +411,7 @@ export default function AdminQuestionsPage() {
                 clearTimeout(debounceTimer.current);
             }
         };
-    }, [fetchQuestions]);
+    }, [page, filters, showNotification]);
 
     // Keyboard shortcuts handler
     useEffect(() => {
@@ -755,6 +820,9 @@ export default function AdminQuestionsPage() {
 
         setIsBulkImporting(true);
         try {
+            // Get the current curriculum_id from filters (usually CBC)
+            const currentCurriculumId = filters.curriculum_id || null;
+
             const questions = parsedQuestions.map(q => ({
                 text: q.text,
                 marks: q.marks,
@@ -763,6 +831,7 @@ export default function AdminQuestionsPage() {
                 type: 'Structured',
                 subject_id: bulkSubjectId || null,
                 grade_id: bulkGradeId || null,
+                curriculum_id: currentCurriculumId,
             }));
 
             const res = await fetch('/api/questions', {

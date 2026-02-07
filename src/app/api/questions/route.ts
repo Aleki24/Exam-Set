@@ -11,14 +11,30 @@ export async function GET(request: NextRequest) {
         const curriculum_id = searchParams.get('curriculum_id');
         const grade_id = searchParams.get('grade_id');
         const subject_id = searchParams.get('subject_id');
-        const topic = searchParams.get('topic');
+        let topic = searchParams.get('topic');
+        const topic_id = searchParams.get('topic_id');
         const subtopic = searchParams.get('subtopic');
         const term = searchParams.get('term');
         const difficulty = searchParams.get('difficulty');
         const type = searchParams.get('type');
+        const level = searchParams.get('level');
+        const band = searchParams.get('band');
         const search = searchParams.get('search');
         const limit = parseInt(searchParams.get('limit') || '50');
         const offset = parseInt(searchParams.get('offset') || '0');
+
+        // ... existing topic lookup ...
+        if (topic_id && !topic) {
+            const { data: topicData } = await supabase
+                .from('subject_topics')
+                .select('name')
+                .eq('id', topic_id) // Use eq explicitly
+                .single();
+
+            if (topicData) {
+                topic = topicData.name;
+            }
+        }
 
         // Build query
         let query = supabase
@@ -26,13 +42,15 @@ export async function GET(request: NextRequest) {
             .select(`
                 *,
                 curriculums:curriculum_id(name),
-                grades:grade_id(name),
+                grades:grade_id!inner(name, level, band),
                 subjects:subject_id(name)
             `, { count: 'exact' })
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
         // Apply filters
+        if (level) query = query.eq('grades.level', level);
+        if (band) query = query.eq('grades.band', band);
         if (curriculum_id) query = query.eq('curriculum_id', curriculum_id);
         if (grade_id) query = query.eq('grade_id', grade_id);
         if (subject_id) query = query.eq('subject_id', subject_id);
@@ -63,7 +81,10 @@ export async function GET(request: NextRequest) {
             subjects: undefined,
         }));
 
-        return NextResponse.json({ questions, count: count || 0 });
+        return NextResponse.json({
+            questions,
+            count: count || 0
+        });
     } catch (error: any) {
         console.error('Questions GET error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

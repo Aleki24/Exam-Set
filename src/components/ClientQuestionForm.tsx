@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, Save, Loader2, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Save, Loader2, Plus, Trash2, ChevronDown, ChevronUp, Image as ImageIcon } from 'lucide-react';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import { QuestionSubPart } from '@/types';
 
@@ -41,6 +41,8 @@ interface QuestionFormData {
     subject_id: string;
     term: string;
     sub_parts: QuestionSubPart[];
+    imagePath?: string;
+    imageCaption?: string;
 }
 
 interface ClientQuestionFormProps {
@@ -93,6 +95,8 @@ const DEFAULT_FORM_DATA: QuestionFormData = {
     subject_id: '',
     term: '',
     sub_parts: [],
+    imagePath: '',
+    imageCaption: ''
 };
 
 // Generate labels for sub-parts (a, b, c, ..., z, aa, ab, ...)
@@ -110,6 +114,7 @@ export default function ClientQuestionForm({
 }: ClientQuestionFormProps) {
     const [formData, setFormData] = useState<QuestionFormData>(DEFAULT_FORM_DATA);
     const [grades, setGrades] = useState<Grade[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
 
     // CBC Specific State
     const [selectedLevel, setSelectedLevel] = useState<string>('');
@@ -318,6 +323,34 @@ export default function ClientQuestionForm({
         }
     }, [isOpen]);
 
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch('/api/storage/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!res.ok) throw new Error('Upload failed');
+
+            const data = await res.json();
+            if (data.success && data.url) {
+                setFormData(prev => ({ ...prev, imagePath: data.url }));
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Failed to upload image');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -355,6 +388,60 @@ export default function ClientQuestionForm({
                                 onChange={(content) => setFormData({ ...formData, text: content })}
                                 placeholder="Enter the question text..."
                             />
+                        </div>
+                    </div>
+
+                    {/* Image Upload */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Question Image (Optional)
+                        </label>
+                        <div className="flex items-start gap-4">
+                            {formData.imagePath ? (
+                                <div className="relative group">
+                                    <img
+                                        src={formData.imagePath}
+                                        alt="Preview"
+                                        className="h-32 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900"
+                                    />
+                                    <button
+                                        onClick={() => setFormData({ ...formData, imagePath: '', imageCaption: '' })}
+                                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="w-32 h-32 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center text-gray-400 hover:border-primary hover:text-primary transition-colors bg-gray-50 dark:bg-gray-800/50">
+                                    {isUploading ? (
+                                        <Loader2 className="w-6 h-6 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <ImageIcon className="w-8 h-8 mb-2 opacity-50" />
+                                            <span className="text-xs font-medium">Upload Image</span>
+                                        </>
+                                    )}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageUpload}
+                                        className="absolute inset-0 opacity-0 cursor-pointer w-32 h-32"
+                                        disabled={isUploading}
+                                    />
+                                </div>
+                            )}
+
+                            {formData.imagePath && (
+                                <div className="flex-1">
+                                    <input
+                                        type="text"
+                                        value={formData.imageCaption || ''}
+                                        onChange={e => setFormData({ ...formData, imageCaption: e.target.value })}
+                                        placeholder="Add a caption (e.g., Figure 1.1)"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 

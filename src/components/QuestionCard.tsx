@@ -156,6 +156,27 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, onAdd, onRemove, 
                         ))}
                     </div>
                 )}
+
+                {/* Sub-parts Rendering */}
+                {question.subParts && question.subParts.length > 0 && (
+                    <div className="mt-4 space-y-3 pl-2">
+                        {question.subParts.map((part, idx) => (
+                            <div key={part.id || idx} className="flex gap-3">
+                                <span className="font-bold text-sm text-muted-foreground w-6 shrink-0">({part.label})</span>
+                                <div className="flex-1">
+                                    <div className="text-sm text-foreground mb-1">
+                                        <LatexRenderer content={part.text} />
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <span className="text-[10px] font-bold text-muted-foreground bg-secondary px-1.5 rounded">
+                                            [{part.marks}]
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Actions Footer */}
