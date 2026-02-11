@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import SingleQuestionPreview from '@/components/SingleQuestionPreview';
+import { Question as PreviewQuestion } from '@/types';
 import {
     Plus,
     Search,
@@ -862,6 +864,22 @@ export default function AdminQuestionsPage() {
         }
     };
 
+    // Build a preview Question object from formData for SingleQuestionPreview
+    const previewQuestion: PreviewQuestion = useMemo(() => ({
+        id: 'admin-preview',
+        text: formData.text || 'Question text will appear here...',
+        marks: formData.marks || 1,
+        type: (formData.type || 'Structured') as any,
+        difficulty: (formData.difficulty || 'Medium') as any,
+        topic: formData.topic || 'Topic',
+        options: formData.options,
+        matchingPairs: formData.matching_pairs,
+        answerLines: formData.answerLines,
+        subtopic: formData.subtopic,
+        term: formData.term,
+        bloomsLevel: (formData.blooms_level || 'Knowledge') as any,
+    }), [formData]);
+
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -1476,12 +1494,17 @@ export default function AdminQuestionsPage() {
 
             {/* Question Form Modal */}
             {showForm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
-                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                                {editingQuestion ? 'Edit Question' : 'New Question'}
-                            </h2>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col font-sans" style={{ maxHeight: '90vh' }}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                    {editingQuestion ? 'Edit Question' : 'New Question'}
+                                </h2>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Fill in the details below. The preview on the right shows how it will appear on paper.
+                                </p>
+                            </div>
                             <button
                                 onClick={() => { setShowForm(false); resetForm(); }}
                                 className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
@@ -1490,292 +1513,332 @@ export default function AdminQuestionsPage() {
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-6">
-                            {/* Question Text */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Question Text <span className="text-red-500">*</span>
-                                </label>
-                                <div className="min-h-[200px]">
-                                    <RichTextEditor
-                                        value={formData.text || ''}
-                                        onChange={(content) => setFormData({ ...formData, text: content })}
-                                        placeholder="Enter the question text..."
-                                    />
-                                </div>
-                            </div>
+                        <div className="flex-1 min-h-0 overflow-y-auto" style={{ overflowY: 'auto' }}>
+                            <div className="min-h-0 flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
 
-                            {/* Type and Difficulty */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Question Type
-                                    </label>
-                                    <select
-                                        value={formData.type}
-                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    >
-                                        {QUESTION_TYPES.map((t) => (
-                                            <option key={t} value={t}>{t}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Difficulty
-                                    </label>
-                                    <select
-                                        value={formData.difficulty}
-                                        onChange={(e) => setFormData({ ...formData, difficulty: e.target.value as any })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    >
-                                        {DIFFICULTY_LEVELS.map((d) => (
-                                            <option key={d} value={d}>{d}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* MCQ Options */}
-                            {formData.type === 'Multiple Choice' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Options (first one is correct answer)
-                                    </label>
-                                    <div className="space-y-2">
-                                        {(formData.options || ['', '', '', '']).map((opt, idx) => (
-                                            <input
-                                                key={idx}
-                                                type="text"
-                                                value={opt}
-                                                onChange={(e) => updateOption(idx, e.target.value)}
-                                                placeholder={`Option ${idx + 1}${idx === 0 ? ' (correct)' : ''}`}
-                                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${idx === 0 ? 'border-green-300 dark:border-green-600' : 'border-gray-300 dark:border-gray-600'
-                                                    }`}
+                                {/* LEFT: FORM */}
+                                <div className="flex-1 p-6 space-y-6">
+                                    {/* Question Text */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Question Text <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="min-h-[200px]">
+                                            <RichTextEditor
+                                                value={formData.text || ''}
+                                                onChange={(content) => setFormData({ ...formData, text: content })}
+                                                placeholder="Enter the question text..."
                                             />
-                                        ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
 
-                            {/* Matching Pairs */}
-                            {formData.type === 'Matching' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Matching Pairs
-                                    </label>
-                                    <div className="space-y-2">
-                                        {(formData.matching_pairs || []).map((pair, idx) => (
-                                            <div key={idx} className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={pair.left}
-                                                    onChange={(e) => updateMatchingPair(idx, 'left', e.target.value)}
-                                                    placeholder="Left item"
-                                                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                                />
-                                                <span className="flex items-center text-gray-400">→</span>
-                                                <input
-                                                    type="text"
-                                                    value={pair.right}
-                                                    onChange={(e) => updateMatchingPair(idx, 'right', e.target.value)}
-                                                    placeholder="Right item"
-                                                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                                />
-                                                {(formData.matching_pairs?.length || 0) > 1 && (
-                                                    <button
-                                                        onClick={() => removeMatchingPair(idx)}
-                                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
-                                                )}
+                                    {/* Type and Difficulty */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Question Type
+                                            </label>
+                                            <select
+                                                value={formData.type}
+                                                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                            >
+                                                {QUESTION_TYPES.map((t) => (
+                                                    <option key={t} value={t}>{t}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Difficulty
+                                            </label>
+                                            <select
+                                                value={formData.difficulty}
+                                                onChange={(e) => setFormData({ ...formData, difficulty: e.target.value as any })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                            >
+                                                {DIFFICULTY_LEVELS.map((d) => (
+                                                    <option key={d} value={d}>{d}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* MCQ Options */}
+                                    {formData.type === 'Multiple Choice' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Options (first one is correct answer)
+                                            </label>
+                                            <div className="space-y-2">
+                                                {(formData.options || ['', '', '', '']).map((opt, idx) => (
+                                                    <input
+                                                        key={idx}
+                                                        type="text"
+                                                        value={opt}
+                                                        onChange={(e) => updateOption(idx, e.target.value)}
+                                                        placeholder={`Option ${idx + 1}${idx === 0 ? ' (correct)' : ''}`}
+                                                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${idx === 0 ? 'border-green-300 dark:border-green-600' : 'border-gray-300 dark:border-gray-600'
+                                                            }`}
+                                                    />
+                                                ))}
                                             </div>
-                                        ))}
-                                        <button
-                                            onClick={addMatchingPair}
-                                            className="text-sm text-blue-600 hover:underline"
-                                        >
-                                            + Add pair
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+                                        </div>
+                                    )}
 
-                            {/* Topic and Subtopic */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Topic <span className="text-red-500">*</span>
-                                    </label>
-                                    {formTopics.length > 0 ? (
+                                    {/* Matching Pairs */}
+                                    {formData.type === 'Matching' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Matching Pairs
+                                            </label>
+                                            <div className="space-y-2">
+                                                {(formData.matching_pairs || []).map((pair, idx) => (
+                                                    <div key={idx} className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={pair.left}
+                                                            onChange={(e) => updateMatchingPair(idx, 'left', e.target.value)}
+                                                            placeholder="Left item"
+                                                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                        />
+                                                        <span className="flex items-center text-gray-400">→</span>
+                                                        <input
+                                                            type="text"
+                                                            value={pair.right}
+                                                            onChange={(e) => updateMatchingPair(idx, 'right', e.target.value)}
+                                                            placeholder="Right item"
+                                                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                        />
+                                                        {(formData.matching_pairs?.length || 0) > 1 && (
+                                                            <button
+                                                                onClick={() => removeMatchingPair(idx)}
+                                                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                <button
+                                                    onClick={addMatchingPair}
+                                                    className="text-sm text-blue-600 hover:underline"
+                                                >
+                                                    + Add pair
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Topic and Subtopic */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Topic <span className="text-red-500">*</span>
+                                            </label>
+                                            {formTopics.length > 0 ? (
+                                                <select
+                                                    value={formData.topic}
+                                                    onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-teal-300 dark:border-teal-600 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-gray-900 dark:text-white"
+                                                >
+                                                    <option value="">Select Topic...</option>
+                                                    {formTopics.map((t) => (
+                                                        <option key={t.id} value={t.name}>
+                                                            {t.topic_number}. {t.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={formData.topic}
+                                                    onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                    placeholder={formData.subject_id ? "No topics created - type here" : "Select a subject first"}
+                                                />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Subtopic
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.subtopic}
+                                                onChange={(e) => setFormData({ ...formData, subtopic: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                placeholder="e.g., Linear Equations"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Marks, Bloom's Level, Answer Lines */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Marks
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                value={formData.marks}
+                                                onChange={(e) => setFormData({ ...formData, marks: parseInt(e.target.value) || 1 })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
+                                                Answer Space (Lines)
+                                            </label>
+                                            <div className="flex items-center gap-4">
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="15"
+                                                    value={formData.answerLines || 0}
+                                                    onChange={(e) => setFormData({ ...formData, answerLines: parseInt(e.target.value) })}
+                                                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                                />
+                                                <span className="w-8 text-center font-bold text-sm">{formData.answerLines || 0}</span>
+                                            </div>
+                                            <p className="text-[10px] text-gray-500 mt-1">
+                                                Adjust the number of blank lines rendered for the answer.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Bloom's Level
+                                            </label>
+                                            <select
+                                                value={formData.blooms_level}
+                                                onChange={(e) => setFormData({ ...formData, blooms_level: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                            >
+                                                {BLOOMS_LEVELS.map((b) => (
+                                                    <option key={b} value={b}>{b}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Level, Grade, Subject */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Level <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                value={formData.curriculum_id ? (grades.find(g => g.id === formData.grade_id)?.level || '') : ''}
+                                                onChange={(e) => {
+                                                    // When level changes, reset grade and filter grades
+                                                    setFormData({ ...formData, grade_id: '', subject_id: '' });
+                                                    setFilterLevel(e.target.value);
+                                                }}
+                                                className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-gray-900 dark:text-white"
+                                            >
+                                                <option value="">Select Level...</option>
+                                                {levels.map((l) => (
+                                                    <option key={l} value={l as string}>{LEVEL_LABELS[l as string] || l}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Grade <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                value={formData.grade_id}
+                                                onChange={(e) => setFormData({ ...formData, grade_id: e.target.value, subject_id: '' })}
+                                                className="w-full px-3 py-2 border border-green-300 dark:border-green-600 rounded-lg bg-green-50 dark:bg-green-900/30 text-gray-900 dark:text-white"
+                                            >
+                                                <option value="">Select Grade...</option>
+                                                {filteredGrades.map((g) => (
+                                                    <option key={g.id} value={g.id}>{g.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Subject <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                value={formData.subject_id}
+                                                onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
+                                                className="w-full px-3 py-2 border border-amber-300 dark:border-amber-600 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-gray-900 dark:text-white"
+                                            >
+                                                <option value="">Select Subject...</option>
+                                                {availableSubjects.map((s) => (
+                                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Term */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Term
+                                        </label>
                                         <select
-                                            value={formData.topic}
-                                            onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                                            className="w-full px-3 py-2 border border-teal-300 dark:border-teal-600 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-gray-900 dark:text-white"
+                                            value={formData.term}
+                                            onChange={(e) => setFormData({ ...formData, term: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                         >
-                                            <option value="">Select Topic...</option>
-                                            {formTopics.map((t) => (
-                                                <option key={t.id} value={t.name}>
-                                                    {t.topic_number}. {t.name}
-                                                </option>
+                                            <option value="">No term</option>
+                                            {TERMS.map((t) => (
+                                                <option key={t.value} value={t.value}>{t.label}</option>
                                             ))}
                                         </select>
-                                    ) : (
-                                        <input
-                                            type="text"
-                                            value={formData.topic}
-                                            onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                                    </div>
+
+                                    {/* Marking Scheme */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Marking Scheme
+                                        </label>
+                                        <textarea
+                                            value={formData.marking_scheme}
+                                            onChange={(e) => setFormData({ ...formData, marking_scheme: e.target.value })}
+                                            rows={3}
                                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                            placeholder={formData.subject_id ? "No topics created - type here" : "Select a subject first"}
+                                            placeholder="Describe how this question should be marked..."
                                         />
-                                    )}
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Subtopic
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.subtopic}
-                                        onChange={(e) => setFormData({ ...formData, subtopic: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                        placeholder="e.g., Linear Equations"
-                                    />
-                                </div>
-                            </div>
 
-                            {/* Marks, Bloom's Level, Answer Lines */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Marks
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={formData.marks}
-                                        onChange={(e) => setFormData({ ...formData, marks: parseInt(e.target.value) || 1 })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Answer Lines (0 = default)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={formData.answerLines}
-                                        onChange={(e) => setFormData({ ...formData, answerLines: parseInt(e.target.value) || 0 })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                        placeholder="Auto"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Bloom's Level
-                                    </label>
-                                    <select
-                                        value={formData.blooms_level}
-                                        onChange={(e) => setFormData({ ...formData, blooms_level: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    >
-                                        {BLOOMS_LEVELS.map((b) => (
-                                            <option key={b} value={b}>{b}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
+                                {/* RIGHT: LIVE PREVIEW */}
+                                <div className="w-full lg:w-[45%] bg-gray-50 dark:bg-gray-900 p-5 flex flex-col">
+                                    <div className="flex items-center justify-between mb-3 sticky top-0 bg-gray-50 dark:bg-gray-900 pb-2 z-10">
+                                        <h3
+                                            className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2"
+                                            style={{ fontFamily: "'Outfit', sans-serif" }}
+                                        >
+                                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                            Paper Preview
+                                        </h3>
+                                        <div className="text-[9px] text-gray-400" style={{ fontFamily: "'Inter', sans-serif" }}>
+                                            Live • A4 Portrait
+                                        </div>
+                                    </div>
 
-                            {/* Level, Grade, Subject */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Level <span className="text-red-500">*</span>
-                                    </label>
-                                    <select
-                                        value={formData.curriculum_id ? (grades.find(g => g.id === formData.grade_id)?.level || '') : ''}
-                                        onChange={(e) => {
-                                            // When level changes, reset grade and filter grades
-                                            setFormData({ ...formData, grade_id: '', subject_id: '' });
-                                            setFilterLevel(e.target.value);
-                                        }}
-                                        className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-gray-900 dark:text-white"
-                                    >
-                                        <option value="">Select Level...</option>
-                                        {levels.map((l) => (
-                                            <option key={l} value={l as string}>{LEVEL_LABELS[l as string] || l}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Grade <span className="text-red-500">*</span>
-                                    </label>
-                                    <select
-                                        value={formData.grade_id}
-                                        onChange={(e) => setFormData({ ...formData, grade_id: e.target.value, subject_id: '' })}
-                                        className="w-full px-3 py-2 border border-green-300 dark:border-green-600 rounded-lg bg-green-50 dark:bg-green-900/30 text-gray-900 dark:text-white"
-                                    >
-                                        <option value="">Select Grade...</option>
-                                        {filteredGrades.map((g) => (
-                                            <option key={g.id} value={g.id}>{g.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Subject <span className="text-red-500">*</span>
-                                    </label>
-                                    <select
-                                        value={formData.subject_id}
-                                        onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
-                                        className="w-full px-3 py-2 border border-amber-300 dark:border-amber-600 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-gray-900 dark:text-white"
-                                    >
-                                        <option value="">Select Subject...</option>
-                                        {availableSubjects.map((s) => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
+                                    <div className="flex-1 flex justify-center items-start">
+                                        <SingleQuestionPreview question={previewQuestion} />
+                                    </div>
 
-                            {/* Term */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Term
-                                </label>
-                                <select
-                                    value={formData.term}
-                                    onChange={(e) => setFormData({ ...formData, term: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                >
-                                    <option value="">No term</option>
-                                    {TERMS.map((t) => (
-                                        <option key={t.value} value={t.value}>{t.label}</option>
-                                    ))}
-                                </select>
-                            </div>
+                                    <p
+                                        className="text-[10px] text-gray-400 text-center mt-3 pt-2 border-t border-gray-200 dark:border-gray-700"
+                                        style={{ fontFamily: "'Inter', sans-serif" }}
+                                    >
+                                        💡 This preview updates as you type
+                                    </p>
+                                </div>
 
-                            {/* Marking Scheme */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Marking Scheme
-                                </label>
-                                <textarea
-                                    value={formData.marking_scheme}
-                                    onChange={(e) => setFormData({ ...formData, marking_scheme: e.target.value })}
-                                    rows={3}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    placeholder="Describe how this question should be marked..."
-                                />
-                            </div>
-                        </div>
+                            </div>{/* end flex row */}
+                        </div>{/* end flex-1 overflow-hidden */}
 
                         {/* Form footer */}
-                        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-800">
+                        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-800">
                             <button
                                 onClick={() => { setShowForm(false); resetForm(); }}
                                 className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"

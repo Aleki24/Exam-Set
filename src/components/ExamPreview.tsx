@@ -360,9 +360,9 @@ const ExamPreview: React.FC<ExamPreviewProps> = ({ paper, onEdit }) => {
                                     </div>
                                 )}
 
-                                {(q.type === 'Structured' || q.type === 'Essay') && (
+                                {(q.type === 'Structured' || q.type === 'Essay' || q.type === 'Short Answer') && (
                                     <div className="mt-6 space-y-6">
-                                        {Array.from({ length: q.type === 'Essay' ? 8 : 4 }).map((_, i) => (
+                                        {Array.from({ length: q.answerLines || (q.type === 'Essay' ? 8 : 4) }).map((_, i) => (
                                             <div key={i} className="border-b border-border w-full h-6"></div>
                                         ))}
                                     </div>

@@ -150,9 +150,9 @@ export default function QuestionEntryModal({
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
+                <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-600 to-indigo-600 text-white shrink-0">
                     <h2 className="text-xl font-bold">Add New Question</h2>
                     <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition">
                         <X className="w-5 h-5" />
@@ -160,7 +160,7 @@ export default function QuestionEntryModal({
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)] space-y-4">
+                <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-4" style={{ overflowY: 'auto' }}>
                     {/* Question Text */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Question Text *</label>

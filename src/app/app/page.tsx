@@ -227,6 +227,9 @@ export default function Home() {
   // Fetch questions when filters or lookups change
   useEffect(() => {
     const timer = setTimeout(() => {
+      // Prevent fetching if we are in the middle of an update (to avoid reordering list)
+      if (isUpdatingRef.current) return;
+
       // Only fetch if we have lookups ready (to map IDs), UNLESS it's the very first load and we accept potentially unmapped filters?
       // Actually, if lookups aren't ready, we can't map 'CBC' to an ID, so the API might ignore it or we send nothing.
       // Better to wait for lookups.
@@ -462,9 +465,67 @@ export default function Home() {
     setExamQuestions(prev => prev.filter(q => q.id !== id));
   };
 
+  const isUpdatingRef = React.useRef(false);
+
+  // Update a question in the bank — saves to DB and keeps position stable
+  const handleQuestionUpdate = async (id: string, updates: Partial<Question>) => {
+    isUpdatingRef.current = true;
+
+    // 1. Store old state for rollback
+    const oldQuestion = questionBank.find(q => q.id === id);
+
+    // 2. Optimistic Update — uses map() so array order is preserved
+    setQuestionBank(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+
+    // 3. Prepare clean payload (only camelCase frontend fields the API understands)
+    const allowedKeys = [
+      'text', 'marks', 'difficulty', 'topic', 'subtopic', 'term', 'type',
+      'options', 'unit', 'answerLines', 'markingScheme', 'bloomsLevel',
+      'imagePath', 'imageCaption', 'hasLatex', 'matchingPairs', 'expectedLength',
+      'curriculum_id', 'grade_id', 'subject_id',
+    ];
+    const payload: Record<string, unknown> = {};
+    for (const key of allowedKeys) {
+      if (key in updates) {
+        payload[key] = (updates as any)[key];
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/questions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(err.error || 'Failed to update');
+      }
+
+      toast.success("Question updated");
+    } catch (err: any) {
+      console.error("Update failed:", err);
+      toast.error(`Update failed: ${err.message}`);
+      // Revert THIS question only — don't refetch (which would reorder the list)
+      if (oldQuestion) {
+        setQuestionBank(prev => prev.map(q => q.id === id ? oldQuestion : q));
+      }
+    } finally {
+      // Release lock after a short delay to allow UI to settle
+      setTimeout(() => {
+        isUpdatingRef.current = false;
+      }, 1000);
+    }
+  };
+
   const updateQuestion = (source: 'bank' | 'selected' | 'exam', id: string, updates: Partial<Question>) => {
-    if (source === 'bank') setQuestionBank(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
-    if (source === 'exam') setExamQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+    if (source === 'bank') {
+      handleQuestionUpdate(id, updates);
+    }
+    if (source === 'exam') {
+      setExamQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+    }
   };
 
   const handleInlineEdit = (type: 'metadata' | 'question', id: string, key: string, value: string) => {

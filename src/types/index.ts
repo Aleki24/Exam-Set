@@ -387,3 +387,165 @@ export interface ExtendedQuestionFilters extends QuestionFilters {
     section_type?: QuestionSectionType;
     requires_image?: boolean;
 }
+
+// ============================================================================
+// VIRTUAL EXAM SYSTEM TYPES
+// ============================================================================
+
+// Exam session status
+export type ExamSessionStatus = 'in_progress' | 'submitted' | 'timed_out' | 'abandoned';
+
+// Exam session: tracks a student's exam attempt
+export interface ExamSession {
+    id: string;
+    exam_id: string;
+    user_id: string;
+    started_at: string;
+    submitted_at?: string;
+    time_remaining?: number; // seconds
+    time_limit_seconds?: number;
+    status: ExamSessionStatus;
+    score?: number;
+    max_score?: number;
+    percentage?: number;
+    ip_address?: string;
+    user_agent?: string;
+    created_at: string;
+    updated_at: string;
+    // Joined data
+    exam_title?: string;
+    exam_subject?: string;
+    question_count?: number;
+}
+
+// Response data types for different question types
+export interface MCQResponse {
+    selected: string; // Option letter or ID
+}
+
+export interface TrueFalseResponse {
+    selected: boolean;
+}
+
+export interface MatchingResponse {
+    pairs: { left: string; right: string }[];
+}
+
+export interface FillBlankResponse {
+    answers: string[];
+}
+
+export interface EssayResponse {
+    text: string;
+}
+
+export interface NumericResponse {
+    value: number;
+    unit?: string;
+}
+
+export type QuestionResponse =
+    | MCQResponse
+    | TrueFalseResponse
+    | MatchingResponse
+    | FillBlankResponse
+    | EssayResponse
+    | NumericResponse
+    | Record<string, unknown>;
+
+// Exam response: stores answer for a single question
+export interface ExamResponse {
+    id: string;
+    session_id: string;
+    question_id: string;
+    response: QuestionResponse;
+    is_correct?: boolean;
+    marks_awarded: number;
+    marks_possible: number;
+    time_spent_seconds: number;
+    first_answered_at?: string;
+    last_updated_at: string;
+    is_flagged: boolean;
+    created_at: string;
+    // Joined data for display
+    question_text?: string;
+    question_type?: QuestionType;
+}
+
+// ============================================================================
+// QUESTION TAGGING TYPES
+// ============================================================================
+
+export interface QuestionTag {
+    id: string;
+    name: string;
+    slug: string;
+    color: string;
+    description?: string;
+    created_by?: string;
+    is_global: boolean;
+    created_at: string;
+}
+
+export interface QuestionTagMapping {
+    question_id: string;
+    tag_id: string;
+    created_at: string;
+}
+
+// ============================================================================
+// SYLLABUS MAPPING TYPES
+// ============================================================================
+
+export interface SyllabusPoint {
+    id: string;
+    curriculum_id?: string;
+    grade_id?: string;
+    subject_id?: string;
+    code: string;
+    title: string;
+    description?: string;
+    parent_point_id?: string;
+    order_index: number;
+    created_at: string;
+    // Joined data
+    curriculum_name?: string;
+    grade_name?: string;
+    subject_name?: string;
+    children?: SyllabusPoint[];
+}
+
+// ============================================================================
+// STUDENT DASHBOARD TYPES
+// ============================================================================
+
+export interface StudentStats {
+    total_exams_taken: number;
+    average_score: number;
+    total_time_spent: number; // seconds
+    exams_this_week: number;
+    best_subject?: string;
+    worst_subject?: string;
+}
+
+export interface ExamHistoryItem {
+    session_id: string;
+    exam_id: string;
+    exam_title: string;
+    subject: string;
+    score: number;
+    max_score: number;
+    percentage: number;
+    time_taken: number; // seconds
+    submitted_at: string;
+    question_count: number;
+}
+
+export interface SubjectPerformance {
+    subject_id: string;
+    subject_name: string;
+    exams_taken: number;
+    average_score: number;
+    best_score: number;
+    worst_score: number;
+}

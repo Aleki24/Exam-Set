@@ -12,7 +12,11 @@ import {
     Loader2,
     Save,
     X,
-    Tag
+    Tag,
+    Upload,
+    CheckSquare,
+    Square,
+    AlertCircle
 } from 'lucide-react';
 
 interface Subject {
@@ -58,6 +62,18 @@ export default function TopicsPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+    // Bulk Form state
+    const [showBulkForm, setShowBulkForm] = useState(false);
+    const [bulkStep, setBulkStep] = useState<'input' | 'review'>('input');
+    const [bulkTopicsText, setBulkTopicsText] = useState('');
+    const [parsedTopics, setParsedTopics] = useState<{
+        id: string; // temp id for key
+        name: string;
+        topic_number?: number;
+        selected: boolean;
+        error?: string;
+    }[]>([]);
 
     // Form state
     const [showForm, setShowForm] = useState(false);
@@ -204,6 +220,112 @@ export default function TopicsPage() {
         }
     };
 
+    // Bulk Upload Handlers
+    const handleParseBulk = () => {
+        if (!bulkTopicsText.trim()) {
+            showNotification('error', 'Please enter some topics');
+            return;
+        }
+
+        const lines = bulkTopicsText.split('\n').filter(line => line.trim());
+        const parsed = lines.map((line, index) => {
+            let name = line.trim();
+            let topic_number: number | undefined;
+
+            // Try to extract number if present "1. Topic Name" or "1 Topic Name"
+            const match = line.match(/^(\d+)[\.\s]+(.*)/);
+            if (match) {
+                topic_number = parseInt(match[1]);
+                name = match[2].trim();
+            }
+
+            return {
+                id: `temp-${index}-${Date.now()}`,
+                name,
+                topic_number,
+                selected: true,
+                error: name.length > 200 ? 'Name too long (max 200 chars)' : undefined
+            };
+        });
+
+        if (parsed.length === 0) {
+            showNotification('error', 'No valid topics found');
+            return;
+        }
+
+        setParsedTopics(parsed);
+        setBulkStep('review');
+    };
+
+    const handleBulkUpload = async () => {
+        const selectedTopics = parsedTopics.filter(t => t.selected);
+
+        if (selectedTopics.length === 0) {
+            showNotification('error', 'No topics selected');
+            return;
+        }
+
+        if (selectedTopics.some(t => t.error)) {
+            showNotification('error', 'Some selected topics have errors. Please fix them first.');
+            return;
+        }
+
+        if (!selectedSubject) {
+            showNotification('error', 'Please select a subject first');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const res = await fetch('/api/admin/topics/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject_id: selectedSubject,
+                    topics: selectedTopics.map(t => ({
+                        name: t.name,
+                        topic_number: t.topic_number
+                    }))
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                showNotification('success', data.message || 'Topics added successfully');
+                setShowBulkForm(false);
+                setBulkTopicsText('');
+                setBulkStep('input');
+                setParsedTopics([]);
+                fetchTopics();
+            } else {
+                const data = await res.json();
+                showNotification('error', data.error || 'Failed to upload topics');
+            }
+        } catch (error) {
+            console.error('Bulk upload error:', error);
+            showNotification('error', 'Failed to upload topics');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const toggleTopicSelection = (id: string) => {
+        setParsedTopics(prev => prev.map(t =>
+            t.id === id ? { ...t, selected: !t.selected } : t
+        ));
+    };
+
+    const updateParsedTopic = (id: string, updates: Partial<typeof parsedTopics[0]>) => {
+        setParsedTopics(prev => prev.map(t => {
+            if (t.id !== id) return t;
+            const updated = { ...t, ...updates };
+            // Re-validate
+            if (updated.name.length > 200) updated.error = 'Name too long (max 200 chars)';
+            else updated.error = undefined;
+            return updated;
+        }));
+    };
+
     // Delete topic
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this topic?')) return;
@@ -235,13 +357,29 @@ export default function TopicsPage() {
                             <p className="text-xs text-gray-500 dark:text-gray-400">Manage subject-specific topics</p>
                         </div>
                     </div>
-                    <button
-                        onClick={handleNewTopic}
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add Topic
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                if (!selectedSubject) {
+                                    showNotification('error', 'Please select a subject first');
+                                    return;
+                                }
+                                setBulkStep('input');
+                                setShowBulkForm(true);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                        >
+                            <Upload className="w-4 h-4" />
+                            Bulk Add
+                        </button>
+                        <button
+                            onClick={handleNewTopic}
+                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Topic
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -479,6 +617,157 @@ export default function TopicsPage() {
                                     {editingTopic ? 'Update' : 'Create'}
                                 </button>
                             </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Bulk Upload Modal */}
+            <AnimatePresence>
+                {showBulkForm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+                        onClick={() => setShowBulkForm(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-6"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                    {bulkStep === 'input' ? 'Bulk Add Topics' : 'Review Topics'}
+                                </h2>
+                                <button
+                                    onClick={() => setShowBulkForm(false)}
+                                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                                >
+                                    <X className="w-5 h-5 text-gray-500" />
+                                </button>
+                            </div>
+
+                            {bulkStep === 'input' ? (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Paste Topics (One per line)
+                                        </label>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                            Format: "Topic Name" or "1. Topic Name"
+                                        </p>
+                                        <textarea
+                                            value={bulkTopicsText}
+                                            onChange={(e) => setBulkTopicsText(e.target.value)}
+                                            rows={10}
+                                            placeholder="Introduction to Science&#10;2. Measurement&#10;Forces"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none font-mono text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-3 mt-6">
+                                        <button
+                                            onClick={() => setShowBulkForm(false)}
+                                            className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleParseBulk}
+                                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                                        >
+                                            Review & Select
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col h-[60vh]">
+                                    <div className="flex-1 overflow-y-auto pr-2 space-y-2 mb-4">
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                            Review the topics below. Uncheck any you don't want to import. Edit names if they are too long.
+                                        </p>
+                                        {parsedTopics.map((topic) => (
+                                            <div
+                                                key={topic.id}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border ${topic.error
+                                                    ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                                                    : topic.selected
+                                                        ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30'
+                                                        : 'border-transparent opacity-60'
+                                                    }`}
+                                            >
+                                                <button
+                                                    onClick={() => toggleTopicSelection(topic.id)}
+                                                    className="mt-2 text-gray-500 hover:text-teal-600 focus:outline-none"
+                                                >
+                                                    {topic.selected ? (
+                                                        <CheckSquare className="w-5 h-5 text-teal-600" />
+                                                    ) : (
+                                                        <Square className="w-5 h-5" />
+                                                    )}
+                                                </button>
+
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="number"
+                                                            placeholder="#"
+                                                            className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                                                            value={topic.topic_number || ''}
+                                                            onChange={(e) => updateParsedTopic(topic.id, { topic_number: parseInt(e.target.value) || undefined })}
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            className={`flex-1 px-2 py-1 text-sm border rounded bg-white dark:bg-gray-700 ${topic.error ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300 dark:border-gray-600'
+                                                                }`}
+                                                            value={topic.name}
+                                                            onChange={(e) => updateParsedTopic(topic.id, { name: e.target.value })}
+                                                        />
+                                                    </div>
+
+                                                    {topic.error && (
+                                                        <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                                                            <AlertCircle className="w-3 h-3" />
+                                                            {topic.error}
+                                                        </div>
+                                                    )}
+
+                                                    {!topic.error && topic.name.length > 180 && (
+                                                        <div className="text-xs text-orange-500">
+                                                            Length: {topic.name.length}/200
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="flex justify-between items-center border-t border-gray-200 dark:border-gray-700 pt-4 mt-auto">
+                                        <div className="text-sm text-gray-500">
+                                            {parsedTopics.filter(t => t.selected).length} selected
+                                        </div>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => setBulkStep('input')}
+                                                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
+                                            >
+                                                Back
+                                            </button>
+                                            <button
+                                                onClick={handleBulkUpload}
+                                                disabled={isSaving || parsedTopics.some(t => t.selected && t.error)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                                Upload Selected
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </motion.div>
                     </motion.div>
                 )}

@@ -237,6 +237,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialData, onS
                         </select>
                     </div>
 
+                    {/* Font Family Selector */}
+                    <div>
+                        <label className="block text-sm font-semibold mb-2">Font Family</label>
+                        <select
+                            className="w-full p-2 border rounded"
+                            value={themeConfig.fontFamily}
+                            onChange={(e) => setThemeConfig({ ...themeConfig, fontFamily: e.target.value })}
+                        >
+                            <option value="Times New Roman, serif">Times New Roman (Serif)</option>
+                            <option value="Georgia, serif">Georgia (Serif)</option>
+                            <option value="Arial, sans-serif">Arial (Sans)</option>
+                            <option value="Helvetica, sans-serif">Helvetica (Sans)</option>
+                            <option value="Inter, sans-serif">Inter (Modern Sans)</option>
+                            <option value="Courier New, monospace">Courier New (Mono)</option>
+                            <option value="'Comic Sans MS', cursive">Comic Sans (Handwritten)</option>
+                        </select>
+                    </div>
+
                     {/* Fine Tuning Controls */}
                     <div>
                         <label className="block text-sm font-semibold mb-2">Font Size (pt)</label>
