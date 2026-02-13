@@ -34,7 +34,7 @@ export default function Footer() {
                     <motion.div variants={item} className="col-span-1 md:col-span-2 space-y-6">
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg overflow-hidden">
-                                <Image src="/logo.png" alt="MaarifaExams" width={32} height={32} className="w-full h-full object-cover" />
+                                <Image src="/logo1.png" alt="MaarifaExams" width={32} height={32} className="w-full h-full object-cover" />
                             </div>
                             <span className="text-xl font-bold text-slate-900">MaarifaExams</span>
                         </div>

@@ -139,15 +139,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose
                 {/* Logo */}
                 <div className="py-6">
                     <div
-                        className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground cursor-pointer transition-transform hover:scale-105 active:scale-95 shadow-lg shadow-primary/20"
+                        className="w-10 h-10 flex items-center justify-center cursor-pointer transition-transform hover:scale-105 active:scale-95"
                         onClick={() => setView('bank')}
                     >
                         <Image
-                            src="/logo.png"
+                            src="/logo1.png"
                             alt="MaarifaExams"
-                            width={24}
-                            height={24}
-                            className="w-6 h-6 object-contain"
+                            width={40}
+                            height={40}
+                            className="w-full h-full object-contain"
                         />
                     </div>
                 </div>

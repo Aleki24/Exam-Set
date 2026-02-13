@@ -36,7 +36,7 @@ export default function Navbar() {
                             whileHover={{ rotate: 15 }}
                             className="relative w-9 h-9 rounded-lg overflow-hidden shadow-lg shadow-blue-500/20"
                         >
-                            <Image src="/logo.png" alt="MaarifaExams" width={36} height={36} className="w-full h-full object-cover" />
+                            <Image src="/logo1.png" alt="MaarifaExams" width={36} height={36} className="w-full h-full object-cover" />
                         </motion.div>
                         <span className={`text-lg font-bold tracking-tighter transition-colors ${isScrolled ? 'text-slate-900' : 'text-slate-800'}`}>
                             MaarifaExams
