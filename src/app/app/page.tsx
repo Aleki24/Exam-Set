@@ -21,6 +21,7 @@ import { TemplateEditor } from '@/exam-engine/editor/TemplateEditor';
 import { getCurriculums, getGrades, getSubjects } from '@/services/questionService';
 import { DBCurriculum, DBGrade, DBSubject } from '@/types';
 import { createClient } from '@/utils/supabase/client';
+import { formatDisplayName, getInitials } from '@/utils/userUtils';
 
 declare var html2pdf: any;
 
@@ -148,12 +149,8 @@ export default function Home() {
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   // Computed user display values
-  const displayName = userName || userEmail?.split('@')[0] || 'User';
-  const userInitials = displayName
-    .split(' ')
-    .slice(0, 2)
-    .map(n => n[0]?.toUpperCase())
-    .join('');
+  const displayName = userName || formatDisplayName(userEmail);
+  const userInitials = getInitials(displayName);
 
   // Exam Engine Modal
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/utils/supabase/client';
+import { formatDisplayName, getInitials } from '@/utils/userUtils';
 import {
     FileQuestion,
     BookOpen,
@@ -90,7 +91,7 @@ export default function AdminPage() {
         );
     }
 
-    const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Admin';
+    const displayName = user?.user_metadata?.full_name || formatDisplayName(user?.email);
 
     return (
         <div className="relative min-h-screen bg-[#FAFAFA] overflow-hidden">
@@ -170,7 +171,7 @@ export default function AdminPage() {
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FF6B35] to-[#EC4899] flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#FF6B35]/20">
-                                {displayName[0].toUpperCase()}
+                                {getInitials(displayName)}
                             </div>
                             <div className="hidden sm:block text-right">
                                 <p className="text-sm font-semibold text-gray-900 leading-none">{displayName}</p>
@@ -233,8 +234,8 @@ export default function AdminPage() {
                                     href={module.disabled ? '#' : module.href}
                                     onClick={(e) => module.disabled && e.preventDefault()}
                                     className={`group relative block h-full bg-white rounded-xl p-5 transition-all duration-300 ${module.disabled
-                                            ? 'cursor-not-allowed opacity-60'
-                                            : 'hover:-translate-y-1.5 hover:shadow-xl'
+                                        ? 'cursor-not-allowed opacity-60'
+                                        : 'hover:-translate-y-1.5 hover:shadow-xl'
                                         }`}
                                     style={{
                                         boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
