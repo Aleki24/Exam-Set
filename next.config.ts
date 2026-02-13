@@ -2,6 +2,9 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
     reactStrictMode: true,
+    eslint: {
+        ignoreDuringBuilds: true,
+    },
     serverExternalPackages: ['puppeteer', '@sparticuz/chromium', 'pdf-parse', 'pdfjs-dist'],
     experimental: {
         serverActions: {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -51,7 +51,7 @@ const BLOOMS_LEVELS: BloomsLevel[] = [
     'Creation'
 ];
 
-export default function SearchPage() {
+function SearchPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -405,5 +405,17 @@ export default function SearchPage() {
                 )}
             </main>
         </div>
+    );
+}
+
+export default function SearchPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+        }>
+            <SearchPageContent />
+        </Suspense>
     );
 }

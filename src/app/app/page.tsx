@@ -16,6 +16,7 @@ import PdfDownloader from '@/components/PdfDownloader';
 import QuestionEntryModal from '@/components/QuestionEntryModal';
 import ClientQuestionForm from '@/components/ClientQuestionForm';
 import SubPartsSelector from '@/components/SubPartsSelector';
+import EnhancedBulkImport from '@/components/EnhancedBulkImport';
 
 import { TemplateEditor } from '@/exam-engine/editor/TemplateEditor';
 import { getCurriculums, getGrades, getSubjects } from '@/services/questionService';
@@ -87,6 +88,7 @@ export default function Home() {
   // Modal states
   const [showQuestionEntryModal, setShowQuestionEntryModal] = useState(false);
   const [showClientQuestionForm, setShowClientQuestionForm] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // Lookup data for filters
   const [curriculums, setCurriculums] = useState<DBCurriculum[]>([]);
@@ -295,6 +297,35 @@ export default function Home() {
     }
 
     toast.success('Question created successfully!');
+  };
+
+  // Save questions from bulk import
+  const handleBulkImport = async (questions: { text: string; marks: number; type: string; topic: string; difficulty: string }[]) => {
+    const payload = questions.map(q => ({
+      text: q.text,
+      marks: q.marks,
+      type: q.type,
+      topic: q.topic,
+      difficulty: q.difficulty,
+      curriculum_id: filters.curriculum !== 'All' ? curriculums.find(c => c.name === filters.curriculum)?.id : undefined,
+      subject_id: filters.subject !== 'All' ? subjects.find(s => s.name === filters.subject)?.id : undefined,
+    }));
+
+    const res = await fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questions: payload, bulk: true }),
+    });
+
+    if (!res.ok) throw new Error('Bulk import failed');
+
+    // Refresh question bank
+    const response = await fetch('/api/questions?limit=100');
+    if (response.ok) {
+      const data = await response.json();
+      setQuestionBank(data.questions || []);
+    }
+    toast.success(`${questions.length} questions imported!`);
   };
 
   const saveToLibrary = () => {
@@ -841,6 +872,10 @@ export default function Home() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                         Add Question
                       </button>
+                      <button onClick={() => setShowBulkImport(true)} className="px-4 py-2 border border-primary/30 text-primary rounded-xl text-xs font-bold hover:bg-primary/5 transition-all flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        Bulk Import
+                      </button>
                     </div>
                   </div>
 
@@ -1208,6 +1243,19 @@ export default function Home() {
         onSave={handleSaveNewQuestion}
         curriculums={curriculums}
         subjects={subjects}
+        activeFilters={{
+          curriculum_id: filters.curriculum !== 'All' ? curriculums.find(c => c.name === filters.curriculum)?.id : undefined,
+          subject_id: filters.subject !== 'All' ? subjects.find(s => s.name === filters.subject)?.id : undefined,
+          topic: filters.topic !== 'All' ? filters.topic : undefined,
+        }}
+      />
+
+      {/* Enhanced Bulk Import */}
+      <EnhancedBulkImport
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        onImport={handleBulkImport}
+        defaultTopic={filters.topic !== 'All' ? filters.topic : ''}
       />
 
       {/* Sub-parts Selector Modal */}

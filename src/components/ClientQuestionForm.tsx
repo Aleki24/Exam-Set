@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, Save, Loader2, Plus, Trash2, ChevronDown, ChevronUp, Image as ImageIcon, Settings, ArrowRight } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { X, Save, Loader2, Plus, Trash2, ChevronDown, ChevronUp, Image as ImageIcon, Settings, ArrowRight, AlertTriangle } from 'lucide-react';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SingleQuestionPreview from './SingleQuestionPreview';
 import { QuestionSubPart, Question } from '@/types';
 
 const STORAGE_KEY = 'exam-set-question-form-defaults';
+const DRAFT_KEY = 'exam-set-question-draft';
 
 interface Curriculum {
     id: string;
@@ -49,12 +50,27 @@ interface QuestionFormData {
     answerLines?: number;
 }
 
+interface ActiveFilters {
+    curriculum_id?: string;
+    grade_id?: string;
+    subject_id?: string;
+    topic?: string;
+    term?: string;
+}
+
+interface SimilarQuestion {
+    id: string;
+    text: string;
+    topic: string;
+}
+
 interface ClientQuestionFormProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (question: QuestionFormData) => Promise<void>;
     curriculums: Curriculum[];
     subjects: Subject[];
+    activeFilters?: ActiveFilters;
 }
 
 const QUESTION_TYPES = [
@@ -116,6 +132,7 @@ export default function ClientQuestionForm({
     onSave,
     curriculums,
     subjects,
+    activeFilters,
 }: ClientQuestionFormProps) {
     const [formData, setFormData] = useState<QuestionFormData>(DEFAULT_FORM_DATA);
     const [grades, setGrades] = useState<Grade[]>([]);
@@ -131,30 +148,112 @@ export default function ClientQuestionForm({
     const [error, setError] = useState<string | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
-    // Load defaults from local storage
+    // --- NEW: Duplicate detection ---
+    const [similarQuestions, setSimilarQuestions] = useState<SimilarQuestion[]>([]);
+    const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+    const duplicateTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // --- NEW: Draft auto-save ---
+    const [hasDraft, setHasDraft] = useState(false);
+    const draftTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Load defaults: activeFilters > draft > localStorage
     useEffect(() => {
         if (isOpen) {
+            // Check for a saved draft first
+            const draftRaw = localStorage.getItem(DRAFT_KEY);
+            if (draftRaw) {
+                try {
+                    const draft = JSON.parse(draftRaw);
+                    if (draft.text?.trim()) {
+                        setHasDraft(true);
+                        setFormData({ ...DEFAULT_FORM_DATA, ...draft });
+                        return; // Draft takes priority, user can dismiss
+                    }
+                } catch { /* ignore */ }
+            }
+
+            // Load saved defaults from localStorage
             const savedDetails = localStorage.getItem(STORAGE_KEY);
+            let defaults: Partial<QuestionFormData> = {};
             if (savedDetails) {
                 try {
-                    const parsed = JSON.parse(savedDetails);
-                    setFormData(prev => ({
-                        ...prev,
-                        curriculum_id: parsed.curriculum_id || '',
-                        grade_id: parsed.grade_id || '',
-                        subject_id: parsed.subject_id || '',
-                        topic: parsed.topic || '',
-                        term: parsed.term || '',
-                        subtopic: parsed.subtopic || '',
-                        blooms_level: parsed.blooms_level || 'Knowledge',
-                        difficulty: parsed.difficulty || 'Medium'
-                    }));
+                    defaults = JSON.parse(savedDetails);
                 } catch (e) {
                     console.error('Failed to parse saved form defaults', e);
                 }
             }
+
+            // Active filters override localStorage defaults
+            setFormData(prev => ({
+                ...prev,
+                curriculum_id: activeFilters?.curriculum_id || defaults.curriculum_id || '',
+                grade_id: activeFilters?.grade_id || defaults.grade_id || '',
+                subject_id: activeFilters?.subject_id || defaults.subject_id || '',
+                topic: activeFilters?.topic || defaults.topic || '',
+                term: activeFilters?.term || defaults.term || '',
+                subtopic: defaults.subtopic || '',
+                blooms_level: defaults.blooms_level || 'Knowledge',
+                difficulty: defaults.difficulty as any || 'Medium',
+                type: defaults.type || 'Structured',
+            }));
         }
-    }, [isOpen]);
+    }, [isOpen, activeFilters]);
+
+    // --- NEW: Ctrl+Enter keyboard shortcut ---
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, formData]);
+
+    // --- NEW: Auto-save draft with debounce ---
+    useEffect(() => {
+        if (!isOpen || !formData.text?.trim()) return;
+        if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = setTimeout(() => {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
+        }, 1500);
+        return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current); };
+    }, [isOpen, formData]);
+
+    // --- NEW: Duplicate detection with debounce ---
+    useEffect(() => {
+        if (!isOpen) return;
+        const text = formData.text?.trim();
+        if (!text || text.length < 15) {
+            setSimilarQuestions([]);
+            return;
+        }
+        if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current);
+        duplicateTimerRef.current = setTimeout(async () => {
+            setIsCheckingDuplicates(true);
+            try {
+                const res = await fetch(`/api/questions/search?q=${encodeURIComponent(text.substring(0, 50))}&limit=5`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setSimilarQuestions((data.questions || []).slice(0, 3).map((q: any) => ({
+                        id: q.id, text: q.text, topic: q.topic || ''
+                    })));
+                }
+            } catch { /* ignore */ }
+            setIsCheckingDuplicates(false);
+        }, 800);
+        return () => { if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current); };
+    }, [isOpen, formData.text]);
+
+    // --- NEW: Dismiss draft ---
+    const dismissDraft = () => {
+        localStorage.removeItem(DRAFT_KEY);
+        setHasDraft(false);
+        setFormData(DEFAULT_FORM_DATA);
+    };
 
     // Fetch grades when curriculum changes
     const fetchGrades = useCallback(async (curriculumId: string) => {
@@ -227,13 +326,14 @@ export default function ClientQuestionForm({
         fetchSubjects();
     }, [formData.grade_id, subjects]);
 
-    // Reset loop logic
+    // Reset loop logic — only reset if NOT restoring a draft
     useEffect(() => {
-        if (isOpen) {
-            setFormData(DEFAULT_FORM_DATA);
+        if (isOpen && !hasDraft) {
+            // Don't fully reset here; the defaults are set in the load-defaults effect above
             setSelectedLevel('');
             setSelectedBand('');
             setError(null);
+            setSimilarQuestions([]);
         }
     }, [isOpen]);
 
@@ -252,9 +352,13 @@ export default function ClientQuestionForm({
             subtopic: data.subtopic,
             term: data.term,
             blooms_level: data.blooms_level,
-            difficulty: data.difficulty
+            difficulty: data.difficulty,
+            type: data.type,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+        // Clear draft on successful save
+        localStorage.removeItem(DRAFT_KEY);
+        setHasDraft(false);
     };
 
     const executeSave = async (shouldClose: boolean) => {
@@ -473,10 +577,36 @@ export default function ClientQuestionForm({
                         <div className="flex-1 p-6 space-y-6">
 
                             {/* Error */}
+                            {/* Draft restore banner */}
+                            {hasDraft && (
+                                <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-center gap-2">
+                                        <Save className="w-4 h-4" />
+                                        <span>Draft restored. Continue where you left off.</span>
+                                    </div>
+                                    <button onClick={dismissDraft} className="text-xs font-bold text-blue-500 hover:text-blue-700 underline">Discard draft</button>
+                                </div>
+                            )}
+
                             {error && (
                                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                                     {error}
+                                </div>
+                            )}
+
+                            {/* Duplicate detection warning */}
+                            {similarQuestions.length > 0 && (
+                                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-center gap-2 font-bold mb-2">
+                                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                        Possible duplicates found
+                                    </div>
+                                    <ul className="space-y-1 text-xs text-amber-700">
+                                        {similarQuestions.map(sq => (
+                                            <li key={sq.id} className="truncate">• {sq.text.substring(0, 80)}{sq.text.length > 80 ? '...' : ''}</li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
 
@@ -810,12 +940,15 @@ export default function ClientQuestionForm({
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-b-xl flex items-center justify-between shrink-0">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
-                    >
-                        Cancel
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <span className="text-[10px] text-gray-400 hidden sm:inline">Ctrl+Enter to save</span>
+                    </div>
                     <button
                         onClick={handleSaveAndAdd}
                         disabled={isSaving || isSaveAndAdd}
