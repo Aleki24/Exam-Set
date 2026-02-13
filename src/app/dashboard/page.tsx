@@ -37,7 +37,7 @@ import { StudentStats, ExamHistoryItem, StoredExam } from '@/types';
 export default function DashboardPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState<{ email?: string; id?: string } | null>(null);
+    const [user, setUser] = useState<{ email?: string; id?: string; avatar_url?: string } | null>(null);
     const [stats, setStats] = useState<StudentStats | null>(null);
     const [examHistory, setExamHistory] = useState<ExamHistoryItem[]>([]);
     const [availableExams, setAvailableExams] = useState<StoredExam[]>([]);
@@ -52,7 +52,10 @@ export default function DashboardPage() {
                 return;
             }
 
-            setUser(user);
+            setUser({
+                ...user,
+                avatar_url: user.user_metadata?.avatar_url || undefined,
+            });
 
             // Load all dashboard data in parallel
             const [statsData, historyData, examsData] = await Promise.all([
@@ -118,14 +121,17 @@ export default function DashboardPage() {
                         >
                             <Home className="w-5 h-5" />
                         </Link>
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                            {getInitials(formatDisplayName(user?.email))}
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold overflow-hidden">
+                            {user?.avatar_url ? (
+                                <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                getInitials(formatDisplayName(user?.email))
+                            )}
                         </div>
                         <div>
                             <h1 className="font-semibold text-slate-800">
                                 Welcome back, {formatDisplayName(user?.email)}!
                             </h1>
-                            <p className="text-sm text-slate-500">{user?.email}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

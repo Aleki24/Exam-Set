@@ -93,7 +93,7 @@ export default function SignupPage() {
             <div className="w-full max-w-md mx-auto">
                 {/* Logo/Title */}
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2">ExamGenius AI</h1>
+                    <h1 className="text-3xl font-bold text-white mb-2">MaarifaExams</h1>
                     <p className="text-blue-200/70">Create your admin account</p>
                 </div>
 

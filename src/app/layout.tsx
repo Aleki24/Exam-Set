@@ -5,7 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
-    title: 'ExamGenius AI',
+    title: 'MaarifaExams',
     description: 'AI-powered exam question generator and builder',
 };
 

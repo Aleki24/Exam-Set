@@ -35,7 +35,7 @@ export default function Footer() {
                             <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
                                 <Sparkles className="w-5 h-5 text-white" />
                             </div>
-                            <span className="text-xl font-bold text-slate-900">ExamGenius AI</span>
+                            <span className="text-xl font-bold text-slate-900">MaarifaExams</span>
                         </div>
                         <p className="text-slate-500 max-w-sm leading-relaxed">
                             Empowering educators with AI-driven assessment tools. Create, edit, and export professional exams in strict accordance with curriculum standards.
@@ -82,7 +82,7 @@ export default function Footer() {
                     transition={{ delay: 0.5 }}
                     className="pt-8 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500"
                 >
-                    <p>© 2024 ExamGenius Inc. All rights reserved.</p>
+                    <p>© 2024 MaarifaExams. All rights reserved.</p>
                     <div className="flex gap-8">
                         <a href="#" className="hover:text-slate-900 transition-colors">Privacy Policy</a>
                         <a href="#" className="hover:text-slate-900 transition-colors">Terms of Service</a>

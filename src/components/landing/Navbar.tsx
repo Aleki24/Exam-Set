@@ -38,7 +38,7 @@ export default function Navbar() {
                             <Sparkles className="w-4 h-4 text-white" />
                         </motion.div>
                         <span className={`text-lg font-bold tracking-tighter transition-colors ${isScrolled ? 'text-slate-900' : 'text-slate-800'}`}>
-                            ExamGenius
+                            MaarifaExams
                         </span>
                     </div>
 

@@ -87,7 +87,7 @@ export default function HeroSection() {
                     <div className="relative rounded-xl bg-slate-900/5 p-2 ring-1 ring-inset ring-slate-900/10 lg:-m-4 lg:rounded-2xl lg:p-4">
                         <Image
                             src="/hero-dashboard.png"
-                            alt="ExamGenius Dashboard Preview"
+                            alt="MaarifaExams Dashboard Preview"
                             width={1364}
                             height={866}
                             quality={100}
