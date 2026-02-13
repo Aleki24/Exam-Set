@@ -10,59 +10,64 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 export async function middleware(request: NextRequest) {
-    // If env vars are missing, skip middleware to prevent crash
-    if (!supabaseUrl || !supabaseKey) {
+    try {
+        // If env vars are missing, skip middleware to prevent crash
+        if (!supabaseUrl || !supabaseKey) {
+            return NextResponse.next();
+        }
+
+        // Update session first
+        const response = await updateSession(request)
+
+        const pathname = request.nextUrl.pathname
+
+        // Create supabase client for auth check
+        const createSupabase = () => createServerClient(
+            supabaseUrl,
+            supabaseKey,
+            {
+                cookies: {
+                    getAll() {
+                        return request.cookies.getAll()
+                    },
+                    setAll(cookiesToSet) {
+                        cookiesToSet.forEach(({ name, value, options }) => {
+                            response.cookies.set(name, value, options)
+                        })
+                    },
+                },
+            }
+        )
+
+        // Protected routes - require authentication
+        const isProtectedRoute = pathname.startsWith('/app') || pathname.startsWith('/admin')
+
+        if (isProtectedRoute) {
+            const supabase = createSupabase()
+            const { data: { user } } = await supabase.auth.getUser()
+
+            if (!user) {
+                // Not logged in - redirect to home page (landing)
+                return NextResponse.redirect(new URL('/', request.url))
+            }
+        }
+
+        // Redirect authenticated users away from auth pages to main app
+        if (pathname.startsWith('/auth') && !pathname.includes('/callback')) {
+            const supabase = createSupabase()
+            const { data: { user } } = await supabase.auth.getUser()
+
+            if (user) {
+                // Already logged in - redirect to main app
+                return NextResponse.redirect(new URL('/app', request.url))
+            }
+        }
+
+        return response
+    } catch (e) {
+        console.error('Middleware error:', e);
         return NextResponse.next();
     }
-
-    // Update session first
-    const response = await updateSession(request)
-
-    const pathname = request.nextUrl.pathname
-
-    // Create supabase client for auth check
-    const createSupabase = () => createServerClient(
-        supabaseUrl,
-        supabaseKey,
-        {
-            cookies: {
-                getAll() {
-                    return request.cookies.getAll()
-                },
-                setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) => {
-                        response.cookies.set(name, value, options)
-                    })
-                },
-            },
-        }
-    )
-
-    // Protected routes - require authentication
-    const isProtectedRoute = pathname.startsWith('/app') || pathname.startsWith('/admin')
-
-    if (isProtectedRoute) {
-        const supabase = createSupabase()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-            // Not logged in - redirect to home page (landing)
-            return NextResponse.redirect(new URL('/', request.url))
-        }
-    }
-
-    // Redirect authenticated users away from auth pages to main app
-    if (pathname.startsWith('/auth') && !pathname.includes('/callback')) {
-        const supabase = createSupabase()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (user) {
-            // Already logged in - redirect to main app
-            return NextResponse.redirect(new URL('/app', request.url))
-        }
-    }
-
-    return response
 }
 
 export const config = {
