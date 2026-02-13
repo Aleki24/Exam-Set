@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
-import { Sparkles, Menu, X } from 'lucide-react';
+import Image from 'next/image';
+import { Menu, X } from 'lucide-react';
 
 export default function Navbar() {
     const [isScrolled, setIsScrolled] = useState(false);
@@ -33,9 +34,9 @@ export default function Navbar() {
                     <div className="flex items-center gap-2.5 cursor-pointer group" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                         <motion.div
                             whileHover={{ rotate: 15 }}
-                            className="relative w-9 h-9 flex items-center justify-center bg-blue-600 rounded-lg shadow-lg shadow-blue-500/20"
+                            className="relative w-9 h-9 rounded-lg overflow-hidden shadow-lg shadow-blue-500/20"
                         >
-                            <Sparkles className="w-4 h-4 text-white" />
+                            <Image src="/logo.png" alt="MaarifaExams" width={36} height={36} className="w-full h-full object-cover" />
                         </motion.div>
                         <span className={`text-lg font-bold tracking-tighter transition-colors ${isScrolled ? 'text-slate-900' : 'text-slate-800'}`}>
                             MaarifaExams
