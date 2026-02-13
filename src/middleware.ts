@@ -5,7 +5,16 @@ import { createServerClient } from '@supabase/ssr'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!;
 
+if (!supabaseUrl || !supabaseKey) {
+    console.warn('Missing Supabase environment variables in middleware. This may cause runtime errors.');
+}
+
 export async function middleware(request: NextRequest) {
+    // If env vars are missing, skip middleware to prevent crash
+    if (!supabaseUrl || !supabaseKey) {
+        return NextResponse.next();
+    }
+
     // Update session first
     const response = await updateSession(request)
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { X, Save, Loader2, Plus, Trash2, ChevronDown, ChevronUp, Image as ImageIcon, Settings, ArrowRight, AlertTriangle } from 'lucide-react';
+import { X, Save, Loader2, Plus, Trash2, ChevronDown, ChevronUp, Image as ImageIcon, Settings, ArrowRight, AlertTriangle, Sparkles } from 'lucide-react';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SingleQuestionPreview from './SingleQuestionPreview';
 import { QuestionSubPart, Question } from '@/types';
@@ -884,11 +884,19 @@ export default function ClientQuestionForm({
                                     </>
                                 )}
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Subject</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
+                                        Subject
+                                        {activeFilters?.subject_id && formData.subject_id === activeFilters.subject_id && (
+                                            <Sparkles className="w-3 h-3 text-purple-500 animate-pulse" />
+                                        )}
+                                    </label>
                                     <select
                                         value={formData.subject_id}
                                         onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
-                                        className="w-full px-2 py-1.5 text-sm border rounded-lg bg-gray-50"
+                                        className={`w-full px-2 py-1.5 text-sm border rounded-lg ${activeFilters?.subject_id && formData.subject_id === activeFilters.subject_id
+                                            ? 'bg-purple-50 border-purple-200'
+                                            : 'bg-gray-50'
+                                            }`}
                                     >
                                         <option value="">Select Subject...</option>
                                         {availableSubjects.map((s) => (
@@ -897,13 +905,21 @@ export default function ClientQuestionForm({
                                     </select>
                                 </div>
                                 <div className="col-span-1 sm:col-span-2">
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Topic</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
+                                        Topic
+                                        {activeFilters?.topic && formData.topic === activeFilters.topic && (
+                                            <Sparkles className="w-3 h-3 text-purple-500 animate-pulse" />
+                                        )}
+                                    </label>
                                     <input
                                         type="text"
                                         value={formData.topic}
                                         onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
                                         placeholder="e.g. Algebra, Solar System"
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                                        className={`w-full px-3 py-2 text-sm border rounded-lg ${activeFilters?.topic && formData.topic === activeFilters.topic
+                                            ? 'bg-purple-50 border-purple-200'
+                                            : 'border-gray-300'
+                                            }`}
                                     />
                                 </div>
                             </div>
