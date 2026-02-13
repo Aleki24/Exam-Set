@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ViewState, ExamPaper } from '@/types';
 import { createClient } from '@/utils/supabase/client';
+import { formatDisplayName, getInitials } from '@/utils/userUtils';
 
 interface SidebarProps {
     currentView: ViewState;
@@ -116,12 +117,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, onClose
     };
 
     // Get display name and initials
-    const displayName = user?.full_name || user?.email?.split('@')[0] || 'User';
-    const initials = displayName
-        .split(' ')
-        .slice(0, 2)
-        .map(n => n[0]?.toUpperCase())
-        .join('');
+    const displayName = user?.full_name || formatDisplayName(user?.email);
+    const initials = getInitials(displayName);
 
     return (
         <>

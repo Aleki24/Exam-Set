@@ -26,6 +26,7 @@ import {
     Home
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { formatDisplayName, getInitials } from '@/utils/userUtils';
 import {
     getExamHistory,
     getStudentStats,
@@ -118,10 +119,12 @@ export default function DashboardPage() {
                             <Home className="w-5 h-5" />
                         </Link>
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                            {user?.email?.[0]?.toUpperCase() || 'U'}
+                            {getInitials(formatDisplayName(user?.email))}
                         </div>
                         <div>
-                            <h1 className="font-semibold text-slate-800">Welcome back!</h1>
+                            <h1 className="font-semibold text-slate-800">
+                                Welcome back, {formatDisplayName(user?.email)}!
+                            </h1>
                             <p className="text-sm text-slate-500">{user?.email}</p>
                         </div>
                     </div>
