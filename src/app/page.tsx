@@ -29,13 +29,22 @@ export default function HomePage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        router.push('/app');
-      } else {
-        setIsLoading(false);
+      try {
+        const supabase = createClient();
+        // Race against a timeout to prevent infinite loading
+        const authPromise = supabase.auth.getUser();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Auth check timed out')), 3000)
+        );
+        const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
+        if (user) {
+          router.push('/app');
+          return;
+        }
+      } catch (e) {
+        console.error('Auth check failed:', e);
       }
+      setIsLoading(false);
     };
     checkAuth();
   }, [router]);
