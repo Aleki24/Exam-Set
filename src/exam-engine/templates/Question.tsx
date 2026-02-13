@@ -109,16 +109,7 @@ export const Question: React.FC<QuestionProps> = ({
                 return null;
 
             case 'Fill-in-the-blank':
-                return (
-                    <div className="ml-8 mt-4 space-y-4">
-                        {Array.from({ length: 1 }).map((_, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                                <span className="text-xs opacity-50">Answer: </span>
-                                <div className="border-b border-black w-48 h-4"></div>
-                            </div>
-                        ))}
-                    </div>
-                );
+                return null;
 
             case 'Numeric':
                 return (

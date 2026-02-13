@@ -14,7 +14,8 @@ import {
     Loader2,
     ArrowLeft,
     List,
-    X
+    X,
+    Home
 } from 'lucide-react';
 import { Question, ExamSession, ExamResponse } from '@/types';
 
@@ -306,6 +307,18 @@ export default function ExamPage() {
                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <button
+                            onClick={() => router.back()}
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => router.push('/')}
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                        >
+                            <Home className="w-5 h-5" />
+                        </button>
+                        <button
                             onClick={() => setShowNavigation(!showNavigation)}
                             className="lg:hidden p-2 hover:bg-slate-100 rounded-lg"
                         >
@@ -323,8 +336,8 @@ export default function ExamPage() {
                     {timeRemaining !== null && (
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-lg ${isLowTime
-                                    ? 'bg-red-100 text-red-700 animate-pulse'
-                                    : 'bg-slate-100 text-slate-700'
+                                ? 'bg-red-100 text-red-700 animate-pulse'
+                                : 'bg-slate-100 text-slate-700'
                                 }`}
                         >
                             <Clock className="w-5 h-5" />
@@ -481,8 +494,8 @@ export default function ExamPage() {
                                 <button
                                     onClick={() => toggleFlag(currentQuestion.id)}
                                     className={`p-2 rounded-lg transition-colors ${flaggedQuestions.has(currentQuestion.id)
-                                            ? 'bg-yellow-100 text-yellow-700'
-                                            : 'hover:bg-slate-100 text-slate-400'
+                                        ? 'bg-yellow-100 text-yellow-700'
+                                        : 'hover:bg-slate-100 text-slate-400'
                                         }`}
                                     title="Flag for review"
                                 >
@@ -623,8 +636,8 @@ function QuestionInput({ question, value, onChange }: QuestionInputProps) {
                                 key={idx}
                                 onClick={() => onChange({ selected: letter })}
                                 className={`w-full text-left p-4 rounded-lg border-2 transition-all ${isSelected
-                                        ? 'border-blue-500 bg-blue-50'
-                                        : 'border-slate-200 hover:border-slate-300'
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-slate-200 hover:border-slate-300'
                                     }`}
                             >
                                 <span className="font-medium mr-3">{letter}.</span>
@@ -645,8 +658,8 @@ function QuestionInput({ question, value, onChange }: QuestionInputProps) {
                                 key={opt.toString()}
                                 onClick={() => onChange({ selected: opt })}
                                 className={`flex-1 p-4 rounded-lg border-2 font-medium transition-all ${isSelected
-                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                        : 'border-slate-200 hover:border-slate-300'
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : 'border-slate-200 hover:border-slate-300'
                                     }`}
                             >
                                 {opt ? 'True' : 'False'}

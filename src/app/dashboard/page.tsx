@@ -12,6 +12,7 @@ import {
     BarChart3,
     FileText,
     ChevronRight,
+    ChevronLeft,
     Play,
     Loader2,
     User,
@@ -21,7 +22,8 @@ import {
     Award,
     Search,
     Settings,
-    ClipboardList
+    ClipboardList,
+    Home
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import {
@@ -103,6 +105,18 @@ export default function DashboardPage() {
             <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-40">
                 <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.back()}
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <Link
+                            href="/"
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                        >
+                            <Home className="w-5 h-5" />
+                        </Link>
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
                             {user?.email?.[0]?.toUpperCase() || 'U'}
                         </div>

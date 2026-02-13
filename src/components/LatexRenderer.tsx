@@ -23,6 +23,9 @@ const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }
         // Pattern to match both block ($$...$$) and inline ($...$) LaTeX
         const latexRegex = /\$\$([\s\S]*?)\$\$|\$((?!\$)[^\n$]*?)\$/g;
 
+        // Pattern for inline blanks (3 or more underscores: ___)
+        const blankRegex = /_{3,}/g;
+
         let lastIndex = 0;
         let match;
 
@@ -30,9 +33,24 @@ const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }
             // Add text before the match
             if (match.index > lastIndex) {
                 const textSegment = remaining.slice(lastIndex, match.index);
-                parts.push(
-                    <span key={key++} dangerouslySetInnerHTML={{ __html: textSegment }} />
-                );
+                // Process blanks within the text segment
+                const partsWithBlanks = textSegment.split(blankRegex);
+                const matches = textSegment.match(blankRegex);
+
+                partsWithBlanks.forEach((part, i) => {
+                    parts.push(
+                        <span key={key++} dangerouslySetInnerHTML={{ __html: part }} />
+                    );
+                    if (matches && i < matches.length) {
+                        parts.push(
+                            <span
+                                key={key++}
+                                className="inline-block border-b-2 border-current min-w-[3rem] mx-1 relative top-1"
+                                aria-hidden="true"
+                            ></span>
+                        );
+                    }
+                });
             }
 
             const isBlock = match[1] !== undefined;
@@ -76,16 +94,31 @@ const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }
         // Add remaining text after last match
         if (lastIndex < remaining.length) {
             const textSegment = remaining.slice(lastIndex);
-            parts.push(
-                <span key={key++} dangerouslySetInnerHTML={{ __html: textSegment }} />
-            );
+            // Process blanks within the remaining text segment
+            const partsWithBlanks = textSegment.split(blankRegex);
+            const matches = textSegment.match(blankRegex);
+
+            partsWithBlanks.forEach((part, i) => {
+                parts.push(
+                    <span key={key++} dangerouslySetInnerHTML={{ __html: part }} />
+                );
+                if (matches && i < matches.length) {
+                    parts.push(
+                        <span
+                            key={key++}
+                            className="inline-block border-b-2 border-current min-w-[3rem] mx-1 relative top-1"
+                            aria-hidden="true"
+                        ></span>
+                    );
+                }
+            });
         }
 
         return parts.length > 0 ? parts : [<span key={0}>{text}</span>];
     };
 
-    // Check if content contains any LaTeX
-    const hasLatex = /\$/.test(content);
+    // Check if content contains any LaTeX or blanks
+    const hasLatex = /\$/.test(content) || /_{3,}/.test(content);
 
     if (!hasLatex) {
         return <span className={className} dangerouslySetInnerHTML={{ __html: content }} />;
