@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
-import PaperCard from '@/components/shop/PaperCard';
+import PaperCard, { PaperCardSkeleton } from '@/components/shop/PaperCard';
+import LevelStrip from '@/components/shop/LevelStrip';
 import FilterRail from '@/components/shop/FilterRail';
 import { useCart } from '@/lib/cart';
 import { LEVELS, examTypeName } from '@/lib/catalog';
@@ -208,7 +209,7 @@ export default function ShopPage() {
                 </div>
             </div>
 
-            <div className="shell-width grid gap-8 py-6 lg:grid-cols-[260px_1fr]">
+            <div className="shell-width grid min-w-0 gap-8 py-6 lg:grid-cols-[260px_1fr]">
                 {/* Desktop rail */}
                 <aside className="hidden lg:block">
                     <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] scroll-panel pr-2">
@@ -223,29 +224,42 @@ export default function ShopPage() {
                 </aside>
 
                 {/* Results */}
-                <main>
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <h1 className="text-xl font-bold tracking-tight">
-                                {activeSummary.length > 0 ? activeSummary.join(' · ') : 'All exam papers'}
-                            </h1>
-                            <p className="mt-0.5 text-sm text-muted-foreground">
+                <main className="min-w-0">
+                    {/* Level strip: the fastest way in, and it doubles as the
+                        page's only "hero" — no marketing, just the catalog. */}
+                    <div className="mb-8">
+                        <LevelStrip
+                            active={filters.level}
+                            counts={response?.facets?.levels}
+                            onSelect={(level) => patchFilters({ level, grade: undefined })}
+                        />
+                    </div>
+
+                    <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
+                        <div className="min-w-0">
+                            <p className="overline mb-2">
                                 {loading
-                                    ? 'Loading…'
-                                    : `${response?.total ?? 0} paper${(response?.total ?? 0) === 1 ? '' : 's'} available`}
+                                    ? 'Loading'
+                                    : `${response?.total ?? 0} paper${(response?.total ?? 0) === 1 ? '' : 's'}`}
+                            </p>
+                            <h1 className="display-2">
+                                {activeSummary.length > 0 ? activeSummary.join(' · ') : 'Every exam paper'}
+                            </h1>
+                            <p className="lead mt-2 max-w-xl text-sm sm:text-base">
+                                Question papers and marking schemes for CBE and 8-4-4, ready to print.
                             </p>
                         </div>
 
-                        <Link href="/set" className="btn-outline">
-                            <PenSquare className="h-4 w-4" />
+                        <Link href="/set" className="btn-outline shrink-0">
+                            <PenSquare className="h-4 w-4" aria-hidden />
                             Set your own exam
                         </Link>
-                    </div>
+                    </header>
 
                     {loading ? (
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="surface h-52 animate-pulse bg-secondary/60" />
+                                <PaperCardSkeleton key={i} index={i} />
                             ))}
                         </div>
                     ) : papers.length === 0 ? (
@@ -255,11 +269,12 @@ export default function ShopPage() {
                         />
                     ) : (
                         <>
-                            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                                {papers.map((paper) => (
+                            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                                {papers.map((paper, i) => (
                                     <PaperCard
                                         key={paper.id}
                                         paper={paper}
+                                        index={i}
                                         inCart={cart.has(paper.id)}
                                         onToggleCart={handleToggleCart}
                                         onDownload={handleDownload}
@@ -268,16 +283,21 @@ export default function ShopPage() {
                             </div>
 
                             {response?.hasMore && (
-                                <div className="mt-8 flex justify-center">
+                                <div className="mt-10 flex flex-col items-center gap-3">
                                     <button
                                         type="button"
                                         onClick={loadMore}
                                         disabled={loadingMore}
                                         className="btn-outline"
                                     >
-                                        {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                        {loadingMore ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                        ) : null}
                                         Load more papers
                                     </button>
+                                    <p className="figure text-[11px] text-muted-foreground">
+                                        {papers.length} of {response.total}
+                                    </p>
                                 </div>
                             )}
                         </>
@@ -332,24 +352,28 @@ export default function ShopPage() {
 
 function EmptyState({ hasFilters, onReset }: { hasFilters: boolean; onReset: () => void }) {
     return (
-        <div className="surface flex flex-col items-center justify-center px-6 py-16 text-center">
-            <FileQuestion className="mb-4 h-10 w-10 text-muted-foreground" />
-            <h2 className="text-lg font-bold">No papers match this yet</h2>
-            <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-                {hasFilters
-                    ? 'Try a wider level or exam type — or build the paper yourself from the question bank.'
-                    : 'The catalog is empty. Publish your first paper from the setter and it appears here.'}
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-                {hasFilters && (
-                    <button type="button" onClick={onReset} className="btn-outline">
-                        Clear filters
-                    </button>
-                )}
-                <Link href="/set" className="btn-primary">
-                    <PenSquare className="h-4 w-4" />
-                    Set an exam
-                </Link>
+        <div className="surface relative overflow-hidden px-6 py-20 text-center">
+            {/* Ruled exercise-book lines, faded out — a blank page. */}
+            <div className="ruled pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+            <div className="relative">
+                <FileQuestion className="mx-auto mb-5 h-9 w-9 text-muted-foreground" aria-hidden />
+                <h2 className="title-1">No papers match this yet</h2>
+                <p className="lead mx-auto mt-3 max-w-md text-sm sm:text-base">
+                    {hasFilters
+                        ? 'Try a wider level or exam type — or build the paper yourself from the question bank.'
+                        : 'The catalog is empty. Publish your first paper from the setter and it appears here.'}
+                </p>
+                <div className="mt-8 flex flex-wrap justify-center gap-2">
+                    {hasFilters && (
+                        <button type="button" onClick={onReset} className="btn-outline">
+                            Clear filters
+                        </button>
+                    )}
+                    <Link href="/set" className="btn-primary">
+                        <PenSquare className="h-4 w-4" aria-hidden />
+                        Set an exam
+                    </Link>
+                </div>
             </div>
         </div>
     );

@@ -10,6 +10,7 @@ import { useCart } from '@/lib/cart';
 import { formatPrice } from '@/lib/catalog';
 import { formatDisplayName, getInitials } from '@/utils/userUtils';
 import { useRole } from '@/lib/roles';
+import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 
 /**
  * The whole navigation of the product: two places to go, plus your cart and
@@ -59,15 +60,18 @@ export default function TopNav() {
         <header className="sticky top-0 z-50 border-b bar-blur">
             <div className="shell-width flex h-16 items-center gap-3">
                 {/* Brand */}
-                <Link href="/" className="flex items-center gap-2.5 shrink-0" aria-label="Maarifa Exams home">
-                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground font-black text-sm">
-                        MX
-                    </span>
+                <Link
+                    href="/"
+                    className="group flex shrink-0 items-center gap-2.5"
+                    aria-label="Skulbase Exams home"
+                >
+                    <BrandMark className="h-9 w-9 text-[15px] transition-transform duration-200 group-hover:-rotate-3" />
                     <span className="hidden sm:block">
-                        <span className="block text-[15px] font-bold leading-tight tracking-tight">Maarifa Exams</span>
-                        <span className="block text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                            CBE paper shop
-                        </span>
+                        <Wordmark
+                            suffix="Exams"
+                            className="block font-display text-[17px] font-bold leading-none tracking-[-0.02em]"
+                        />
+                        <span className="overline mt-1 block">CBE paper shop</span>
                     </span>
                 </Link>
 
@@ -80,14 +84,19 @@ export default function TopNav() {
                                 key={href}
                                 href={href}
                                 aria-current={active ? 'page' : undefined}
-                                className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
-                                    active
-                                        ? 'bg-secondary text-foreground'
-                                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                                className={`relative flex min-h-11 items-center gap-2 px-3.5 text-sm font-semibold transition-colors ${
+                                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                                 }`}
                             >
-                                <Icon className="h-4 w-4" />
+                                <Icon className="h-4 w-4" aria-hidden />
                                 {label}
+                                {/* The active marker: a rule under the label, not a pill. */}
+                                <span
+                                    className={`absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-primary transition-transform duration-200 ${
+                                        active ? 'scale-x-100' : 'scale-x-0'
+                                    }`}
+                                    aria-hidden
+                                />
                             </Link>
                         );
                     })}
@@ -98,14 +107,14 @@ export default function TopNav() {
                 {/* Cart */}
                 <Link
                     href="/cart"
-                    className="relative flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold transition-colors hover:bg-secondary"
+                    className="relative flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition-all duration-150 hover:border-primary/40 hover:bg-primary/[0.04] active:scale-[0.98]"
                 >
-                    <ShoppingCart className="h-4 w-4" />
-                    <span className="hidden sm:inline tabular-nums">
+                    <ShoppingCart className="h-4 w-4" aria-hidden />
+                    <span className={count > 0 ? 'figure hidden sm:inline' : 'hidden sm:inline'}>
                         {count > 0 ? formatPrice(totals.totalCents, totals.currency) : 'Cart'}
                     </span>
                     {count > 0 && (
-                        <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-bold text-accent-foreground">
+                        <span className="figure absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-foreground">
                             {count}
                         </span>
                     )}
@@ -115,13 +124,13 @@ export default function TopNav() {
                 {email && (
                     <Link
                         href="/library"
-                        className={`hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:flex ${
+                        className={`hidden min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors sm:flex ${
                             pathname.startsWith('/library')
-                                ? 'bg-secondary text-foreground'
-                                : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                                ? 'text-foreground'
+                                : 'text-muted-foreground hover:text-foreground'
                         }`}
                     >
-                        <Library className="h-4 w-4" />
+                        <Library className="h-4 w-4" aria-hidden />
                         My library
                     </Link>
                 )}
@@ -130,13 +139,13 @@ export default function TopNav() {
                 {isAdmin && (
                     <Link
                         href="/admin"
-                        className={`hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:flex ${
+                        className={`hidden min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors sm:flex ${
                             pathname.startsWith('/admin')
-                                ? 'bg-secondary text-foreground'
-                                : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                                ? 'text-foreground'
+                                : 'text-muted-foreground hover:text-foreground'
                         }`}
                     >
-                        <ShieldCheck className="h-4 w-4" />
+                        <ShieldCheck className="h-4 w-4" aria-hidden />
                         Admin
                     </Link>
                 )}
@@ -146,7 +155,7 @@ export default function TopNav() {
                     <button
                         type="button"
                         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="hidden h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:grid"
+                        className="btn-icon hidden sm:inline-grid"
                         aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
                     >
                         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -157,7 +166,7 @@ export default function TopNav() {
                 {email ? (
                     <div className="hidden items-center gap-2 sm:flex">
                         <span
-                            className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary"
+                            className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary"
                             title={email}
                         >
                             {getInitials(name || formatDisplayName(email))}
@@ -165,7 +174,7 @@ export default function TopNav() {
                         <button
                             type="button"
                             onClick={signOut}
-                            className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                            className="btn-icon"
                             aria-label="Sign out"
                         >
                             <LogOut className="h-4 w-4" />
@@ -186,7 +195,7 @@ export default function TopNav() {
                 <button
                     type="button"
                     onClick={() => setMobileOpen((v) => !v)}
-                    className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary md:hidden"
+                    className="btn-icon md:hidden"
                     aria-label="Menu"
                     aria-expanded={mobileOpen}
                 >
@@ -202,7 +211,7 @@ export default function TopNav() {
                             <Link
                                 key={href}
                                 href={href}
-                                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold hover:bg-secondary"
+                                className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
                             >
                                 <Icon className="h-4 w-4" />
                                 {label}
@@ -210,7 +219,7 @@ export default function TopNav() {
                         ))}
                         <Link
                             href="/cart"
-                            className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold hover:bg-secondary"
+                            className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
                         >
                             <ShoppingCart className="h-4 w-4" />
                             Cart {count > 0 && `(${count})`}
@@ -219,7 +228,7 @@ export default function TopNav() {
                             <>
                                 <Link
                                     href="/library"
-                                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold hover:bg-secondary"
+                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
                                 >
                                     <Library className="h-4 w-4" />
                                     My library
@@ -227,7 +236,7 @@ export default function TopNav() {
                                 {isAdmin && (
                                     <Link
                                         href="/admin"
-                                        className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold hover:bg-secondary"
+                                        className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
                                     >
                                         <ShieldCheck className="h-4 w-4" />
                                         Admin
@@ -236,7 +245,7 @@ export default function TopNav() {
                                 <button
                                     type="button"
                                     onClick={signOut}
-                                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold text-muted-foreground hover:bg-secondary"
+                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold text-muted-foreground hover:bg-secondary"
                                 >
                                     <LogOut className="h-4 w-4" />
                                     Sign out

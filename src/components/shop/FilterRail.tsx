@@ -45,10 +45,10 @@ export default function FilterRail({ filters, facets, subjects, onChange, onRese
     );
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-7">
             {activeCount > 0 && (
-                <button type="button" onClick={onReset} className="btn-outline w-full">
-                    <X className="h-4 w-4" />
+                <button type="button" onClick={onReset} className="btn-outline btn-sm w-full">
+                    <X className="h-3.5 w-3.5" aria-hidden />
                     Clear {activeCount} filter{activeCount === 1 ? '' : 's'}
                 </button>
             )}
@@ -103,9 +103,7 @@ export default function FilterRail({ filters, facets, subjects, onChange, onRese
                         if (inGroup.length === 0) return null;
                         return (
                             <div key={group}>
-                                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
-                                    {group}
-                                </p>
+                                <p className="overline mb-2 opacity-70">{group}</p>
                                 <div className="space-y-0.5">
                                     {inGroup.map((type) => (
                                         <RailButton
@@ -206,7 +204,9 @@ export default function FilterRail({ filters, facets, subjects, onChange, onRese
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <section>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-foreground">{title}</h3>
+            <div className="rule-heading mb-3">
+                <h3 className="overline text-foreground">{title}</h3>
+            </div>
             {children}
         </section>
     );
@@ -230,18 +230,18 @@ function RailButton({
             type="button"
             onClick={onClick}
             aria-pressed={active}
-            className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
+            className={`group flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-all duration-150 ${
                 active
-                    ? 'bg-primary/10 font-semibold text-primary'
+                    ? 'bg-primary/[0.08] font-semibold text-primary'
                     : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
             }`}
         >
-            <span className="truncate">
-                {label}
-                {hint && <span className="ml-1.5 text-[11px] text-muted-foreground/70">{hint}</span>}
+            <span className="flex min-w-0 items-baseline gap-1.5">
+                <span className="truncate">{label}</span>
+                {hint && <span className="figure shrink-0 text-[10px] opacity-60">{hint}</span>}
             </span>
             {typeof count === 'number' && count > 0 && (
-                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/70">{count}</span>
+                <span className="figure shrink-0 text-[10px] opacity-60">{count}</span>
             )}
         </button>
     );

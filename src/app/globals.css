@@ -10,108 +10,137 @@
        ======================================================================== */
 
     :root {
-        --background: oklch(0.986 0.003 100);
-        --foreground: oklch(0.24 0.014 250);
+        /* Inherited from Skulbase so the two products read as one system: cool
+           near-white ground, blue primary, green counterpart. */
+        --paper: oklch(0.984 0.003 247.858);
+        --background: oklch(0.984 0.003 247.858);
+        --foreground: oklch(0.208 0.042 265.755);
 
         --card: oklch(1 0 0);
-        --card-foreground: oklch(0.24 0.014 250);
+        --card-foreground: oklch(0.208 0.042 265.755);
 
         --popover: oklch(1 0 0);
-        --popover-foreground: oklch(0.24 0.014 250);
+        --popover-foreground: oklch(0.208 0.042 265.755);
 
-        --primary: oklch(0.47 0.11 168);
-        --primary-foreground: oklch(0.99 0 0);
+        /* Skulbase blue — the brand action colour, identical to the sibling app. */
+        --primary: oklch(0.546 0.245 262.881);
+        --primary-foreground: oklch(1 0 0);
 
-        --secondary: oklch(0.965 0.006 160);
-        --secondary-foreground: oklch(0.30 0.02 200);
+        /* Skulbase green — the second half of the wordmark; also "free" and "good". */
+        --brand-green: oklch(0.585 0.17 149);
 
-        --muted: oklch(0.955 0.004 240);
-        --muted-foreground: oklch(0.50 0.012 250);
+        --secondary: oklch(0.968 0.007 247.896);
+        --secondary-foreground: oklch(0.279 0.041 260.031);
 
-        --accent: oklch(0.74 0.15 62);
-        --accent-foreground: oklch(0.24 0.03 60);
+        --muted: oklch(0.955 0.008 247.896);
+        --muted-foreground: oklch(0.478 0.033 256.802);
 
-        --destructive: oklch(0.58 0.20 25);
-        --destructive-foreground: oklch(0.99 0 0);
+        /* Amber is reserved for commerce only: prices, add-to-cart, pay, publish.
+           Deep enough to sit beside the blue without shouting. */
+        --accent: oklch(0.635 0.145 55);
+        --accent-foreground: oklch(1 0 0);
 
-        --success: oklch(0.60 0.14 155);
-        --success-foreground: oklch(0.99 0 0);
+        /* The examiner's red: marks, errors, margin notes. Nothing else. */
+        --ink-red: oklch(0.545 0.205 27);
 
-        --border: oklch(0.915 0.005 250);
-        --input: oklch(0.915 0.005 250);
-        --ring: oklch(0.47 0.11 168);
+        --destructive: oklch(0.577 0.216 27.325);
+        --destructive-foreground: oklch(1 0 0);
 
-        --chart-1: oklch(0.47 0.11 168);
-        --chart-2: oklch(0.74 0.15 62);
-        --chart-3: oklch(0.55 0.13 250);
-        --chart-4: oklch(0.62 0.16 20);
-        --chart-5: oklch(0.60 0.10 300);
+        --success: oklch(0.585 0.17 149);
+        --success-foreground: oklch(1 0 0);
 
-        --sidebar: oklch(0.995 0.002 100);
-        --sidebar-foreground: oklch(0.24 0.014 250);
-        --sidebar-primary: oklch(0.47 0.11 168);
-        --sidebar-primary-foreground: oklch(0.99 0 0);
-        --sidebar-accent: oklch(0.74 0.15 62);
-        --sidebar-accent-foreground: oklch(0.24 0.03 60);
-        --sidebar-border: oklch(0.915 0.005 250);
-        --sidebar-ring: oklch(0.47 0.11 168);
+        --border: oklch(0.923 0.013 255.508);
+        --input: oklch(0.923 0.013 255.508);
+        --ring: oklch(0.546 0.245 262.881);
 
-        --font-sans: Inter, ui-sans-serif, system-ui;
+        --chart-1: oklch(0.546 0.245 262.881);
+        --chart-2: oklch(0.585 0.17 149);
+        --chart-3: oklch(0.635 0.145 55);
+        --chart-4: oklch(0.545 0.205 27);
+        --chart-5: oklch(0.585 0.16 300);
+
+        --sidebar: oklch(0.992 0.002 247.858);
+        --sidebar-foreground: oklch(0.208 0.042 265.755);
+        --sidebar-primary: oklch(0.546 0.245 262.881);
+        --sidebar-primary-foreground: oklch(1 0 0);
+        --sidebar-accent: oklch(0.635 0.145 55);
+        --sidebar-accent-foreground: oklch(1 0 0);
+        --sidebar-border: oklch(0.923 0.013 255.508);
+        --sidebar-ring: oklch(0.546 0.245 262.881);
+
+        /* Skulbase's faces, plus a book serif for the printed papers. */
+        --font-display: Syne, ui-sans-serif, system-ui, sans-serif;
+        --font-sans: Inter, system-ui, -apple-system, sans-serif;
         --font-serif: Lora, ui-serif, serif;
-        --font-mono: 'Roboto Mono', ui-monospace, monospace;
+        --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-        --radius: 0.75rem;
+        --radius: 0.625rem;
 
-        --shadow-2xs: 0px 4px 10px -4px hsl(0 0% 0% / 0.04);
-        --shadow-xs: 0px 6px 14px -4px hsl(0 0% 0% / 0.05);
-        --shadow-sm: 0px 8px 20px -6px hsl(0 0% 0% / 0.08);
-        --shadow: 0px 10px 30px -8px hsl(0 0% 0% / 0.10);
-        --shadow-md: 0px 14px 40px -10px hsl(0 0% 0% / 0.12);
-        --shadow-lg: 0px 18px 55px -12px hsl(0 0% 0% / 0.14);
-        --shadow-xl: 0px 22px 70px -14px hsl(0 0% 0% / 0.16);
-        --shadow-2xl: 0px 30px 90px -16px hsl(0 0% 0% / 0.20);
+        --shadow-2xs: 0px 1px 2px 0px oklch(0.208 0.042 265.755 / 0.05);
+        --shadow-xs: 0px 2px 4px -1px oklch(0.208 0.042 265.755 / 0.06);
+        --shadow-sm: 0px 4px 12px -2px oklch(0.208 0.042 265.755 / 0.08);
+        --shadow: 0px 8px 24px -4px oklch(0.208 0.042 265.755 / 0.10);
+        --shadow-md: 0px 12px 32px -6px oklch(0.208 0.042 265.755 / 0.12);
+        --shadow-lg: 0px 18px 48px -10px oklch(0.208 0.042 265.755 / 0.14);
+        --shadow-xl: 0px 24px 64px -12px oklch(0.208 0.042 265.755 / 0.16);
+        --shadow-2xl: 0px 32px 80px -16px oklch(0.208 0.042 265.755 / 0.20);
     }
 
+    /* Night edition, matched to Skulbase's dark palette. */
     .dark {
-        --background: oklch(0.19 0.012 250);
-        --foreground: oklch(0.95 0.004 250);
+        --paper: oklch(0.208 0.042 265.755);
+        --background: oklch(0.208 0.042 265.755);
+        --foreground: oklch(0.968 0.007 247.896);
 
-        --card: oklch(0.245 0.014 250);
-        --card-foreground: oklch(0.95 0.004 250);
+        --card: oklch(0.256 0.042 265.755);
+        --card-foreground: oklch(0.968 0.007 247.896);
 
-        --popover: oklch(0.245 0.014 250);
-        --popover-foreground: oklch(0.95 0.004 250);
+        --popover: oklch(0.256 0.042 265.755);
+        --popover-foreground: oklch(0.968 0.007 247.896);
 
-        --primary: oklch(0.68 0.13 168);
-        --primary-foreground: oklch(0.17 0.02 200);
+        --primary: oklch(0.623 0.214 259.815);
+        --primary-foreground: oklch(0.129 0.042 264.695);
 
-        --secondary: oklch(0.29 0.016 250);
-        --secondary-foreground: oklch(0.95 0.004 250);
+        --brand-green: oklch(0.70 0.16 150);
 
-        --muted: oklch(0.30 0.012 250);
-        --muted-foreground: oklch(0.70 0.01 250);
+        --secondary: oklch(0.302 0.043 258);
+        --secondary-foreground: oklch(0.968 0.007 247.896);
 
-        --accent: oklch(0.79 0.14 68);
-        --accent-foreground: oklch(0.20 0.03 60);
+        --muted: oklch(0.315 0.04 258);
+        --muted-foreground: oklch(0.735 0.028 256.802);
 
-        --destructive: oklch(0.63 0.19 25);
-        --destructive-foreground: oklch(0.99 0 0);
+        --accent: oklch(0.735 0.145 60);
+        --accent-foreground: oklch(0.18 0.03 60);
 
-        --success: oklch(0.70 0.14 155);
-        --success-foreground: oklch(0.17 0.02 160);
+        --ink-red: oklch(0.68 0.18 27);
 
-        --border: oklch(0.32 0.012 250);
-        --input: oklch(0.32 0.012 250);
-        --ring: oklch(0.68 0.13 168);
+        --destructive: oklch(0.65 0.19 27.325);
+        --destructive-foreground: oklch(1 0 0);
 
-        --sidebar: oklch(0.21 0.013 250);
-        --sidebar-foreground: oklch(0.95 0.004 250);
-        --sidebar-primary: oklch(0.68 0.13 168);
-        --sidebar-primary-foreground: oklch(0.17 0.02 200);
-        --sidebar-accent: oklch(0.79 0.14 68);
-        --sidebar-accent-foreground: oklch(0.20 0.03 60);
-        --sidebar-border: oklch(0.32 0.012 250);
-        --sidebar-ring: oklch(0.68 0.13 168);
+        --success: oklch(0.70 0.16 150);
+        --success-foreground: oklch(0.14 0.03 150);
+
+        --border: oklch(0.352 0.044 257.287);
+        --input: oklch(0.352 0.044 257.287);
+        --ring: oklch(0.623 0.214 259.815);
+
+        --sidebar: oklch(0.228 0.042 265.755);
+        --sidebar-foreground: oklch(0.968 0.007 247.896);
+        --sidebar-primary: oklch(0.623 0.214 259.815);
+        --sidebar-primary-foreground: oklch(0.129 0.042 264.695);
+        --sidebar-accent: oklch(0.735 0.145 60);
+        --sidebar-accent-foreground: oklch(0.18 0.03 60);
+        --sidebar-border: oklch(0.352 0.044 257.287);
+        --sidebar-ring: oklch(0.623 0.214 259.815);
+
+        /* Shadows do little on dark grounds; borders carry the structure. */
+        --shadow-2xs: 0px 2px 6px -2px oklch(0 0 0 / 0.4);
+        --shadow-xs: 0px 4px 10px -3px oklch(0 0 0 / 0.45);
+        --shadow-sm: 0px 8px 18px -6px oklch(0 0 0 / 0.5);
+        --shadow: 0px 12px 28px -8px oklch(0 0 0 / 0.55);
+        --shadow-md: 0px 16px 38px -10px oklch(0 0 0 / 0.6);
+        --shadow-lg: 0px 22px 55px -12px oklch(0 0 0 / 0.65);
+        --shadow-xl: 0px 28px 70px -14px oklch(0 0 0 / 0.7);
     }
 }
 
@@ -153,6 +182,11 @@
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
 
+    --color-paper: var(--paper);
+    --color-ink-red: var(--ink-red);
+    --color-brand-green: var(--brand-green);
+
+    --font-display: var(--font-display);
     --font-sans: var(--font-sans);
     --font-serif: var(--font-serif);
     --font-mono: var(--font-mono);
@@ -180,43 +214,184 @@
     body {
         background: var(--background);
         color: var(--foreground);
+        font-family: var(--font-sans);
         font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
         -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
     }
 
-    /* Focus is visible everywhere, and always the same shape. */
-    :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    /*
+     * Headings are the design. Every h1-h4 gets the display serif with tight
+     * tracking by default, so a component never has to remember to ask.
+     * Fraunces is an optical-size face: SOFT and WONK give it warmth at large
+     * sizes without turning cartoonish.
+     */
+    :where(h1, h2, h3, h4) {
+        font-family: var(--font-display);
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        font-weight: 700;
+    }
+
+    /* Figures line up in columns everywhere: prices, marks, counts, totals. */
+    :where(.tabular-nums, td, th) {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* One focus treatment, used by everything. */
+    :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
+        border-radius: calc(var(--radius) - 2px);
+    }
+
+    ::selection {
+        background: color-mix(in oklab, var(--accent) 35%, transparent);
+        color: var(--foreground);
+    }
+
+    /* Motion is opt-out for anyone who has asked the OS to calm things down. */
+    @media (prefers-reduced-motion: reduce) {
+
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
     }
 }
 
 @layer utilities {
 
     /* ------------------------------------------------------------------------
+       TYPE SCALE
+       Fixed steps only — no invented sizes. Display steps carry the serif;
+       overlines and figures carry the mono for editorial contrast.
+       ------------------------------------------------------------------------ */
+
+    :where(.display-1) {
+        font-family: var(--font-display);
+        @apply text-4xl font-extrabold leading-[1.05] tracking-[-0.035em] sm:text-5xl lg:text-6xl;
+    }
+
+    :where(.display-2) {
+        font-family: var(--font-display);
+        @apply text-3xl font-bold leading-[1.1] tracking-[-0.03em] sm:text-4xl;
+    }
+
+    :where(.title-1) {
+        font-family: var(--font-display);
+        @apply text-2xl font-bold leading-snug tracking-[-0.02em];
+    }
+
+    :where(.title-2) {
+        font-family: var(--font-display);
+        @apply text-lg font-bold leading-snug tracking-[-0.015em];
+    }
+
+    /* Card and list headings stay in the UI face: they sit next to dense
+       metadata and need to hold up at 15px. */
+    :where(.heading-ui) {
+        @apply text-[15px] font-semibold leading-snug tracking-[-0.01em];
+    }
+
+    /* The editorial signature: mono, uppercase, widely tracked. Used for every
+       section label, eyebrow and kicker in the product. */
+    :where(.overline) {
+        font-family: var(--font-mono);
+        @apply text-[10px] font-medium uppercase leading-none tracking-[0.16em] text-muted-foreground;
+    }
+
+    :where(.lead) {
+        @apply text-base leading-relaxed text-muted-foreground sm:text-lg;
+    }
+
+    :where(.meta) {
+        @apply text-xs leading-normal text-muted-foreground;
+    }
+
+    /* Prices, marks, totals, references. */
+    :where(.figure) {
+        font-family: var(--font-mono);
+        @apply font-medium tabular-nums tracking-tight;
+    }
+
+    /* ------------------------------------------------------------------------
        SURFACES
        ------------------------------------------------------------------------ */
 
     :where(.surface) {
-        @apply bg-card border border-border rounded-xl;
+        @apply bg-card border border-border;
+        border-radius: var(--radius);
     }
 
-    /* The workhorse card: papers in the shop, questions in the bank. */
-    :where(.card-elevated) {
-        @apply bg-card border border-border rounded-xl transition-all duration-200;
+    /*
+     * The workhorse card. A "sheet": white paper on the warm ground, with a
+     * hairline ruled margin down the left edge that inks in on hover — the one
+     * detail that ties the whole shop back to a real exam script.
+     */
+    :where(.sheet) {
+        @apply relative bg-card border border-border;
+        border-radius: var(--radius);
         box-shadow: var(--shadow-2xs);
+        transition: box-shadow 220ms ease-out, border-color 220ms ease-out, transform 220ms ease-out;
+    }
+
+    :where(.sheet)::before {
+        content: '';
+        position: absolute;
+        inset-block: 0.875rem;
+        left: 0;
+        width: 2px;
+        border-radius: 2px;
+        background: color-mix(in oklab, var(--ink-red) 22%, transparent);
+        opacity: 0;
+        transition: opacity 220ms ease-out;
+        pointer-events: none;
+    }
+
+    :where(.sheet):hover {
+        box-shadow: var(--shadow-sm);
+        border-color: color-mix(in oklab, var(--primary) 32%, var(--border));
+        transform: translateY(-2px);
+    }
+
+    :where(.sheet):hover::before {
+        opacity: 1;
+    }
+
+    /* Kept as an alias so older markup keeps working. */
+    :where(.card-elevated) {
+        @apply bg-card border border-border;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-2xs);
+        transition: box-shadow 220ms ease-out, border-color 220ms ease-out;
     }
 
     :where(.card-elevated):hover {
         box-shadow: var(--shadow-sm);
-        border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+        border-color: color-mix(in oklab, var(--primary) 32%, var(--border));
     }
 
-    /* Sticky bars that sit over scrolling content. */
+    /* Sticky bars over scrolling content. */
     :where(.bar-blur) {
         @apply border-border;
-        background: color-mix(in oklab, var(--background) 82%, transparent);
-        backdrop-filter: blur(12px);
+        background: color-mix(in oklab, var(--background) 80%, transparent);
+        backdrop-filter: blur(14px) saturate(140%);
+    }
+
+    /* Ruled paper: the faint horizontal lines of a school exercise book. Used
+       sparingly, behind empty states and page headers. */
+    :where(.ruled) {
+        background-image: repeating-linear-gradient(to bottom,
+                transparent,
+                transparent 27px,
+                color-mix(in oklab, var(--border) 70%, transparent) 27px,
+                color-mix(in oklab, var(--border) 70%, transparent) 28px);
     }
 
     /* ------------------------------------------------------------------------
@@ -224,17 +399,23 @@
        ------------------------------------------------------------------------ */
 
     :where(.chip) {
-        @apply inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors;
+        @apply inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-xs font-medium text-muted-foreground transition-all duration-150;
     }
 
     :where(.chip):hover {
         @apply text-foreground;
         border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+        background: color-mix(in oklab, var(--primary) 5%, var(--card));
+    }
+
+    :where(.chip):active {
+        transform: scale(0.97);
     }
 
     :where(.chip-active) {
         @apply border-transparent text-primary-foreground;
         background: var(--primary);
+        box-shadow: var(--shadow-2xs);
     }
 
     :where(.chip-active):hover {
@@ -243,31 +424,52 @@
     }
 
     :where(.badge-soft) {
-        @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
-        background: color-mix(in oklab, var(--primary) 10%, transparent);
-        color: color-mix(in oklab, var(--primary) 80%, var(--foreground));
+        font-family: var(--font-mono);
+        @apply inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em];
+        background: color-mix(in oklab, var(--primary) 9%, transparent);
+        color: color-mix(in oklab, var(--primary) 82%, var(--foreground));
     }
 
     :where(.badge-price) {
-        @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold tabular-nums;
+        font-family: var(--font-mono);
+        @apply inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold tabular-nums;
         background: color-mix(in oklab, var(--accent) 20%, transparent);
-        color: color-mix(in oklab, var(--accent) 65%, var(--foreground));
+        color: color-mix(in oklab, var(--accent) 60%, var(--foreground));
     }
 
     :where(.badge-free) {
-        @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wide;
-        background: color-mix(in oklab, var(--success) 16%, transparent);
-        color: color-mix(in oklab, var(--success) 70%, var(--foreground));
+        font-family: var(--font-mono);
+        @apply inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em];
+        background: color-mix(in oklab, var(--success) 15%, transparent);
+        color: color-mix(in oklab, var(--success) 72%, var(--foreground));
+    }
+
+    /* The marks total, set like an examiner's note in the margin. */
+    :where(.badge-marks) {
+        font-family: var(--font-mono);
+        @apply inline-flex items-center gap-1 text-[11px] font-bold tabular-nums;
+        color: color-mix(in oklab, var(--ink-red) 78%, var(--foreground));
     }
 
     /* ------------------------------------------------------------------------
        BUTTONS
+       Shared base, then one variant per intent. Every variant has hover, active
+       and disabled states; 44px min height keeps them thumb-sized on mobile.
        ------------------------------------------------------------------------ */
 
-    /* One shared base, then a variant per intent. Tailwind v4 will not let a
-       utility @apply another custom utility, so the base is repeated by hand. */
-    :where(.btn, .btn-primary, .btn-buy, .btn-outline, .btn-ghost) {
-        @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
+    :where(.btn, .btn-primary, .btn-buy, .btn-outline, .btn-ghost, .btn-danger) {
+        @apply inline-flex min-h-11 items-center justify-center gap-2 px-4 text-sm font-semibold transition-all duration-150 disabled:opacity-45 disabled:pointer-events-none;
+        border-radius: calc(var(--radius) - 1px);
+        letter-spacing: -0.005em;
+    }
+
+    :where(.btn, .btn-primary, .btn-buy, .btn-outline, .btn-ghost, .btn-danger):active:not(:disabled) {
+        transform: scale(0.98);
+    }
+
+    /* Compact variant for toolbars and dense rows. */
+    :where(.btn-sm) {
+        @apply min-h-9 px-3 text-xs;
     }
 
     :where(.btn-primary) {
@@ -281,6 +483,7 @@
         box-shadow: var(--shadow-xs);
     }
 
+    /* Commerce actions only: add to cart, pay, publish for sale. */
     :where(.btn-buy) {
         background: var(--accent);
         color: var(--accent-foreground);
@@ -288,7 +491,8 @@
     }
 
     :where(.btn-buy):hover {
-        background: color-mix(in oklab, var(--accent) 88%, black);
+        background: color-mix(in oklab, var(--accent) 90%, black);
+        box-shadow: var(--shadow-xs);
     }
 
     :where(.btn-outline) {
@@ -296,8 +500,8 @@
     }
 
     :where(.btn-outline):hover {
-        @apply bg-secondary;
-        border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+        border-color: color-mix(in oklab, var(--primary) 42%, var(--border));
+        background: color-mix(in oklab, var(--primary) 5%, var(--card));
     }
 
     :where(.btn-ghost) {
@@ -308,46 +512,170 @@
         @apply bg-secondary text-foreground;
     }
 
+    :where(.btn-danger) {
+        @apply text-destructive-foreground;
+        background: var(--destructive);
+    }
+
+    :where(.btn-danger):hover {
+        background: color-mix(in oklab, var(--destructive) 88%, black);
+    }
+
+    /* Square icon-only button, still 44px for touch. */
+    :where(.btn-icon) {
+        @apply inline-grid h-11 w-11 place-items-center text-muted-foreground transition-all duration-150;
+        border-radius: calc(var(--radius) - 1px);
+    }
+
+    :where(.btn-icon):hover {
+        @apply bg-secondary text-foreground;
+    }
+
+    :where(.btn-icon):active {
+        transform: scale(0.94);
+    }
+
     /* ------------------------------------------------------------------------
        FORMS
        ------------------------------------------------------------------------ */
 
     :where(.field) {
-        @apply w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm text-foreground transition-colors placeholder:text-muted-foreground;
+        @apply w-full min-h-11 border border-input bg-card px-3 text-sm text-foreground transition-all duration-150 placeholder:text-muted-foreground/70;
+        border-radius: calc(var(--radius) - 1px);
+    }
+
+    :where(.field):hover:not(:focus) {
+        border-color: color-mix(in oklab, var(--primary) 28%, var(--input));
     }
 
     :where(.field):focus {
         @apply outline-none;
         border-color: var(--ring);
-        box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 18%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 16%, transparent);
+    }
+
+    :where(textarea.field) {
+        @apply py-2.5 leading-relaxed;
     }
 
     :where(.label) {
-        @apply block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5;
+        font-family: var(--font-mono);
+        @apply mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground;
     }
 
     /* ------------------------------------------------------------------------
-       LAYOUT HELPERS
+       LAYOUT
        ------------------------------------------------------------------------ */
 
     :where(.shell-width) {
         @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8;
     }
 
+    /* Section label with a rule running off to the right — the editorial
+       divider used above every group of content. */
+    :where(.rule-heading) {
+        @apply flex items-center gap-3;
+    }
+
+    :where(.rule-heading)::after {
+        content: '';
+        @apply h-px flex-1;
+        background: linear-gradient(to right, var(--border), transparent);
+    }
+
     :where(.scroll-panel) {
         @apply overflow-y-auto overscroll-contain;
         scrollbar-width: thin;
-        scrollbar-color: var(--border) transparent;
+        scrollbar-color: color-mix(in oklab, var(--border) 90%, transparent) transparent;
     }
 
     :where(.scroll-panel)::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 9px;
+        height: 9px;
+    }
+
+    :where(.scroll-panel)::-webkit-scrollbar-track {
+        background: transparent;
     }
 
     :where(.scroll-panel)::-webkit-scrollbar-thumb {
-        background: var(--border);
+        background: color-mix(in oklab, var(--border) 90%, transparent);
         border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+    }
+
+    :where(.scroll-panel)::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+        background-clip: content-box;
+    }
+
+    /* Horizontal strip that scrolls on small screens without a visible bar. */
+    :where(.rail-x) {
+        @apply flex gap-2 overflow-x-auto pb-1;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    :where(.rail-x)::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* ------------------------------------------------------------------------
+       MOTION
+       Entry reveals are staggered by setting --i on each item. Only key content
+       animates; nothing blocks interaction, and reduced-motion disables it all.
+       ------------------------------------------------------------------------ */
+
+    @keyframes rise-in {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    :where(.rise-in) {
+        animation: rise-in 420ms cubic-bezier(0.21, 0.6, 0.35, 1) both;
+        animation-delay: calc(var(--i, 0) * 45ms);
+    }
+
+    :where(.fade-in) {
+        animation: fade-in 300ms ease-out both;
+        animation-delay: calc(var(--i, 0) * 40ms);
+    }
+
+    /* Skeletons that hold the real layout rather than spinning. */
+    :where(.skeleton) {
+        @apply bg-secondary;
+        border-radius: calc(var(--radius) - 2px);
+        animation: skeleton-pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes skeleton-pulse {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.55;
+        }
     }
 
     /* Kept for the legacy builder chrome that still references them. */

@@ -4,6 +4,7 @@ import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 
 function LoginForm() {
@@ -125,12 +126,13 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
             <div className="w-full max-w-sm">
                 <Link href="/" className="mb-8 flex flex-col items-center gap-3">
-                    <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-sm font-black text-primary-foreground">
-                        MX
-                    </span>
+                    <BrandMark className="h-11 w-11 text-base" />
                     <span className="text-center">
-                        <span className="block text-lg font-bold tracking-tight">Maarifa Exams</span>
-                        <span className="block text-xs text-muted-foreground">
+                        <Wordmark
+                            suffix="Exams"
+                            className="block font-display text-lg font-bold tracking-[-0.02em]"
+                        />
+                        <span className="mt-1 block text-xs text-muted-foreground">
                             Buy CBE exam papers, or set your own
                         </span>
                     </span>

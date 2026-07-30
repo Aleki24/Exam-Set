@@ -17,6 +17,7 @@ import {
     Users,
 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import PaperCard from '@/components/shop/PaperCard';
 import { useCart } from '@/lib/cart';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
@@ -28,6 +29,7 @@ export default function PaperDetailPage() {
     const cart = useCart();
 
     const [paper, setPaper] = useState<PaperListing | null>(null);
+    const [related, setRelated] = useState<PaperListing[]>([]);
     const [loading, setLoading] = useState(true);
     const [downloading, setDownloading] = useState<'paper' | 'scheme' | null>(null);
 
@@ -47,16 +49,32 @@ export default function PaperDetailPage() {
             .finally(() => setLoading(false));
     }, [params?.id]);
 
-    const download = async (asset: 'paper' | 'scheme') => {
+    // Cross-sell: other papers for the same level, which is what a teacher who
+    // needs one paper almost always needs more of.
+    useEffect(() => {
         if (!paper) return;
+        const params = new URLSearchParams({ limit: '4', sort: 'popular' });
+        if (paper.level_slug) params.set('level', paper.level_slug);
+
+        fetch(`/api/papers?${params}`)
+            .then((res) => res.json())
+            .then((data) => setRelated((data.papers || []).filter((p: PaperListing) => p.id !== paper.id).slice(0, 3)))
+            .catch(() => {
+                /* a missing cross-sell strip is not worth an error toast */
+            });
+    }, [paper]);
+
+    const download = async (asset: 'paper' | 'scheme', target?: PaperListing) => {
+        const subject = target ?? paper;
+        if (!subject) return;
         setDownloading(asset);
         try {
-            const res = await fetch(`/api/papers/${paper.id}/download?asset=${asset}`);
+            const res = await fetch(`/api/papers/${subject.id}/download?asset=${asset}`);
             const data = await res.json();
 
             if (res.status === 401) {
                 toast.error('Sign in to download');
-                router.push(`/auth/login?next=/papers/${paper.slug || paper.id}`);
+                router.push(`/auth/login?next=/papers/${subject.slug || subject.id}`);
                 return;
             }
             if (res.status === 402) {
@@ -80,7 +98,7 @@ export default function PaperDetailPage() {
             <div className="min-h-screen bg-background">
                 <TopNav />
                 <div className="shell-width py-16">
-                    <div className="surface h-64 animate-pulse bg-secondary/60" />
+                    <div className="skeleton h-64" />
                 </div>
             </div>
         );
@@ -91,7 +109,7 @@ export default function PaperDetailPage() {
             <div className="min-h-screen bg-background">
                 <TopNav />
                 <div className="shell-width py-20 text-center">
-                    <h1 className="text-xl font-bold">Paper not found</h1>
+                    <h1 className="title-1">Paper not found</h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                         It may have been unpublished by its author.
                     </p>
@@ -125,19 +143,15 @@ export default function PaperDetailPage() {
                 <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
                     {/* Main */}
                     <div>
-                        <span className="badge-soft">{examTypeName(paper.exam_type)}</span>
-                        <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{paper.title}</h1>
-                        <p className="mt-2 text-sm text-muted-foreground">
+                        <p className="overline mb-3">{examTypeName(paper.exam_type)}</p>
+                        <h1 className="display-2">{paper.title}</h1>
+                        <p className="meta mt-3">
                             {[paper.subject, paper.grade_label || level?.name, term?.name, paper.year, paper.paper_number]
                                 .filter(Boolean)
                                 .join(' · ')}
                         </p>
 
-                        {paper.description && (
-                            <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-foreground/90">
-                                {paper.description}
-                            </p>
-                        )}
+                        {paper.description && <p className="lead mt-6 max-w-2xl">{paper.description}</p>}
 
                         {/* Facts grid */}
                         <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -149,9 +163,9 @@ export default function PaperDetailPage() {
 
                         {/* What's included */}
                         <div className="surface mt-8 p-5">
-                            <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                                What you get
-                            </h2>
+                            <div className="rule-heading">
+                                <h2 className="overline">What you get</h2>
+                            </div>
                             <ul className="mt-3 space-y-2.5 text-sm">
                                 <li className="flex items-start gap-2.5">
                                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -182,7 +196,7 @@ export default function PaperDetailPage() {
                     <aside>
                         <div className="surface sticky top-24 p-5">
                             <div className="flex items-baseline justify-between">
-                                <span className="text-3xl font-black tracking-tight tabular-nums">
+                                <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
                                     {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
                                 </span>
                                 {paper.has_marking_scheme && (
@@ -266,13 +280,39 @@ export default function PaperDetailPage() {
                             </p>
 
                             {paper.download_count > 0 && (
-                                <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground tabular-nums">
+                                <p className="figure mt-4 border-t border-border pt-3 text-[11px] text-muted-foreground">
                                     {paper.download_count} download{paper.download_count === 1 ? '' : 's'}
                                 </p>
                             )}
                         </div>
                     </aside>
                 </div>
+
+                {/* More like this */}
+                {related.length > 0 && (
+                    <section className="mt-16 border-t border-border pt-8" aria-labelledby="related-heading">
+                        <div className="rule-heading mb-5">
+                            <h2 id="related-heading" className="overline">
+                                More for {level?.name ?? 'this level'}
+                            </h2>
+                        </div>
+                        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            {related.map((other, i) => (
+                                <PaperCard
+                                    key={other.id}
+                                    paper={other}
+                                    index={i}
+                                    inCart={cart.has(other.id)}
+                                    onToggleCart={(p) => {
+                                        const added = cart.toggle(p);
+                                        toast.success(added ? 'Added to your cart' : 'Removed from cart');
+                                    }}
+                                    onDownload={(other) => download('paper', other)}
+                                />
+                            ))}
+                        </div>
+                    </section>
+                )}
             </div>
         </div>
     );
@@ -289,11 +329,11 @@ function Fact({
 }) {
     return (
         <div className="surface p-3.5">
-            <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <Icon className="h-3.5 w-3.5" />
+            <dt className="overline flex items-center gap-1.5">
+                <Icon className="h-3 w-3" aria-hidden />
                 {label}
             </dt>
-            <dd className="mt-1 text-lg font-bold tabular-nums">{value}</dd>
+            <dd className="figure mt-1 text-lg font-bold">{value}</dd>
         </div>
     );
 }

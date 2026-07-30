@@ -61,12 +61,12 @@ export default function PaperPanel({
             {/* Live totals */}
             <div className="border-b border-border bg-secondary/40 p-4">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-bold uppercase tracking-widest">Your paper</h2>
+                    <h2 className="overline text-foreground">Your paper</h2>
                     {questions.length > 0 && (
                         <button
                             type="button"
                             onClick={onClear}
-                            className="text-xs font-semibold text-muted-foreground hover:text-destructive"
+                            className="text-xs font-semibold text-muted-foreground transition-colors hover:text-destructive"
                         >
                             Clear all
                         </button>
@@ -124,7 +124,7 @@ export default function PaperPanel({
                 {questions.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center px-4 py-10 text-center">
                         <Tag className="mb-3 h-8 w-8 text-muted-foreground" />
-                        <p className="text-sm font-semibold">No questions yet</p>
+                        <p className="title-2">No questions yet</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                             Add them from the bank, or auto-build to a mark target.
                         </p>
@@ -141,14 +141,14 @@ export default function PaperPanel({
                             return (
                                 <li key={`${question.id}-${index}`} className="surface p-2.5">
                                     <div className="flex items-start gap-2">
-                                        <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-secondary text-[11px] font-bold tabular-nums">
+                                        <span className="figure mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-secondary text-[11px] font-bold">
                                             {index + 1}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                             <div className="line-clamp-2">
                                                 <LatexRenderer content={question.text} className="text-xs leading-relaxed" />
                                             </div>
-                                            <p className="mt-1 text-[10px] text-muted-foreground">
+                                            <p className="figure mt-1 text-[10px] text-muted-foreground">
                                                 {marks} mk · {question.difficulty}
                                                 {question.topic ? ` · ${question.topic}` : ''}
                                             </p>
@@ -191,7 +191,7 @@ export default function PaperPanel({
 
             {/* Cover details */}
             <details className="border-t border-border">
-                <summary className="cursor-pointer px-4 py-3 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+                <summary className="overline cursor-pointer px-4 py-4 transition-colors hover:text-foreground">
                     Paper details
                 </summary>
                 <div className="space-y-3 px-4 pb-4">
@@ -399,8 +399,8 @@ export default function PaperPanel({
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
     return (
         <div className="rounded-lg bg-card px-2.5 py-2 text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="text-lg font-black tabular-nums leading-tight">{value}</p>
+            <p className="overline">{label}</p>
+            <p className="figure mt-1 text-lg font-bold leading-none">{value}</p>
         </div>
     );
 }

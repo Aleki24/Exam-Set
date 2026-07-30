@@ -5,10 +5,11 @@ import { Check, ChevronDown, Eye, Plus } from 'lucide-react';
 import LatexRenderer from '@/components/LatexRenderer';
 import type { DBQuestion } from '@/types';
 
+/* Difficulty reads as a colour first, a word second. */
 const DIFFICULTY_STYLES: Record<string, string> = {
     Easy: 'bg-success/12 text-success',
-    Medium: 'bg-accent/18 text-accent-foreground',
-    Difficult: 'bg-destructive/10 text-destructive',
+    Medium: 'bg-accent/15 text-accent',
+    Difficult: 'bg-ink-red/12 text-ink-red',
 };
 
 interface BankRowProps {
@@ -29,7 +30,7 @@ export default function BankRow({ question, added, onAdd, onRemove }: BankRowPro
     const marks = subPartMarks > 0 ? subPartMarks : question.marks;
 
     return (
-        <article className={`card-elevated p-3.5 ${added ? 'border-primary/50 bg-primary/[0.03]' : ''}`}>
+        <article className={`sheet p-3.5 ${added ? 'border-primary/50 bg-primary/[0.03]' : ''}`}>
             <div className="flex items-start gap-3">
                 <button
                     type="button"
@@ -58,7 +59,7 @@ export default function BankRow({ question, added, onAdd, onRemove }: BankRowPro
                         >
                             {question.difficulty}
                         </span>
-                        <span className="font-semibold tabular-nums text-foreground">{marks} mk</span>
+                        <span className="badge-marks">{marks} mk</span>
                         <span>{question.type}</span>
                         {question.topic && <span className="truncate">{question.topic}</span>}
                         {question.subParts && question.subParts.length > 0 && (
@@ -104,9 +105,7 @@ export default function BankRow({ question, added, onAdd, onRemove }: BankRowPro
 
                             {question.markingScheme && (
                                 <div className="rounded-lg bg-secondary p-3">
-                                    <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                        Marking scheme
-                                    </p>
+                                    <p className="overline mb-1.5">Marking scheme</p>
                                     <LatexRenderer content={question.markingScheme} className="text-xs" />
                                 </div>
                             )}

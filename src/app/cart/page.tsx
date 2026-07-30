@@ -132,7 +132,7 @@ export default function CartPage() {
                 <TopNav />
                 <div className="shell-width py-20 text-center">
                     <ShoppingCart className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
-                    <h1 className="text-xl font-bold">Your cart is empty</h1>
+                    <h1 className="title-1">Your cart is empty</h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                         Add papers from the shop, or build one yourself in the setter.
                     </p>
@@ -162,17 +162,20 @@ export default function CartPage() {
                     Keep shopping
                 </Link>
 
-                <h1 className="text-2xl font-bold tracking-tight">Your cart</h1>
+                <div className="mb-6">
+                    <p className="overline mb-2">Checkout</p>
+                    <h1 className="display-2">Your cart</h1>
+                </div>
 
-                <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_380px]">
+                <div className="mt-6 grid min-w-0 gap-8 lg:grid-cols-[1fr_380px]">
                     {/* Items */}
-                    <div className="space-y-3">
+                    <div className="min-w-0 space-y-3">
                         {items.map((item) => (
-                            <div key={item.exam_id} className="card-elevated flex items-center gap-4 p-4">
+                            <div key={item.exam_id} className="sheet flex items-center gap-4 p-4">
                                 <div className="min-w-0 flex-1">
                                     <Link
                                         href={`/papers/${item.exam_id}`}
-                                        className="block truncate text-[15px] font-bold hover:text-primary"
+                                        className="heading-ui block truncate hover:text-primary"
                                     >
                                         {item.title}
                                     </Link>
@@ -188,7 +191,7 @@ export default function CartPage() {
                                         </span>
                                     )}
                                 </div>
-                                <span className="shrink-0 text-sm font-bold tabular-nums">
+                                <span className="figure shrink-0 text-sm font-bold">
                                     {formatPrice(item.price_cents, item.currency)}
                                 </span>
                                 <button
@@ -203,7 +206,7 @@ export default function CartPage() {
                         ))}
 
                         {nextTier && (
-                            <p className="rounded-lg bg-accent/10 px-4 py-3 text-sm text-accent-foreground">
+                            <p className="rounded-lg border border-accent/25 bg-accent/[0.07] px-4 py-3 text-sm text-accent">
                                 Add {nextTier.minItems - paidCount} more paper
                                 {nextTier.minItems - paidCount === 1 ? '' : 's'} to save {nextTier.percentOff}% on this
                                 order.
@@ -214,30 +217,28 @@ export default function CartPage() {
                     {/* Summary + pay */}
                     <aside>
                         <div className="surface sticky top-24 p-5">
-                            <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                                Order summary
-                            </h2>
+                            <h2 className="overline">Order summary</h2>
 
                             <dl className="mt-4 space-y-2 text-sm">
                                 <div className="flex justify-between">
                                     <dt className="text-muted-foreground">
                                         Subtotal ({items.length} paper{items.length === 1 ? '' : 's'})
                                     </dt>
-                                    <dd className="font-semibold tabular-nums">
+                                    <dd className="figure font-semibold">
                                         {formatPrice(totals.subtotalCents, totals.currency)}
                                     </dd>
                                 </div>
                                 {totals.discountCents > 0 && (
                                     <div className="flex justify-between text-primary">
                                         <dt>Bundle discount ({totals.discountPercent}%)</dt>
-                                        <dd className="font-semibold tabular-nums">
+                                        <dd className="figure font-semibold">
                                             −{formatPrice(totals.discountCents, totals.currency)}
                                         </dd>
                                     </div>
                                 )}
                                 <div className="flex justify-between border-t border-border pt-3 text-base">
                                     <dt className="font-bold">Total</dt>
-                                    <dd className="font-black tabular-nums">
+                                    <dd className="figure text-base font-bold">
                                         {formatPrice(totals.totalCents, totals.currency)}
                                     </dd>
                                 </div>
@@ -346,9 +347,7 @@ function PaymentPending({
 
             {/* Manual fallback: always available, because STK can fail. */}
             <div className="rounded-lg border border-border p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                    Or pay manually
-                </h3>
+                <h3 className="overline">Or pay manually</h3>
                 <ol className="mt-2 space-y-1 text-xs text-muted-foreground">
                     {(paybill || till) && (
                         <li>

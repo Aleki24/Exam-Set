@@ -78,7 +78,7 @@ export default function BankFilters({
     return (
         <div className="space-y-5">
             {activeCount > 0 && (
-                <button type="button" onClick={onReset} className="btn-outline w-full">
+                <button type="button" onClick={onReset} className="btn-outline btn-sm w-full">
                     <X className="h-4 w-4" />
                     Clear {activeCount} filter{activeCount === 1 ? '' : 's'}
                 </button>
@@ -183,7 +183,7 @@ export default function BankFilters({
             {/* Topics */}
             <section>
                 <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-widest">Topics / strands</h3>
+                    <h3 className="overline text-foreground">Topics / strands</h3>
                     {filters.topics.length > 0 && (
                         <button
                             type="button"
@@ -223,7 +223,7 @@ export default function BankFilters({
                                         className="h-4 w-4 shrink-0 rounded border-input accent-[var(--primary)]"
                                     />
                                     <span className="min-w-0 flex-1 truncate">{topic}</span>
-                                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                                    <span className="figure shrink-0 text-[10px] text-muted-foreground">
                                         {count}
                                     </span>
                                 </label>

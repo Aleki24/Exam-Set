@@ -362,11 +362,11 @@ export default function SetterPage() {
                                           selected.length
                                       } in your paper`}
                             </p>
-                            <button type="button" onClick={() => setShowNewQuestion(true)} className="btn-ghost text-xs">
+                            <button type="button" onClick={() => setShowNewQuestion(true)} className="btn-ghost btn-sm">
                                 <Plus className="h-3.5 w-3.5" />
                                 New question
                             </button>
-                            <button type="button" onClick={() => setShowBulkImport(true)} className="btn-ghost text-xs">
+                            <button type="button" onClick={() => setShowBulkImport(true)} className="btn-ghost btn-sm">
                                 <FileUp className="h-3.5 w-3.5" />
                                 Bulk import
                             </button>
@@ -374,7 +374,7 @@ export default function SetterPage() {
                                 type="button"
                                 onClick={addAllVisible}
                                 disabled={filteredPool.length === 0}
-                                className="btn-outline text-xs"
+                                className="btn-outline btn-sm"
                             >
                                 <Layers className="h-3.5 w-3.5" />
                                 Add all shown
@@ -385,12 +385,12 @@ export default function SetterPage() {
                     <div className="flex-1 scroll-panel space-y-2 p-3">
                         {loadingPool ? (
                             Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="surface h-20 animate-pulse bg-secondary/60" />
+                                <div key={i} className="skeleton h-20" />
                             ))
                         ) : filteredPool.length === 0 ? (
                             <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
                                 <Sparkles className="mb-3 h-8 w-8 text-muted-foreground" />
-                                <p className="font-semibold">No questions match these filters</p>
+                                <p className="title-2">No questions match these filters</p>
                                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                                     Widen the filters, or add questions to the bank — you can type them in or paste a
                                     whole paper with bulk import.
@@ -466,12 +466,12 @@ export default function SetterPage() {
             {/* Mobile paper summary bar */}
             <div className="flex items-center gap-3 border-t border-border bg-card p-3 lg:hidden">
                 <div className="flex-1">
-                    <p className="text-xs font-semibold">
+                    <p className="figure text-xs font-semibold">
                         {stats.count} question{stats.count === 1 ? '' : 's'} · {stats.marks} marks
                     </p>
-                    <p className="text-[11px] text-muted-foreground">≈ {stats.estimatedMinutes} minutes</p>
+                    <p className="figure text-[10px] text-muted-foreground">≈ {stats.estimatedMinutes} min</p>
                 </div>
-                <button type="button" onClick={() => setShowAutoBuild(true)} className="btn-outline text-xs">
+                <button type="button" onClick={() => setShowAutoBuild(true)} className="btn-outline btn-sm">
                     <Sparkles className="h-3.5 w-3.5" />
                     Auto-build
                 </button>
@@ -482,7 +482,7 @@ export default function SetterPage() {
                         setShowPreview(true);
                     }}
                     disabled={selected.length === 0}
-                    className="btn-primary text-xs"
+                    className="btn-primary btn-sm"
                 >
                     Review paper
                 </button>
@@ -495,11 +495,11 @@ export default function SetterPage() {
                     <div className="absolute inset-0 bg-foreground/40" onClick={() => setShowFiltersMobile(false)} />
                     <div className="absolute inset-y-0 left-0 flex w-[85%] max-w-sm flex-col bg-card">
                         <div className="flex items-center justify-between border-b border-border p-4">
-                            <h2 className="font-bold">Filter the bank</h2>
+                            <h2 className="title-2">Filter the bank</h2>
                             <button
                                 type="button"
                                 onClick={() => setShowFiltersMobile(false)}
-                                className="grid h-9 w-9 place-items-center rounded-lg hover:bg-secondary"
+                                className="btn-icon"
                                 aria-label="Close"
                             >
                                 <X className="h-5 w-5" />
@@ -570,7 +570,7 @@ export default function SetterPage() {
                             <button
                                 type="button"
                                 onClick={() => setShowPreview(false)}
-                                className="grid h-9 w-9 place-items-center rounded-lg hover:bg-secondary"
+                                className="btn-icon"
                                 aria-label="Close preview"
                             >
                                 <X className="h-5 w-5" />
@@ -678,7 +678,7 @@ function PublishModal({
                 aria-labelledby="publish-title"
                 className="relative w-full max-w-md rounded-t-2xl bg-card p-5 shadow-2xl sm:rounded-2xl"
             >
-                <h2 id="publish-title" className="text-lg font-bold">
+                <h2 id="publish-title" className="title-1">
                     Publish &amp; sell
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">

@@ -44,14 +44,14 @@ export default function AutoBuildModal({ open, poolSize, topics, onClose, onBuil
                 className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-card shadow-2xl sm:rounded-2xl"
             >
                 <div className="flex items-center justify-between border-b border-border p-4">
-                    <h2 id="autobuild-title" className="flex items-center gap-2 font-bold">
+                    <h2 id="autobuild-title" className="title-2 flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-primary" />
                         Auto-build the paper
                     </h2>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="grid h-8 w-8 place-items-center rounded-lg hover:bg-secondary"
+                        className="btn-icon h-9 w-9"
                         aria-label="Close"
                     >
                         <X className="h-4 w-4" />
@@ -104,7 +104,7 @@ export default function AutoBuildModal({ open, poolSize, topics, onClose, onBuil
                                 <div key={level}>
                                     <div className="mb-1 flex justify-between text-xs">
                                         <span className="font-semibold">{level}</span>
-                                        <span className="tabular-nums text-muted-foreground">
+                                        <span className="figure text-muted-foreground">
                                             {blueprint.difficultyMix[level]}%
                                         </span>
                                     </div>

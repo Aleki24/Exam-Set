@@ -12,8 +12,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CartItem, PaperListing } from '@/types/shop';
 import { bundleDiscount, sumCents } from '@/lib/catalog';
 
-const STORAGE_KEY = 'maarifa.cart.v1';
-const CHANGED_EVENT = 'maarifa:cart-changed';
+const STORAGE_KEY = 'skulbase.cart.v1';
+const CHANGED_EVENT = 'skulbase:cart-changed';
 
 function read(): CartItem[] {
     if (typeof window === 'undefined') return [];

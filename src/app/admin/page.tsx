@@ -211,8 +211,9 @@ export default function AdminPage() {
             <div className="shell-width py-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Shop admin</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="overline mb-2">Skulbase Exams</p>
+                        <h1 className="display-2">Shop admin</h1>
+                        <p className="meta mt-2">
                             Signed in as {role ? ROLE_LABELS[role] : 'user'}
                             {isOwner ? ' — you can appoint admins' : ''}
                         </p>
@@ -263,7 +264,7 @@ export default function AdminPage() {
                             key={t.id}
                             type="button"
                             onClick={() => setTab(t.id)}
-                            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+                            className={`-mb-px min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors ${
                                 tab === t.id
                                     ? 'border-primary text-foreground'
                                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -271,7 +272,7 @@ export default function AdminPage() {
                         >
                             {t.label}
                             {typeof t.count === 'number' && (
-                                <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{t.count}</span>
+                                <span className="figure ml-1.5 text-[11px] text-muted-foreground">{t.count}</span>
                             )}
                         </button>
                     ))}
@@ -279,7 +280,7 @@ export default function AdminPage() {
 
                 <div className="mt-6">
                     {loading ? (
-                        <div className="surface h-40 animate-pulse bg-secondary/60" />
+                        <div className="skeleton h-40" />
                     ) : tab === 'payments' ? (
                         <PaymentsQueue orders={orders} busyId={busyId} onSettle={settleOrder} />
                     ) : tab === 'catalog' ? (
@@ -316,7 +317,7 @@ function PaymentsQueue({
         return (
             <div className="surface px-6 py-14 text-center">
                 <BadgeCheck className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
-                <h2 className="font-bold">Nothing waiting</h2>
+                <h2 className="title-2">Nothing waiting</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
                     Orders paid by M-Pesa express confirm themselves. Ones paid to the paybill land here for you to
                     verify.
@@ -330,7 +331,7 @@ function PaymentsQueue({
             {orders.map((order) => (
                 <div key={order.id} className="flex flex-wrap items-center gap-4 p-4">
                     <div className="min-w-0 flex-1">
-                        <p className="font-mono text-sm font-bold">{order.reference}</p>
+                        <p className="figure text-sm font-bold">{order.reference}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                             {order.items?.length ?? 0} paper{(order.items?.length ?? 0) === 1 ? '' : 's'} ·{' '}
                             {order.phone || 'no phone given'} ·{' '}
@@ -349,11 +350,11 @@ function PaymentsQueue({
                     </div>
 
                     <div className="text-right">
-                        <p className="text-sm font-bold tabular-nums">
+                        <p className="figure text-sm font-bold">
                             {formatPrice(order.total_cents, order.currency)}
                         </p>
                         {order.provider_ref && (
-                            <p className="font-mono text-xs text-muted-foreground">{order.provider_ref}</p>
+                            <p className="figure text-[11px] text-muted-foreground">{order.provider_ref}</p>
                         )}
                     </div>
 
@@ -362,7 +363,7 @@ function PaymentsQueue({
                             type="button"
                             onClick={() => onSettle(order, 'confirm')}
                             disabled={busyId === order.id}
-                            className="btn-primary text-xs"
+                            className="btn-primary btn-sm"
                         >
                             {busyId === order.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -375,7 +376,7 @@ function PaymentsQueue({
                             type="button"
                             onClick={() => onSettle(order, 'reject')}
                             disabled={busyId === order.id}
-                            className="btn-outline text-xs"
+                            className="btn-outline btn-sm"
                         >
                             <Ban className="h-3.5 w-3.5" />
                             Reject
@@ -408,7 +409,7 @@ function CatalogTable({
         return (
             <div className="surface px-6 py-14 text-center">
                 <FileUp className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
-                <h2 className="font-bold">No papers listed yet</h2>
+                <h2 className="title-2">No papers listed yet</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
                     Upload a PDF, or build one in the setter and publish it.
                 </p>
@@ -427,7 +428,7 @@ function CatalogTable({
                     <div className="min-w-0 flex-1">
                         <Link
                             href={`/papers/${paper.slug || paper.id}`}
-                            className="block truncate text-sm font-bold hover:text-primary"
+                            className="heading-ui block truncate hover:text-primary"
                         >
                             {paper.title}
                         </Link>
@@ -444,7 +445,7 @@ function CatalogTable({
                         </p>
                     </div>
 
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <span className="figure text-[11px] text-muted-foreground">
                         {paper.purchase_count} sold · {paper.download_count} downloads
                     </span>
 
@@ -454,7 +455,7 @@ function CatalogTable({
                         type="button"
                         onClick={() => onTogglePublished(paper)}
                         disabled={busyId === paper.id}
-                        className={paper.is_published ? 'btn-outline text-xs' : 'btn-primary text-xs'}
+                        className={paper.is_published ? 'btn-outline btn-sm' : 'btn-primary btn-sm'}
                     >
                         {paper.is_published ? (
                             <>
@@ -473,7 +474,7 @@ function CatalogTable({
                         type="button"
                         onClick={() => onDelete(paper)}
                         disabled={busyId === paper.id}
-                        className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        className="btn-icon hover:bg-destructive/10 hover:text-destructive"
                         aria-label={`Delete ${paper.title}`}
                     >
                         <Trash2 className="h-4 w-4" />
@@ -558,9 +559,7 @@ function TeamPanel({
         <div className="space-y-6">
             {isOwner && (
                 <div className="surface p-5">
-                    <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                        Appoint an admin
-                    </h2>
+                    <h2 className="overline">Appoint an admin</h2>
                     <p className="mt-1.5 text-sm text-muted-foreground">
                         Admins upload papers, set prices, publish and confirm payments. They need an account here
                         already.
@@ -603,7 +602,7 @@ function TeamPanel({
                                 type="button"
                                 onClick={() => setRole(member.email, 'user')}
                                 disabled={busy}
-                                className="btn-outline text-xs"
+                                className="btn-outline btn-sm"
                             >
                                 Remove access
                             </button>
@@ -622,8 +621,8 @@ function TeamPanel({
 function Metric({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
     return (
         <div className={`surface p-4 ${accent ? 'border-accent/40 bg-accent/5' : ''}`}>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="mt-1 text-xl font-black tabular-nums">{value}</p>
+            <p className="overline">{label}</p>
+            <p className="figure mt-1.5 text-xl font-bold">{value}</p>
         </div>
     );
 }
@@ -634,7 +633,7 @@ function Gate({ title, body }: { title: string; body: string }) {
             <TopNav />
             <div className="shell-width py-20 text-center">
                 <Lock className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
-                <h1 className="text-xl font-bold">{title}</h1>
+                <h1 className="title-1">{title}</h1>
                 <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{body}</p>
                 <div className="mt-6 flex justify-center gap-2">
                     <Link href="/" className="btn-primary">

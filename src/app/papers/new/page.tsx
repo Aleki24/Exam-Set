@@ -101,7 +101,7 @@ export default function UploadPaperPage() {
                 <TopNav />
                 <div className="shell-width py-20 text-center">
                     <Lock className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
-                    <h1 className="text-xl font-bold">Selling is for admins</h1>
+                    <h1 className="title-1">Selling is for admins</h1>
                     <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                         Only the shop owner and the admins they appoint can list papers for sale. You can still set
                         your own exams and save them to your library.
@@ -134,8 +134,9 @@ export default function UploadPaperPage() {
                     Admin
                 </Link>
 
-                <h1 className="text-2xl font-bold tracking-tight">Upload a paper for sale</h1>
-                <p className="mt-1.5 text-sm text-muted-foreground">
+                <p className="overline mb-2">Admin</p>
+                <h1 className="display-2">Upload a paper for sale</h1>
+                <p className="lead mt-3 text-sm sm:text-base">
                     The PDF is stored privately. Buyers only ever get a short-lived signed link, and only after they
                     have paid.
                 </p>
@@ -143,7 +144,9 @@ export default function UploadPaperPage() {
                 <form onSubmit={submit} className="mt-8 space-y-8">
                     {/* Files */}
                     <section className="surface p-5">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Files</h2>
+                        <div className="rule-heading">
+                            <h2 className="overline">Files</h2>
+                        </div>
 
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
                             <FilePicker
@@ -167,9 +170,9 @@ export default function UploadPaperPage() {
 
                     {/* What it is */}
                     <section className="surface p-5">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                            What is this paper?
-                        </h2>
+                        <div className="rule-heading">
+                            <h2 className="overline">What is this paper?</h2>
+                        </div>
 
                         <div className="mt-4 space-y-4">
                             <div>
@@ -367,7 +370,9 @@ export default function UploadPaperPage() {
 
                     {/* Price */}
                     <section className="surface p-5">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Price</h2>
+                        <div className="rule-heading">
+                            <h2 className="overline">Price</h2>
+                        </div>
 
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
                             <div>
@@ -450,7 +455,7 @@ function FilePicker({
                 <div className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5">
                     <FileUp className="h-4 w-4 shrink-0 text-primary" />
                     <span className="min-w-0 flex-1 truncate text-sm">{file.name}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    <span className="figure shrink-0 text-[11px] text-muted-foreground">
                         {(file.size / 1024 / 1024).toFixed(1)} MB
                     </span>
                     <button
@@ -469,7 +474,7 @@ function FilePicker({
                 <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 text-sm font-semibold text-muted-foreground transition-all duration-150 hover:border-primary hover:bg-primary/[0.03] hover:text-foreground"
                 >
                     <FileUp className="h-4 w-4" />
                     Choose PDF{required ? '' : ' (optional)'}

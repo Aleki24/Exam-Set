@@ -71,7 +71,8 @@ export default function LibraryPage() {
             <TopNav />
 
             <div className="shell-width py-6">
-                <h1 className="text-2xl font-bold tracking-tight">My library</h1>
+                <p className="overline mb-2">Your account</p>
+                <h1 className="display-2">My library</h1>
 
                 <div className="mt-5 flex gap-1 border-b border-border">
                     {tabs.map((t) => (
@@ -86,7 +87,7 @@ export default function LibraryPage() {
                             }`}
                         >
                             {t.label}
-                            <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{t.count}</span>
+                            <span className="figure ml-1.5 text-[11px] text-muted-foreground">{t.count}</span>
                         </button>
                     ))}
                 </div>
@@ -94,7 +95,7 @@ export default function LibraryPage() {
                 {loading ? (
                     <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {Array.from({ length: 3 }).map((_, i) => (
-                            <div key={i} className="surface h-36 animate-pulse bg-secondary/60" />
+                            <div key={i} className="skeleton h-36" />
                         ))}
                     </div>
                 ) : (
@@ -136,7 +137,7 @@ export default function LibraryPage() {
                                         <div key={order.id} className="flex items-center gap-4 p-4">
                                             <Receipt className="h-4 w-4 shrink-0 text-muted-foreground" />
                                             <div className="min-w-0 flex-1">
-                                                <p className="font-mono text-sm font-semibold">{order.reference}</p>
+                                                <p className="figure text-sm font-semibold">{order.reference}</p>
                                                 <p className="text-xs text-muted-foreground">
                                                     {new Date(order.created_at).toLocaleDateString('en-KE', {
                                                         day: 'numeric',
@@ -145,7 +146,7 @@ export default function LibraryPage() {
                                                     })}
                                                 </p>
                                             </div>
-                                            <span className="text-sm font-bold tabular-nums">
+                                            <span className="figure text-sm font-bold">
                                                 {formatPrice(order.total_cents, order.currency)}
                                             </span>
                                             <span
@@ -154,7 +155,7 @@ export default function LibraryPage() {
                                                         ? 'bg-success/15 text-success'
                                                         : order.status === 'failed' || order.status === 'cancelled'
                                                           ? 'bg-destructive/10 text-destructive'
-                                                          : 'bg-accent/15 text-accent-foreground'
+                                                          : 'bg-accent/15 text-accent'
                                                 }`}
                                             >
                                                 {STATUS_LABELS[order.status] ?? order.status}
@@ -194,7 +195,7 @@ function OwnedCard({
     };
 
     return (
-        <article className="card-elevated flex flex-col p-4">
+        <article className="sheet flex flex-col p-4">
             <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="badge-soft">{examTypeName(paper.exam_type)}</span>
                 {isOwnSet && !paper.is_published && (
@@ -203,7 +204,7 @@ function OwnedCard({
                     </span>
                 )}
             </div>
-            <h3 className="text-[15px] font-bold leading-snug">{paper.title}</h3>
+            <h3 className="title-2">{paper.title}</h3>
             <p className="mt-1 text-xs text-muted-foreground">
                 {[paper.subject, paper.grade_label, paper.year].filter(Boolean).join(' · ')}
                 {paper.total_marks ? ` · ${paper.total_marks} marks` : ''}
@@ -244,7 +245,7 @@ function Empty({
     return (
         <div className="surface flex flex-col items-center px-6 py-16 text-center">
             <FileText className="mb-4 h-10 w-10 text-muted-foreground" />
-            <h2 className="text-lg font-bold">{title}</h2>
+            <h2 className="title-1">{title}</h2>
             <p className="mt-1.5 max-w-md text-sm text-muted-foreground">{body}</p>
             <Link href={action.href} className="btn-primary mt-6">
                 {action.label}

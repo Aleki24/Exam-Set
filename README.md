@@ -1,6 +1,6 @@
-# Maarifa Exams
+# Skulbase Exams
 
-A CBE exam-paper shop for Kenyan schools. The site does two things and nothing else:
+The exam-paper arm of [Skulbase](https://github.com/Aleki24/Report-Card). A CBE exam-paper shop for Kenyan schools. The site does two things and nothing else:
 
 1. **Sell exam papers** — `/` is the shop. Papers are organised the way a teacher
    shops: level first (Pre-Primary through Grade 12, plus legacy Form 1–4), then
@@ -12,6 +12,31 @@ A CBE exam-paper shop for Kenyan schools. The site does two things and nothing e
 
 There is deliberately no marketing landing page: the first thing anyone sees is
 the papers they can buy.
+
+## Design
+
+The look is inherited from Skulbase so the two products read as one family: the
+same **Syne / Inter / JetBrains Mono** type stack, the same blue primary and
+green counterpart, the same two-tone `Skulbase` wordmark, and the same cool
+neutral surfaces and `--radius`.
+
+What is specific to the exam shop sits on top of that:
+
+- **Sheets, not cards.** Papers render as white pages on the cool ground, with a
+  hairline red margin rule that inks in on hover — a nod to a real exam script.
+- **Mono overlines.** Every section label, kicker and figure is set in the mono
+  face, which keeps dense metadata legible and gives the catalog an editorial
+  voice.
+- **Marks in examiner's red.** `--ink-red` is reserved for mark totals, errors
+  and margin notes, so a mark count never reads as a price.
+- **Amber for commerce only.** Prices, add-to-cart, pay and publish. Nothing
+  else uses it, so the money path is always obvious.
+
+All of it lives in `src/app/globals.css` as a token layer plus a small set of
+component utilities (`.sheet`, `.chip`, `.btn-*`, `.field`, `.overline`,
+`.figure`, `.rise-in`). Those utilities are wrapped in `:where()` so any Tailwind
+class always wins over them, and entry animations are disabled under
+`prefers-reduced-motion`.
 
 ## Who can do what
 
