@@ -98,6 +98,12 @@ the shop are:
   order items and entitlements
 - `013_roles_and_sellers.sql` — the owner/admin/user roles and who may sell
 
+**Deploying to an existing database?** `supabase/production-setup.sql` is those
+two concatenated in order, ready to paste into the Supabase SQL editor in one go.
+It is safe to re-run. Two things it does that you should know about: every exam
+currently marked `is_public` becomes a published free catalog paper (reprice them
+from `/admin` → Catalog), and the first account to sign up becomes the owner.
+
 ### Payments
 
 M-Pesa runs in one of two modes, decided by whether the Daraja credentials are
