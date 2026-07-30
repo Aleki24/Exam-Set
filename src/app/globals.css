@@ -3,10 +3,11 @@
 @layer base {
 
     /* ========================================================================
-       DESIGN TOKENS
-       A quiet, paper-first palette: warm off-white surfaces, ink text and a
-       deep emerald primary. Prices and buy actions use the amber accent so
-       commerce reads at a glance without shouting.
+       DESIGN TOKENS — inherited from Skulbase
+       Cool near-white ground, Skulbase blue as the action colour, Skulbase green
+       as its counterpart. Two colours are rationed on purpose: amber marks the
+       money path only, and the examiner's red marks only marks. Structure comes
+       from hairlines and whitespace rather than shadows.
        ======================================================================== */
 
     :root {
@@ -76,9 +77,9 @@
 
         --radius: 0.625rem;
 
-        --shadow-2xs: 0px 1px 2px 0px oklch(0.208 0.042 265.755 / 0.05);
-        --shadow-xs: 0px 2px 4px -1px oklch(0.208 0.042 265.755 / 0.06);
-        --shadow-sm: 0px 4px 12px -2px oklch(0.208 0.042 265.755 / 0.08);
+        --shadow-2xs: 0px 1px 2px 0px oklch(0.208 0.042 265.755 / 0.035);
+        --shadow-xs: 0px 2px 4px -1px oklch(0.208 0.042 265.755 / 0.045);
+        --shadow-sm: 0px 4px 14px -4px oklch(0.208 0.042 265.755 / 0.07);
         --shadow: 0px 8px 24px -4px oklch(0.208 0.042 265.755 / 0.10);
         --shadow-md: 0px 12px 32px -6px oklch(0.208 0.042 265.755 / 0.12);
         --shadow-lg: 0px 18px 48px -10px oklch(0.208 0.042 265.755 / 0.14);
@@ -355,9 +356,8 @@
     }
 
     :where(.sheet):hover {
-        box-shadow: var(--shadow-sm);
-        border-color: color-mix(in oklab, var(--primary) 32%, var(--border));
-        transform: translateY(-2px);
+        box-shadow: var(--shadow-xs);
+        border-color: color-mix(in oklab, var(--primary) 26%, var(--border));
     }
 
     :where(.sheet):hover::before {
@@ -583,6 +583,46 @@
         background: linear-gradient(to right, var(--border), transparent);
     }
 
+    /* A filter group that folds away. The marker is ours, not the browser's. */
+    :where(.disclosure) {
+        @apply border-b border-border pb-3;
+    }
+
+    :where(.disclosure) > summary {
+        @apply flex cursor-pointer list-none items-center justify-between gap-2 py-2 text-sm font-semibold transition-colors;
+    }
+
+    :where(.disclosure) > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    :where(.disclosure) > summary:hover {
+        @apply text-primary;
+    }
+
+    :where(.disclosure) > summary::after {
+        content: '';
+        @apply h-1.5 w-1.5 shrink-0 rotate-45 border-b border-r border-current opacity-50 transition-transform duration-200;
+        margin-bottom: 2px;
+    }
+
+    :where(.disclosure[open]) > summary::after {
+        @apply rotate-[-135deg];
+        margin-bottom: 0;
+    }
+
+    /* An applied filter, shown above the results so it can be removed without
+       hunting through the rail for it. */
+    :where(.chip-applied) {
+        @apply inline-flex min-h-8 items-center gap-1.5 rounded-full border border-transparent px-3 text-xs font-medium transition-colors;
+        background: color-mix(in oklab, var(--primary) 9%, transparent);
+        color: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+    }
+
+    :where(.chip-applied):hover {
+        background: color-mix(in oklab, var(--primary) 15%, transparent);
+    }
+
     :where(.scroll-panel) {
         @apply overflow-y-auto overscroll-contain;
         scrollbar-width: thin;
@@ -652,6 +692,24 @@
     :where(.rise-in) {
         animation: rise-in 420ms cubic-bezier(0.21, 0.6, 0.35, 1) both;
         animation-delay: calc(var(--i, 0) * 45ms);
+    }
+
+    /* Grids use this instead: content appears, nothing slides around. */
+    :where(.settle-in) {
+        animation: settle-in 320ms ease-out both;
+        animation-delay: calc(var(--i, 0) * 30ms);
+    }
+
+    @keyframes settle-in {
+        from {
+            opacity: 0;
+            transform: translateY(4px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
     }
 
     :where(.fade-in) {

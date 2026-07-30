@@ -57,7 +57,7 @@ export default function TopNav() {
     };
 
     return (
-        <header className="sticky top-0 z-50 border-b bar-blur">
+        <header className="sticky top-0 z-50 border-b border-border/60 bar-blur">
             <div className="shell-width flex h-16 items-center gap-3">
                 {/* Brand */}
                 <Link

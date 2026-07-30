@@ -164,9 +164,10 @@ export default function ShopPage() {
         <div className="min-h-screen bg-background">
             <TopNav />
 
-            {/* Search + sort bar */}
+            {/* Search + sort. Shares the nav's sticky region so the page has a
+                single edge rather than two stacked bars. */}
             <div className="sticky top-16 z-40 border-b bar-blur">
-                <div className="shell-width flex items-center gap-2 py-3">
+                <div className="shell-width flex items-center gap-2 py-2.5">
                     <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
@@ -209,7 +210,7 @@ export default function ShopPage() {
                 </div>
             </div>
 
-            <div className="shell-width grid min-w-0 gap-8 py-6 lg:grid-cols-[260px_1fr]">
+            <div className="shell-width grid min-w-0 gap-8 py-6 lg:grid-cols-[212px_1fr]">
                 {/* Desktop rail */}
                 <aside className="hidden lg:block">
                     <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] scroll-panel pr-2">
@@ -218,7 +219,6 @@ export default function ShopPage() {
                             facets={response?.facets}
                             subjects={subjects}
                             onChange={patchFilters}
-                            onReset={resetFilters}
                         />
                     </div>
                 </aside>
@@ -235,9 +235,16 @@ export default function ShopPage() {
                         />
                     </div>
 
-                    <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
+                    <AppliedFilters
+                        filters={filters}
+                        onChange={patchFilters}
+                        onClearSearch={() => setSearchDraft('')}
+                        onReset={resetFilters}
+                    />
+
+                    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
                         <div className="min-w-0">
-                            <p className="overline mb-2">
+                            <p className="overline mb-2.5">
                                 {loading
                                     ? 'Loading'
                                     : `${response?.total ?? 0} paper${(response?.total ?? 0) === 1 ? '' : 's'}`}
@@ -245,9 +252,11 @@ export default function ShopPage() {
                             <h1 className="display-2">
                                 {activeSummary.length > 0 ? activeSummary.join(' · ') : 'Every exam paper'}
                             </h1>
-                            <p className="lead mt-2 max-w-xl text-sm sm:text-base">
-                                Question papers and marking schemes for CBE and 8-4-4, ready to print.
-                            </p>
+                            {activeSummary.length === 0 && !filters.search && (
+                                <p className="lead mt-3 max-w-md text-sm sm:text-[15px]">
+                                    Question papers and marking schemes, ready to print.
+                                </p>
+                            )}
                         </div>
 
                         <Link href="/set" className="btn-outline shrink-0">
@@ -257,7 +266,7 @@ export default function ShopPage() {
                     </header>
 
                     {loading ? (
-                        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, i) => (
                                 <PaperCardSkeleton key={i} index={i} />
                             ))}
@@ -269,7 +278,7 @@ export default function ShopPage() {
                         />
                     ) : (
                         <>
-                            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                                 {papers.map((paper, i) => (
                                     <PaperCard
                                         key={paper.id}
@@ -331,7 +340,6 @@ export default function ShopPage() {
                                 facets={response?.facets}
                                 subjects={subjects}
                                 onChange={patchFilters}
-                                onReset={resetFilters}
                             />
                         </div>
                         <div className="border-t border-border p-4">
@@ -345,6 +353,70 @@ export default function ShopPage() {
                         </div>
                     </div>
                 </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Applied filters, restated above the results.
+ *
+ * The rail folds groups away, so this is the honest record of what is narrowing
+ * the list — and the one place to undo any of it.
+ */
+function AppliedFilters({
+    filters,
+    onChange,
+    onClearSearch,
+    onReset,
+}: {
+    filters: PaperFilters;
+    onChange: (patch: Partial<PaperFilters>) => void;
+    onClearSearch: () => void;
+    onReset: () => void;
+}) {
+    const applied: { label: string; clear: Partial<PaperFilters>; isSearch?: boolean }[] = [];
+
+    if (filters.level) {
+        const level = LEVELS.find((l) => l.slug === filters.level);
+        applied.push({ label: level?.name ?? filters.level, clear: { level: undefined, grade: undefined } });
+    }
+    if (filters.grade) applied.push({ label: filters.grade, clear: { grade: undefined } });
+    if (filters.exam_type) applied.push({ label: examTypeName(filters.exam_type), clear: { exam_type: undefined } });
+    if (filters.subject) applied.push({ label: filters.subject, clear: { subject: undefined } });
+    if (filters.term) applied.push({ label: filters.term, clear: { term: undefined } });
+    if (filters.year) applied.push({ label: String(filters.year), clear: { year: undefined } });
+    if (filters.price) {
+        applied.push({ label: filters.price === 'free' ? 'Free' : 'Premium', clear: { price: undefined } });
+    }
+    if (filters.search) {
+        applied.push({ label: `“${filters.search}”`, clear: { search: undefined }, isSearch: true });
+    }
+
+    if (applied.length === 0) return null;
+
+    return (
+        <div className="mb-6 flex flex-wrap items-center gap-1.5">
+            {applied.map((item) => (
+                <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => (item.isSearch ? onClearSearch() : onChange(item.clear))}
+                    className="chip-applied"
+                    aria-label={`Remove filter ${item.label}`}
+                >
+                    {item.label}
+                    <X className="h-3 w-3 opacity-60" aria-hidden />
+                </button>
+            ))}
+            {applied.length > 1 && (
+                <button
+                    type="button"
+                    onClick={onReset}
+                    className="ml-1 text-xs font-semibold text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                >
+                    Clear all
+                </button>
             )}
         </div>
     );

@@ -19,52 +19,63 @@ interface LevelStripProps {
 export default function LevelStrip({ active, counts, onSelect }: LevelStripProps) {
     return (
         <section aria-labelledby="level-strip-heading" className="min-w-0">
-            <div className="rule-heading mb-3">
-                <h2 id="level-strip-heading" className="overline">
-                    Browse by level
-                </h2>
-            </div>
+            <h2 id="level-strip-heading" className="overline mb-3">
+                Browse by level
+            </h2>
 
             <div className="rail-x -mx-1 px-1">
-                <button
-                    type="button"
+                <LevelTile
+                    label="All levels"
+                    hint="CBE & 8-4-4"
+                    active={!active}
                     onClick={() => onSelect(undefined)}
-                    aria-pressed={!active}
-                    className={`sheet shrink-0 px-4 py-3 text-left transition-all ${
-                        !active ? 'border-primary/45 bg-primary/[0.04]' : ''
-                    }`}
-                >
-                    <span className="overline block">All</span>
-                    <span className="heading-ui mt-1 block whitespace-nowrap">Everything</span>
-                </button>
+                />
 
-                {LEVELS.map((level, i) => {
-                    const isActive = active === level.slug;
-                    const count = counts?.[level.slug];
-
-                    return (
-                        <button
-                            key={level.slug}
-                            type="button"
-                            onClick={() => onSelect(isActive ? undefined : level.slug)}
-                            aria-pressed={isActive}
-                            className={`sheet rise-in shrink-0 px-4 py-3 text-left transition-all ${
-                                isActive ? 'border-primary/45 bg-primary/[0.04]' : ''
-                            }`}
-                            style={{ '--i': i + 1 } as React.CSSProperties}
-                        >
-                            <span className="overline block">
-                                {level.curriculum === 'CBE' ? 'CBE' : '8-4-4'}
-                            </span>
-                            <span className="heading-ui mt-1 block whitespace-nowrap">{level.name}</span>
-                            <span className="figure mt-1 block text-[11px] text-muted-foreground">
-                                {level.short}
-                                {typeof count === 'number' && count > 0 ? ` · ${count}` : ''}
-                            </span>
-                        </button>
-                    );
-                })}
+                {LEVELS.map((level) => (
+                    <LevelTile
+                        key={level.slug}
+                        label={level.name}
+                        hint={level.short}
+                        count={counts?.[level.slug]}
+                        active={active === level.slug}
+                        onClick={() => onSelect(active === level.slug ? undefined : level.slug)}
+                    />
+                ))}
             </div>
         </section>
+    );
+}
+
+/** One level. Label on top, band underneath, count only when there is stock. */
+function LevelTile({
+    label,
+    hint,
+    count,
+    active,
+    onClick,
+}: {
+    label: string;
+    hint: string;
+    count?: number;
+    active: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={`shrink-0 rounded-[var(--radius)] border px-4 py-3 text-left transition-colors duration-150 ${
+                active
+                    ? 'border-primary bg-primary/[0.06] text-foreground'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+            }`}
+        >
+            <span className="heading-ui block whitespace-nowrap">{label}</span>
+            <span className="figure mt-1 block text-[10px] opacity-70">
+                {hint}
+                {typeof count === 'number' && count > 0 ? ` · ${count}` : ''}
+            </span>
+        </button>
     );
 }

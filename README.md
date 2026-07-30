@@ -20,10 +20,26 @@ same **Syne / Inter / JetBrains Mono** type stack, the same blue primary and
 green counterpart, the same two-tone `Skulbase` wordmark, and the same cool
 neutral surfaces and `--radius`.
 
+The register is **quiet**: structure comes from whitespace and hairlines, not
+from shadows or colour. Concretely:
+
+- **One coloured element per card.** The action. The price is ink, the metadata is
+  muted, the title carries the weight.
+- **Colour is rationed.** Blue is the action colour, amber marks only the money
+  moment (the price on a paper's page, Buy now, Pay, Publish), examiner's red
+  marks only marks. Nothing else gets a colour.
+- **Progressive disclosure.** The filter rail folds every group away and reports
+  what is selected inside when closed. Grade only appears once a level is chosen.
+  Applied filters are restated as removable chips above the results, so nothing
+  is ever hidden without a trace.
+- **Movement is minimal.** Grids settle in; nothing slides or lifts on hover
+  except by a hairline of border colour.
+
 What is specific to the exam shop sits on top of that:
 
 - **Sheets, not cards.** Papers render as white pages on the cool ground, with a
   hairline red margin rule that inks in on hover — a nod to a real exam script.
+  The whole sheet is the link, so the only button on it is the commerce action.
 - **Mono overlines.** Every section label, kicker and figure is set in the mono
   face, which keeps dense metadata legible and gives the catalog an editorial
   voice.

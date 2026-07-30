@@ -4,18 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import {
-    ArrowLeft,
-    Check,
-    ClipboardCheck,
-    Clock,
-    Download,
-    FileText,
-    Loader2,
-    Plus,
-    ShieldCheck,
-    Users,
-} from 'lucide-react';
+import { ArrowLeft, Check, ClipboardCheck, Download, Loader2, Plus, ShieldCheck } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import PaperCard from '@/components/shop/PaperCard';
 import { useCart } from '@/lib/cart';
@@ -153,35 +142,33 @@ export default function PaperDetailPage() {
 
                         {paper.description && <p className="lead mt-6 max-w-2xl">{paper.description}</p>}
 
-                        {/* Facts grid */}
-                        <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                            <Fact icon={FileText} label="Total marks" value={paper.total_marks || '—'} />
-                            <Fact icon={FileText} label="Questions" value={paper.question_count || '—'} />
-                            <Fact icon={Clock} label="Duration" value={paper.time_limit || '—'} />
-                            <Fact icon={Users} label="Bought" value={paper.purchase_count} />
+                        {/* Facts. A quiet row, not four boxes. */}
+                        <dl className="mt-10 flex flex-wrap gap-x-10 gap-y-5 border-y border-border py-5">
+                            <Fact label="Total marks" value={paper.total_marks || '—'} />
+                            <Fact label="Questions" value={paper.question_count || '—'} />
+                            <Fact label="Duration" value={paper.time_limit || '—'} />
+                            <Fact label="Bought" value={paper.purchase_count} />
                         </dl>
 
                         {/* What's included */}
-                        <div className="surface mt-8 p-5">
-                            <div className="rule-heading">
-                                <h2 className="overline">What you get</h2>
-                            </div>
-                            <ul className="mt-3 space-y-2.5 text-sm">
-                                <li className="flex items-start gap-2.5">
-                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <div className="mt-10">
+                            <h2 className="overline mb-4">What you get</h2>
+                            <ul className="space-y-3 text-sm">
+                                <li className="flex items-start gap-3">
+                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                                     <span>
                                         The full question paper as a print-ready PDF
                                         {paper.institution ? ` (${paper.institution} format)` : ''}
                                     </span>
                                 </li>
                                 {paper.has_marking_scheme && (
-                                    <li className="flex items-start gap-2.5">
-                                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                    <li className="flex items-start gap-3">
+                                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                                         <span>The marking scheme with answers and mark allocation</span>
                                     </li>
                                 )}
-                                <li className="flex items-start gap-2.5">
-                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                <li className="flex items-start gap-3">
+                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                                     <span>Unlimited re-downloads — it stays in your library</span>
                                 </li>
                             </ul>
@@ -266,7 +253,7 @@ export default function PaperDetailPage() {
                                             onClick={() => {
                                                 if (!inCart) cart.add(paper);
                                             }}
-                                            className="btn-primary w-full"
+                                            className="btn-buy w-full"
                                         >
                                             Buy now
                                         </Link>
@@ -296,7 +283,7 @@ export default function PaperDetailPage() {
                                 More for {level?.name ?? 'this level'}
                             </h2>
                         </div>
-                        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                             {related.map((other, i) => (
                                 <PaperCard
                                     key={other.id}
@@ -318,22 +305,11 @@ export default function PaperDetailPage() {
     );
 }
 
-function Fact({
-    icon: Icon,
-    label,
-    value,
-}: {
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    value: React.ReactNode;
-}) {
+function Fact({ label, value }: { label: string; value: React.ReactNode }) {
     return (
-        <div className="surface p-3.5">
-            <dt className="overline flex items-center gap-1.5">
-                <Icon className="h-3 w-3" aria-hidden />
-                {label}
-            </dt>
-            <dd className="figure mt-1 text-lg font-bold">{value}</dd>
+        <div>
+            <dt className="overline">{label}</dt>
+            <dd className="figure mt-1.5 text-lg font-semibold">{value}</dd>
         </div>
     );
 }
