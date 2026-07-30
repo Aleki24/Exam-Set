@@ -124,9 +124,21 @@ all.
 
 ### Paper files
 
-Paper and marking-scheme PDFs go to Cloudflare R2 (or any S3-compatible bucket).
-Nothing is public: `GET /api/papers/[id]/download` checks entitlement and then
-mints a 15-minute signed URL.
+Storage is pluggable, and the backend is chosen from the environment by
+`src/utils/storage.ts`:
+
+- **Supabase Storage** — the default. Needs nothing beyond
+  `SUPABASE_SERVICE_ROLE_KEY`, which the M-Pesa callback already requires, plus
+  migration `014_storage_bucket.sql` to create the private `exam-papers` bucket.
+  No second vendor, no extra bill.
+- **Cloudflare R2** — set all four `R2_*` variables and it takes over
+  automatically. Worth doing once download volume grows, since R2 egress is free.
+
+Either way nothing is public. Uploads go through `POST /api/papers/upload` behind
+an admin check, and `GET /api/papers/[id]/download` verifies entitlement before
+minting a 15-minute signed URL. With neither backend configured those routes
+return 503 with a message naming the variables to set — the rest of the site
+(shop, setter, sign-up, admin) works normally.
 
 ## The exam-setting logic
 
@@ -146,12 +158,16 @@ reasoned about:
 Run the checks:
 
 ```bash
-npm run verify:builder
+npm run verify          # both suites
+npm run verify:builder  # paper assembly rules
+npm run verify:storage  # storage backend selection
 ```
 
-That exercises mark targets, the difficulty mix, topic and type restrictions,
-duplicate avoidance, sub-part arithmetic and graceful degradation against a
-synthetic bank — no database needed.
+`verify:builder` exercises mark targets, the difficulty mix, topic and type
+restrictions, duplicate avoidance, sub-part arithmetic and graceful degradation
+against a synthetic bank. `verify:storage` covers which backend is chosen from
+the environment, including a partial R2 config, which must fall back to Supabase
+rather than fail at runtime. Neither needs a database.
 
 ## Adding a new exam type or level
 

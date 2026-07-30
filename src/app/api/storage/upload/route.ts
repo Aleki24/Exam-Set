@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { uploadFile, getFileUrl } from "@/utils/r2";
+import { putObject, signedDownloadUrl } from '@/utils/storage';
 
 export async function POST(req: NextRequest) {
     try {
@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
         const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "-")}`;
         const contentType = file.type;
 
-        const result = await uploadFile(buffer, fileName, contentType);
-        const url = await getFileUrl(result.key, 31536000); // 1 year expiry
+        const result = await putObject(fileName, buffer, contentType);
+        const url = await signedDownloadUrl(result.key, 31536000); // 1 year expiry
 
         return NextResponse.json({
             success: true,

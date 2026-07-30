@@ -14,6 +14,7 @@
 --      entitlements, with the payment-state functions that gate downloads.
 --   2. Adds the owner / admin / user roles and the row level security that
 --      decides who may sell.
+--   3. Creates the private storage bucket the paper PDFs live in.
 --
 -- TWO THINGS TO KNOW BEFORE RUNNING
 --
@@ -31,7 +32,7 @@
 
 
 -- ============================================================================
--- PART 1 OF 2
+-- PART 1 OF 3
 -- ============================================================================
 
 -- ============================================================================
@@ -457,7 +458,7 @@ UPDATE exams
 
 
 -- ============================================================================
--- PART 2 OF 2
+-- PART 2 OF 3
 -- ============================================================================
 
 -- ============================================================================
@@ -773,3 +774,20 @@ RETURNS TABLE (
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION admin_sales_summary() TO authenticated;
+
+
+-- ============================================================================
+-- PART 3 OF 3 — PRIVATE STORAGE BUCKET
+--
+-- Only needed if you are using Supabase Storage for the paper PDFs (the default
+-- when the R2_* variables are not set). Creates a private bucket; no public
+-- policies are added, because every download is signed server-side by
+-- /api/papers/[id]/download after it has checked entitlement.
+-- ============================================================================
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('exam-papers', 'exam-papers', FALSE, 26214400, ARRAY['application/pdf'])
+ON CONFLICT (id) DO UPDATE
+    SET public = FALSE,
+        file_size_limit = 26214400,
+        allowed_mime_types = ARRAY['application/pdf'];

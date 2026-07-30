@@ -5,7 +5,6 @@ import {
     ExamTerm,
     Question
 } from '@/types';
-import { uploadFile, getFileUrl, deleteFile } from '@/utils/r2';
 
 // ============================================================================
 // EXAM CRUD OPERATIONS
@@ -44,7 +43,7 @@ function mapDBToExam(row: any): StoredExam {
 }
 
 /**
- * Create an exam with PDF upload to R2
+ * Create an exam. Files are uploaded separately, server-side.
  */
 export async function createExam(
     examData: {
@@ -66,27 +65,9 @@ export async function createExam(
         grade_label?: string;
         term_slug?: string;
         year?: number;
-    },
-    pdfBlob?: Blob
+    }
 ): Promise<StoredExam | null> {
     const supabase = createClient();
-
-    let pdfStorageKey: string | undefined;
-    let pdfUrl: string | undefined;
-
-    // Upload PDF to R2 if provided
-    if (pdfBlob) {
-        try {
-            const fileName = `exams/${Date.now()}-${examData.title.replace(/\s+/g, '-')}.pdf`;
-            const buffer = Buffer.from(await pdfBlob.arrayBuffer());
-            const uploadResult = await uploadFile(buffer, fileName, 'application/pdf');
-            pdfStorageKey = uploadResult.key;
-            pdfUrl = await getFileUrl(pdfStorageKey, 86400 * 7); // 7 days expiry
-        } catch (error) {
-            console.error('Error uploading PDF to R2:', error);
-            // Continue without PDF - we can retry upload later
-        }
-    }
 
     // Row level security ties every paper to its author, so the session user has
     // to be stamped on the row or the insert is rejected.
@@ -104,8 +85,6 @@ export async function createExam(
         time_limit: examData.time_limit,
         institution: examData.institution,
         exam_board: examData.exam_board,
-        pdf_storage_key: pdfStorageKey,
-        pdf_url: pdfUrl,
         question_ids: examData.question_ids,
         question_count: examData.question_ids.length,
         // A paper saved from the setter is private to its author until they
@@ -302,35 +281,23 @@ export async function getExamById(id: string): Promise<StoredExam | null> {
 }
 
 /**
- * Get fresh PDF URL for an exam (refresh signed URL)
+ * Get a fresh signed download URL for an exam
  */
 export async function getExamPdfUrl(examId: string): Promise<string | null> {
-    const supabase = createClient();
-
-    // First get the storage key
-    const { data, error } = await supabase
-        .from('exams')
-        .select('pdf_storage_key')
-        .eq('id', examId)
-        .single();
-
-    if (error || !data?.pdf_storage_key) {
-        console.error('Error getting exam PDF key:', error);
-        return null;
-    }
-
+    // The download route is the only thing allowed to sign a link: it checks the
+    // caller owns the paper (or that it is free) first, then mints a short-lived
+    // URL from whichever storage backend is configured.
     try {
-        const url = await getFileUrl(data.pdf_storage_key, 3600); // 1 hour expiry
-
-        // Update the stored URL
-        await supabase
-            .from('exams')
-            .update({ pdf_url: url })
-            .eq('id', examId);
-
-        return url;
+        const res = await fetch(`/api/papers/${examId}/download`);
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            console.error('Could not get a download link:', body.error ?? res.status);
+            return null;
+        }
+        const { url } = await res.json();
+        return url ?? null;
     } catch (error) {
-        console.error('Error generating PDF URL:', error);
+        console.error('Error requesting download link:', error);
         return null;
     }
 }
@@ -367,19 +334,11 @@ export async function updateExam(
 }
 
 /**
- * Delete an exam and its PDF from R2
+ * Delete an exam row
  */
 export async function deleteExam(id: string): Promise<boolean> {
     const supabase = createClient();
 
-    // First get the PDF storage key
-    const { data: exam } = await supabase
-        .from('exams')
-        .select('pdf_storage_key')
-        .eq('id', id)
-        .single();
-
-    // Delete from database
     const { error } = await supabase
         .from('exams')
         .delete()
@@ -390,15 +349,8 @@ export async function deleteExam(id: string): Promise<boolean> {
         return false;
     }
 
-    // Delete PDF from R2 if exists
-    if (exam?.pdf_storage_key) {
-        try {
-            await deleteFile(exam.pdf_storage_key);
-        } catch (error) {
-            console.error('Error deleting PDF from R2:', error);
-            // Don't fail the overall deletion
-        }
-    }
+    // The stored PDF is left in place: removing it needs storage credentials,
+    // which only the server has. /api/admin/papers handles that side.
 
     return true;
 }
@@ -408,54 +360,4 @@ export async function deleteExam(id: string): Promise<boolean> {
  */
 export async function getRecentExams(limit = 10): Promise<StoredExam[]> {
     return getExams({ limit });
-}
-
-/**
- * Upload PDF for an existing exam (retry/update)
- */
-export async function uploadExamPdf(examId: string, pdfBlob: Blob): Promise<string | null> {
-    const supabase = createClient();
-
-    // Get exam details for filename
-    const { data: exam } = await supabase
-        .from('exams')
-        .select('title, pdf_storage_key')
-        .eq('id', examId)
-        .single();
-
-    if (!exam) {
-        console.error('Exam not found');
-        return null;
-    }
-
-    try {
-        // Delete old PDF if exists
-        if (exam.pdf_storage_key) {
-            try {
-                await deleteFile(exam.pdf_storage_key);
-            } catch (e) {
-                // Ignore deletion error
-            }
-        }
-
-        // Upload new PDF
-        const fileName = `exams/${Date.now()}-${exam.title.replace(/\s+/g, '-')}.pdf`;
-        const buffer = Buffer.from(await pdfBlob.arrayBuffer());
-        const uploadResult = await uploadFile(buffer, fileName, 'application/pdf');
-        const pdfUrl = await getFileUrl(uploadResult.key, 86400 * 7);
-
-        // Update exam record
-        await supabase
-            .from('exams')
-            .update({
-                pdf_storage_key: uploadResult.key,
-                pdf_url: pdfUrl
-            })
-            .eq('id', examId);
-
-        return pdfUrl;
-    } catch (error) {
-        console.error('Error uploading exam PDF:', error);
-        return null;
-    }
 }

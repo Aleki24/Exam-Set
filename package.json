@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "verify:builder": "node scripts/verify-paper-builder.mjs"
+    "verify:builder": "node scripts/verify-paper-builder.mjs",
+    "verify:storage": "node scripts/verify-storage.mjs",
+    "verify": "npm run verify:builder && npm run verify:storage"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",

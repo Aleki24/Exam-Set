@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { uploadFile } from '@/utils/r2';
+import { putObject, storageUnavailableReason } from '@/utils/storage';
 import { EXAM_TYPE_BY_SLUG, LEVEL_BY_SLUG } from '@/lib/catalog';
 import { toListing } from '@/lib/paperMapper';
 import { requireAdmin } from '@/utils/auth/guards';
@@ -23,6 +23,11 @@ export async function POST(req: NextRequest) {
         // /set instead, which needs no special role.
         const { actor, failure } = await requireAdmin(supabase);
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+
+        const unavailable = storageUnavailableReason();
+        if (unavailable) {
+            return NextResponse.json({ error: unavailable }, { status: 503 });
+        }
 
         const form = await req.formData();
         const paperFile = form.get('paper') as File | null;
@@ -62,17 +67,17 @@ export async function POST(req: NextRequest) {
         const stem = slugify(`${meta.grade_label || ''} ${meta.year || ''} ${meta.title}`) || 'paper';
         const base = `papers/${actor.id}/${Date.now()}-${stem}`;
 
-        const paperUpload = await uploadFile(
-            Buffer.from(await paperFile.arrayBuffer()),
+        const paperUpload = await putObject(
             `${base}.pdf`,
+            Buffer.from(await paperFile.arrayBuffer()),
             'application/pdf'
         );
 
         let schemeKey: string | null = null;
         if (schemeFile && schemeFile.size > 0) {
-            const schemeUpload = await uploadFile(
-                Buffer.from(await schemeFile.arrayBuffer()),
+            const schemeUpload = await putObject(
                 `${base}-marking-scheme.pdf`,
+                Buffer.from(await schemeFile.arrayBuffer()),
                 'application/pdf'
             );
             schemeKey = schemeUpload.key;

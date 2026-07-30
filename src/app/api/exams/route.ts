@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { uploadFile, getFileUrl } from "@/utils/r2";
+import { putObject, signedDownloadUrl } from '@/utils/storage';
 
 // GET /api/exams - Get list of exams with optional filters
 export async function GET(req: NextRequest) {
@@ -90,9 +90,9 @@ export async function POST(req: NextRequest) {
             try {
                 const fileName = `exams/${Date.now()}-${examData.title?.replace(/\s+/g, '-') || 'exam'}.pdf`;
                 const buffer = Buffer.from(await pdfFile.arrayBuffer());
-                const uploadResult = await uploadFile(buffer, fileName, 'application/pdf');
+                const uploadResult = await putObject(fileName, buffer, 'application/pdf');
                 pdfStorageKey = uploadResult.key;
-                pdfUrl = await getFileUrl(pdfStorageKey, 86400 * 7); // 7 days
+                pdfUrl = await signedDownloadUrl(pdfStorageKey, 86400 * 7); // 7 days
             } catch (uploadError) {
                 console.error("PDF upload error:", uploadError);
                 // Continue without PDF

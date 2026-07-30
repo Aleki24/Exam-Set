@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getFileUrl } from '@/utils/r2';
+import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
 
 /**
  * GET /api/papers/:id/download?asset=paper|scheme
@@ -64,9 +64,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         let url: string | null = null;
         if (storageKey) {
+            const unavailable = storageUnavailableReason();
+            if (unavailable) {
+                console.error('download blocked:', unavailable);
+                return NextResponse.json(
+                    { error: 'Downloads are not available yet — file storage is not configured.' },
+                    { status: 503 }
+                );
+            }
             // 15 minutes is long enough to start a download, short enough that a
             // leaked link is worthless.
-            url = await getFileUrl(storageKey, 900);
+            url = await signedDownloadUrl(storageKey, 900);
         } else if (directUrl) {
             url = directUrl;
         }
