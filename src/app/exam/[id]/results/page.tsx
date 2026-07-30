@@ -92,7 +92,7 @@ export default function ExamResultsPage() {
                     <h2 className="text-xl font-semibold text-slate-800 mb-2">Error</h2>
                     <p className="text-slate-600 mb-4">{error || 'Failed to load results'}</p>
                     <Link
-                        href="/dashboard"
+                        href="/library"
                         className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                         Go to Dashboard
@@ -137,7 +137,7 @@ export default function ExamResultsPage() {
             <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
                     <Link
-                        href="/dashboard"
+                        href="/library"
                         className="flex items-center gap-2 text-slate-600 hover:text-slate-800"
                     >
                         <ArrowLeft className="w-5 h-5" />
@@ -324,7 +324,7 @@ export default function ExamResultsPage() {
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 mt-8 justify-center">
                     <Link
-                        href="/dashboard"
+                        href="/library"
                         className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                         <Home className="w-5 h-5" />

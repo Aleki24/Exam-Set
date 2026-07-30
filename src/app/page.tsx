@@ -1,133 +1,356 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, useScroll, useSpring } from 'framer-motion';
-import { createClient } from '@/utils/supabase/client';
+import { toast } from 'sonner';
+import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion } from 'lucide-react';
+import TopNav from '@/components/shell/TopNav';
+import PaperCard from '@/components/shop/PaperCard';
+import FilterRail from '@/components/shop/FilterRail';
+import { useCart } from '@/lib/cart';
+import { LEVELS, examTypeName } from '@/lib/catalog';
+import type { PaperFilters, PaperListing, PaperListResponse } from '@/types/shop';
 
-// Components
-import Navbar from '@/components/landing/Navbar';
-import HeroSection from '@/components/landing/HeroSection';
-import LogoScroll from '@/components/landing/LogoScroll';
-import FeaturesSection from '@/components/landing/FeaturesSection';
-import StatsSection from '@/components/landing/StatsSection';
-import PricingSection from '@/components/landing/PricingSection';
-import Footer from '@/components/landing/Footer';
-import GridBackground from '../components/landing/GridBackground';
+const PAGE_SIZE = 24;
 
-export default function HomePage() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Progress bar for scroll depth
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 100,
-    damping: 30,
-    restDelta: 0.001
-  });
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const supabase = createClient();
-        // Race against a timeout to prevent infinite loading
-        const authPromise = supabase.auth.getUser();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Auth check timed out')), 3000)
-        );
-        const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
-        if (user) {
-          router.push('/app');
-          return;
-        }
-      } catch (e) {
-        console.error('Auth check failed:', e);
-      }
-      setIsLoading(false);
-    };
-    checkAuth();
-  }, [router]);
-
-  if (isLoading) {
-    return (
-      <div className="h-screen w-full flex items-center justify-center bg-white">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-          className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative min-h-screen bg-[#fafafa] selection:bg-blue-500/30">
-      {/* 1. Reading Progress Bar */}
-      <motion.div
-        className="fixed top-0 left-0 right-0 h-1 bg-blue-600 origin-left z-[100]"
-        style={{ scaleX }}
-      />
-
-      {/* 2. Modern Subtle Background Decor */}
-      <GridBackground />
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-50/50 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-50/50 blur-[120px]" />
-      </div>
-
-      <Navbar />
-
-      <main className="relative z-10">
-        {/* Hero Section - Immediate Entrance */}
-        <SectionWrapper delay={0.1}>
-          <HeroSection />
-        </SectionWrapper>
-
-        {/* Social Proof - Subtle Reveal */}
-        <SectionWrapper delay={0.2} className="py-0">
-          <LogoScroll />
-        </SectionWrapper>
-
-        {/* Core Features - Animated Bento Grid */}
-        <SectionWrapper>
-          <FeaturesSection />
-        </SectionWrapper>
-
-        {/* Dynamic Stats - Numbers that pop */}
-        <SectionWrapper>
-          <StatsSection />
-        </SectionWrapper>
-
-        {/* Pricing - High Contrast Highlight */}
-        <SectionWrapper>
-          <PricingSection />
-        </SectionWrapper>
-      </main>
-
-      <Footer />
-    </div>
-  );
-}
+const SORTS = [
+    { value: 'newest', label: 'Newest' },
+    { value: 'popular', label: 'Most bought' },
+    { value: 'price-asc', label: 'Price: low to high' },
+    { value: 'price-desc', label: 'Price: high to low' },
+    { value: 'title', label: 'A-Z' },
+] as const;
 
 /**
- * SectionWrapper: Standardizes how sections enter the viewport
- * Features: Staggered Fade-in, Subtle Lift, and Viewport Trigger
+ * THE SHOP — the front door of the platform.
+ *
+ * No marketing landing page: the first thing anyone sees is the papers they can
+ * buy, filtered the way a teacher actually shops (level, then exam type).
  */
-function SectionWrapper({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-100px" }}
-      transition={{
-        duration: 0.8,
-        delay: delay,
-        ease: [0.21, 0.47, 0.32, 0.98] // Custom "ease-out" for premium feel
-      }}
-      className={className || "py-12 md:py-24"}
-    >
-      {children}
-    </motion.section>
-  );
+export default function ShopPage() {
+    const router = useRouter();
+    const cart = useCart();
+
+    const [filters, setFilters] = useState<PaperFilters>({ sort: 'newest' });
+    const [searchDraft, setSearchDraft] = useState('');
+    const [papers, setPapers] = useState<PaperListing[]>([]);
+    const [response, setResponse] = useState<PaperListResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [offset, setOffset] = useState(0);
+    const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+
+    // Debounce the search box so typing does not hammer the API.
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setFilters((f) =>
+                f.search === (searchDraft || undefined) ? f : { ...f, search: searchDraft || undefined }
+            );
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchDraft]);
+
+    const queryString = useCallback(
+        (from: number) => {
+            const params = new URLSearchParams();
+            if (filters.level) params.set('level', filters.level);
+            if (filters.grade) params.set('grade', filters.grade);
+            if (filters.subject) params.set('subject', filters.subject);
+            if (filters.exam_type) params.set('exam_type', filters.exam_type);
+            if (filters.term) params.set('term', filters.term);
+            if (filters.year) params.set('year', String(filters.year));
+            if (filters.price) params.set('price', filters.price);
+            if (filters.search) params.set('search', filters.search);
+            if (filters.sort) params.set('sort', filters.sort);
+            params.set('limit', String(PAGE_SIZE));
+            params.set('offset', String(from));
+            return params.toString();
+        },
+        [filters]
+    );
+
+    // Reload from the top whenever the filters change.
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setOffset(0);
+
+        fetch(`/api/papers?${queryString(0)}`)
+            .then((res) => res.json())
+            .then((data: PaperListResponse & { error?: string }) => {
+                if (cancelled) return;
+                if (data.error) {
+                    // The raw database message is useful in the console, not in
+                    // a toast the buyer has to read.
+                    console.error('GET /api/papers:', data.error);
+                    toast.error('Could not load papers right now. Please try again.');
+                    return;
+                }
+                setPapers(data.papers || []);
+                setResponse(data);
+            })
+            .catch(() => !cancelled && toast.error('Could not load papers. Check your connection and try again.'))
+            .finally(() => !cancelled && setLoading(false));
+
+        return () => {
+            cancelled = true;
+        };
+    }, [queryString]);
+
+    const loadMore = async () => {
+        const next = offset + PAGE_SIZE;
+        setLoadingMore(true);
+        try {
+            const res = await fetch(`/api/papers?${queryString(next)}`);
+            const data: PaperListResponse = await res.json();
+            setPapers((current) => [...current, ...(data.papers || [])]);
+            setResponse(data);
+            setOffset(next);
+        } catch {
+            toast.error('Could not load more papers.');
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+
+    const subjects = useMemo(
+        () => Object.keys(response?.facets?.subjects || {}).sort((a, b) => a.localeCompare(b)),
+        [response]
+    );
+
+    const patchFilters = (patch: Partial<PaperFilters>) => setFilters((f) => ({ ...f, ...patch }));
+    const resetFilters = () => {
+        setFilters({ sort: filters.sort });
+        setSearchDraft('');
+    };
+
+    const handleToggleCart = (paper: PaperListing) => {
+        const added = cart.toggle(paper);
+        toast.success(added ? `Added "${paper.title}" to your cart` : 'Removed from cart');
+    };
+
+    /** Free papers and papers you already own download straight away. */
+    const handleDownload = async (paper: PaperListing) => {
+        try {
+            const res = await fetch(`/api/papers/${paper.id}/download`);
+            const data = await res.json();
+
+            if (res.status === 401) {
+                toast.error('Sign in to download this paper');
+                router.push(`/auth/login?next=/papers/${paper.slug || paper.id}`);
+                return;
+            }
+            if (!res.ok) {
+                toast.error(data.error || 'Could not start the download');
+                return;
+            }
+            window.open(data.url, '_blank', 'noopener');
+        } catch {
+            toast.error('Could not start the download');
+        }
+    };
+
+    const activeSummary = [
+        filters.level && LEVELS.find((l) => l.slug === filters.level)?.name,
+        filters.grade,
+        filters.exam_type && examTypeName(filters.exam_type),
+        filters.subject,
+        filters.year,
+    ].filter(Boolean);
+
+    return (
+        <div className="min-h-screen bg-background">
+            <TopNav />
+
+            {/* Search + sort bar */}
+            <div className="sticky top-16 z-40 border-b bar-blur">
+                <div className="shell-width flex items-center gap-2 py-3">
+                    <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                            type="search"
+                            value={searchDraft}
+                            onChange={(e) => setSearchDraft(e.target.value)}
+                            placeholder="Search papers — subject, school, topic, year…"
+                            className="field pl-9"
+                            aria-label="Search papers"
+                        />
+                        {searchDraft && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchDraft('')}
+                                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-muted-foreground hover:bg-secondary"
+                                aria-label="Clear search"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    <select
+                        value={filters.sort}
+                        onChange={(e) => patchFilters({ sort: e.target.value as PaperFilters['sort'] })}
+                        className="field hidden w-auto sm:block"
+                        aria-label="Sort papers"
+                    >
+                        {SORTS.map((s) => (
+                            <option key={s.value} value={s.value}>
+                                {s.label}
+                            </option>
+                        ))}
+                    </select>
+
+                    <button type="button" onClick={() => setShowFiltersMobile(true)} className="btn-outline lg:hidden">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Filters
+                    </button>
+                </div>
+            </div>
+
+            <div className="shell-width grid gap-8 py-6 lg:grid-cols-[260px_1fr]">
+                {/* Desktop rail */}
+                <aside className="hidden lg:block">
+                    <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] scroll-panel pr-2">
+                        <FilterRail
+                            filters={filters}
+                            facets={response?.facets}
+                            subjects={subjects}
+                            onChange={patchFilters}
+                            onReset={resetFilters}
+                        />
+                    </div>
+                </aside>
+
+                {/* Results */}
+                <main>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h1 className="text-xl font-bold tracking-tight">
+                                {activeSummary.length > 0 ? activeSummary.join(' · ') : 'All exam papers'}
+                            </h1>
+                            <p className="mt-0.5 text-sm text-muted-foreground">
+                                {loading
+                                    ? 'Loading…'
+                                    : `${response?.total ?? 0} paper${(response?.total ?? 0) === 1 ? '' : 's'} available`}
+                            </p>
+                        </div>
+
+                        <Link href="/set" className="btn-outline">
+                            <PenSquare className="h-4 w-4" />
+                            Set your own exam
+                        </Link>
+                    </div>
+
+                    {loading ? (
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="surface h-52 animate-pulse bg-secondary/60" />
+                            ))}
+                        </div>
+                    ) : papers.length === 0 ? (
+                        <EmptyState
+                            hasFilters={activeSummary.length > 0 || Boolean(filters.search)}
+                            onReset={resetFilters}
+                        />
+                    ) : (
+                        <>
+                            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                {papers.map((paper) => (
+                                    <PaperCard
+                                        key={paper.id}
+                                        paper={paper}
+                                        inCart={cart.has(paper.id)}
+                                        onToggleCart={handleToggleCart}
+                                        onDownload={handleDownload}
+                                    />
+                                ))}
+                            </div>
+
+                            {response?.hasMore && (
+                                <div className="mt-8 flex justify-center">
+                                    <button
+                                        type="button"
+                                        onClick={loadMore}
+                                        disabled={loadingMore}
+                                        className="btn-outline"
+                                    >
+                                        {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                        Load more papers
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </main>
+            </div>
+
+            {/* Mobile filter sheet */}
+            {showFiltersMobile && (
+                <div className="fixed inset-0 z-50 lg:hidden">
+                    <div
+                        className="absolute inset-0 bg-foreground/40"
+                        onClick={() => setShowFiltersMobile(false)}
+                        aria-hidden
+                    />
+                    <div className="absolute inset-y-0 right-0 flex w-[85%] max-w-sm flex-col bg-card shadow-xl">
+                        <div className="flex items-center justify-between border-b border-border p-4">
+                            <h2 className="font-bold">Filters</h2>
+                            <button
+                                type="button"
+                                onClick={() => setShowFiltersMobile(false)}
+                                className="grid h-9 w-9 place-items-center rounded-lg hover:bg-secondary"
+                                aria-label="Close filters"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 scroll-panel p-4">
+                            <FilterRail
+                                filters={filters}
+                                facets={response?.facets}
+                                subjects={subjects}
+                                onChange={patchFilters}
+                                onReset={resetFilters}
+                            />
+                        </div>
+                        <div className="border-t border-border p-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowFiltersMobile(false)}
+                                className="btn-primary w-full"
+                            >
+                                Show {response?.total ?? 0} papers
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function EmptyState({ hasFilters, onReset }: { hasFilters: boolean; onReset: () => void }) {
+    return (
+        <div className="surface flex flex-col items-center justify-center px-6 py-16 text-center">
+            <FileQuestion className="mb-4 h-10 w-10 text-muted-foreground" />
+            <h2 className="text-lg font-bold">No papers match this yet</h2>
+            <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
+                {hasFilters
+                    ? 'Try a wider level or exam type — or build the paper yourself from the question bank.'
+                    : 'The catalog is empty. Publish your first paper from the setter and it appears here.'}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {hasFilters && (
+                    <button type="button" onClick={onReset} className="btn-outline">
+                        Clear filters
+                    </button>
+                )}
+                <Link href="/set" className="btn-primary">
+                    <PenSquare className="h-4 w-4" />
+                    Set an exam
+                </Link>
+            </div>
+        </div>
+    );
 }

@@ -1,53 +1,64 @@
 @import "tailwindcss";
 
 @layer base {
+
+    /* ========================================================================
+       DESIGN TOKENS
+       A quiet, paper-first palette: warm off-white surfaces, ink text and a
+       deep emerald primary. Prices and buy actions use the amber accent so
+       commerce reads at a glance without shouting.
+       ======================================================================== */
+
     :root {
-        --background: oklch(0.985 0 0);
-        --foreground: oklch(0.32 0 0);
+        --background: oklch(0.986 0.003 100);
+        --foreground: oklch(0.24 0.014 250);
 
         --card: oklch(1 0 0);
-        --card-foreground: oklch(0.32 0 0);
+        --card-foreground: oklch(0.24 0.014 250);
 
         --popover: oklch(1 0 0);
-        --popover-foreground: oklch(0.32 0 0);
+        --popover-foreground: oklch(0.24 0.014 250);
 
-        --primary: oklch(0.56 0.20 275);
-        --primary-foreground: oklch(1 0 0);
+        --primary: oklch(0.47 0.11 168);
+        --primary-foreground: oklch(0.99 0 0);
 
-        --secondary: oklch(0.97 0.01 270);
-        --secondary-foreground: oklch(0.32 0 0);
+        --secondary: oklch(0.965 0.006 160);
+        --secondary-foreground: oklch(0.30 0.02 200);
 
-        --muted: oklch(0.92 0.01 270);
-        --muted-foreground: oklch(0.55 0 0);
+        --muted: oklch(0.955 0.004 240);
+        --muted-foreground: oklch(0.50 0.012 250);
 
-        --accent: oklch(0.78 0.12 250);
-        --accent-foreground: oklch(1 0 0);
+        --accent: oklch(0.74 0.15 62);
+        --accent-foreground: oklch(0.24 0.03 60);
 
-        --destructive: oklch(0.64 0.21 25);
-        --destructive-foreground: oklch(1 0 0);
+        --destructive: oklch(0.58 0.20 25);
+        --destructive-foreground: oklch(0.99 0 0);
 
-        --border: oklch(0.88 0 0);
-        --input: oklch(0.88 0 0);
-        --ring: oklch(0.60 0.22 275);
+        --success: oklch(0.60 0.14 155);
+        --success-foreground: oklch(0.99 0 0);
 
-        --chart-1: oklch(0.60 0.22 275);
-        --chart-2: oklch(0.65 0.18 300);
-        --chart-3: oklch(0.50 0.20 260);
-        --chart-4: oklch(0.72 0.14 230);
-        --chart-5: oklch(0.68 0.10 210);
+        --border: oklch(0.915 0.005 250);
+        --input: oklch(0.915 0.005 250);
+        --ring: oklch(0.47 0.11 168);
 
-        --sidebar: oklch(0.985 0 0);
-        --sidebar-foreground: oklch(0.32 0 0);
-        --sidebar-primary: oklch(0.56 0.20 275);
-        --sidebar-primary-foreground: oklch(1 0 0);
-        --sidebar-accent: oklch(0.78 0.12 250);
-        --sidebar-accent-foreground: oklch(1 0 0);
-        --sidebar-border: oklch(0.88 0 0);
-        --sidebar-ring: oklch(0.60 0.22 275);
+        --chart-1: oklch(0.47 0.11 168);
+        --chart-2: oklch(0.74 0.15 62);
+        --chart-3: oklch(0.55 0.13 250);
+        --chart-4: oklch(0.62 0.16 20);
+        --chart-5: oklch(0.60 0.10 300);
+
+        --sidebar: oklch(0.995 0.002 100);
+        --sidebar-foreground: oklch(0.24 0.014 250);
+        --sidebar-primary: oklch(0.47 0.11 168);
+        --sidebar-primary-foreground: oklch(0.99 0 0);
+        --sidebar-accent: oklch(0.74 0.15 62);
+        --sidebar-accent-foreground: oklch(0.24 0.03 60);
+        --sidebar-border: oklch(0.915 0.005 250);
+        --sidebar-ring: oklch(0.47 0.11 168);
 
         --font-sans: Inter, ui-sans-serif, system-ui;
-        --font-serif: Playfair Display, ui-serif, serif;
-        --font-mono: JetBrains Mono, monospace;
+        --font-serif: Lora, ui-serif, serif;
+        --font-mono: 'Roboto Mono', ui-monospace, monospace;
 
         --radius: 0.75rem;
 
@@ -62,42 +73,45 @@
     }
 
     .dark {
-        --background: oklch(0.22 0.01 265);
-        --foreground: oklch(0.93 0 0);
+        --background: oklch(0.19 0.012 250);
+        --foreground: oklch(0.95 0.004 250);
 
-        --card: oklch(0.30 0.01 265);
-        --card-foreground: oklch(0.93 0 0);
+        --card: oklch(0.245 0.014 250);
+        --card-foreground: oklch(0.95 0.004 250);
 
-        --popover: oklch(0.30 0.01 265);
-        --popover-foreground: oklch(0.93 0 0);
+        --popover: oklch(0.245 0.014 250);
+        --popover-foreground: oklch(0.95 0.004 250);
 
-        --primary: oklch(0.65 0.22 275);
-        --primary-foreground: oklch(0.12 0 0);
+        --primary: oklch(0.68 0.13 168);
+        --primary-foreground: oklch(0.17 0.02 200);
 
-        --secondary: oklch(0.35 0.02 265);
-        --secondary-foreground: oklch(0.93 0 0);
+        --secondary: oklch(0.29 0.016 250);
+        --secondary-foreground: oklch(0.95 0.004 250);
 
-        --muted: oklch(0.38 0 0);
-        --muted-foreground: oklch(0.72 0 0);
+        --muted: oklch(0.30 0.012 250);
+        --muted-foreground: oklch(0.70 0.01 250);
 
-        --accent: oklch(0.70 0.16 250);
-        --accent-foreground: oklch(0.93 0 0);
+        --accent: oklch(0.79 0.14 68);
+        --accent-foreground: oklch(0.20 0.03 60);
 
-        --destructive: oklch(0.64 0.21 25);
-        --destructive-foreground: oklch(1 0 0);
+        --destructive: oklch(0.63 0.19 25);
+        --destructive-foreground: oklch(0.99 0 0);
 
-        --border: oklch(0.38 0 0);
-        --input: oklch(0.38 0 0);
-        --ring: oklch(0.65 0.22 275);
+        --success: oklch(0.70 0.14 155);
+        --success-foreground: oklch(0.17 0.02 160);
 
-        --sidebar: oklch(0.22 0.01 265);
-        --sidebar-foreground: oklch(0.93 0 0);
-        --sidebar-primary: oklch(0.65 0.22 275);
-        --sidebar-primary-foreground: oklch(0.12 0 0);
-        --sidebar-accent: oklch(0.70 0.16 250);
-        --sidebar-accent-foreground: oklch(0.93 0 0);
-        --sidebar-border: oklch(0.38 0 0);
-        --sidebar-ring: oklch(0.65 0.22 275);
+        --border: oklch(0.32 0.012 250);
+        --input: oklch(0.32 0.012 250);
+        --ring: oklch(0.68 0.13 168);
+
+        --sidebar: oklch(0.21 0.013 250);
+        --sidebar-foreground: oklch(0.95 0.004 250);
+        --sidebar-primary: oklch(0.68 0.13 168);
+        --sidebar-primary-foreground: oklch(0.17 0.02 200);
+        --sidebar-accent: oklch(0.79 0.14 68);
+        --sidebar-accent-foreground: oklch(0.20 0.03 60);
+        --sidebar-border: oklch(0.32 0.012 250);
+        --sidebar-ring: oklch(0.68 0.13 168);
     }
 }
 
@@ -118,6 +132,8 @@
     --color-accent-foreground: var(--accent-foreground);
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
@@ -162,42 +178,199 @@
     }
 
     body {
-        /* Canva-like Gradient: Teal/Cyan -> Purple/Pink */
-        background: linear-gradient(135deg,
-                oklch(0.96 0.05 200) 0%,
-                /* Cyan tint */
-                oklch(0.94 0.08 280) 50%,
-                /* Purple tint */
-                oklch(0.93 0.10 320) 100%
-                /* Pink tint */
-            );
-        background-attachment: fixed;
+        background: var(--background);
         color: var(--foreground);
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* Focus is visible everywhere, and always the same shape. */
+    :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
     }
 }
 
-/* Glassmorphism Utilities */
 @layer utilities {
+
+    /* ------------------------------------------------------------------------
+       SURFACES
+       ------------------------------------------------------------------------ */
+
+    :where(.surface) {
+        @apply bg-card border border-border rounded-xl;
+    }
+
+    /* The workhorse card: papers in the shop, questions in the bank. */
+    :where(.card-elevated) {
+        @apply bg-card border border-border rounded-xl transition-all duration-200;
+        box-shadow: var(--shadow-2xs);
+    }
+
+    :where(.card-elevated):hover {
+        box-shadow: var(--shadow-sm);
+        border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+    }
+
+    /* Sticky bars that sit over scrolling content. */
+    :where(.bar-blur) {
+        @apply border-border;
+        background: color-mix(in oklab, var(--background) 82%, transparent);
+        backdrop-filter: blur(12px);
+    }
+
+    /* ------------------------------------------------------------------------
+       CHIPS, BADGES, PILLS
+       ------------------------------------------------------------------------ */
+
+    :where(.chip) {
+        @apply inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors;
+    }
+
+    :where(.chip):hover {
+        @apply text-foreground;
+        border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+    }
+
+    :where(.chip-active) {
+        @apply border-transparent text-primary-foreground;
+        background: var(--primary);
+    }
+
+    :where(.chip-active):hover {
+        @apply text-primary-foreground;
+        background: color-mix(in oklab, var(--primary) 88%, black);
+    }
+
+    :where(.badge-soft) {
+        @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
+        background: color-mix(in oklab, var(--primary) 10%, transparent);
+        color: color-mix(in oklab, var(--primary) 80%, var(--foreground));
+    }
+
+    :where(.badge-price) {
+        @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold tabular-nums;
+        background: color-mix(in oklab, var(--accent) 20%, transparent);
+        color: color-mix(in oklab, var(--accent) 65%, var(--foreground));
+    }
+
+    :where(.badge-free) {
+        @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wide;
+        background: color-mix(in oklab, var(--success) 16%, transparent);
+        color: color-mix(in oklab, var(--success) 70%, var(--foreground));
+    }
+
+    /* ------------------------------------------------------------------------
+       BUTTONS
+       ------------------------------------------------------------------------ */
+
+    /* One shared base, then a variant per intent. Tailwind v4 will not let a
+       utility @apply another custom utility, so the base is repeated by hand. */
+    :where(.btn, .btn-primary, .btn-buy, .btn-outline, .btn-ghost) {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
+    }
+
+    :where(.btn-primary) {
+        @apply text-primary-foreground;
+        background: var(--primary);
+        box-shadow: var(--shadow-2xs);
+    }
+
+    :where(.btn-primary):hover {
+        background: color-mix(in oklab, var(--primary) 88%, black);
+        box-shadow: var(--shadow-xs);
+    }
+
+    :where(.btn-buy) {
+        background: var(--accent);
+        color: var(--accent-foreground);
+        box-shadow: var(--shadow-2xs);
+    }
+
+    :where(.btn-buy):hover {
+        background: color-mix(in oklab, var(--accent) 88%, black);
+    }
+
+    :where(.btn-outline) {
+        @apply border border-border bg-card text-foreground;
+    }
+
+    :where(.btn-outline):hover {
+        @apply bg-secondary;
+        border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+    }
+
+    :where(.btn-ghost) {
+        @apply text-muted-foreground;
+    }
+
+    :where(.btn-ghost):hover {
+        @apply bg-secondary text-foreground;
+    }
+
+    /* ------------------------------------------------------------------------
+       FORMS
+       ------------------------------------------------------------------------ */
+
+    :where(.field) {
+        @apply w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm text-foreground transition-colors placeholder:text-muted-foreground;
+    }
+
+    :where(.field):focus {
+        @apply outline-none;
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 18%, transparent);
+    }
+
+    :where(.label) {
+        @apply block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5;
+    }
+
+    /* ------------------------------------------------------------------------
+       LAYOUT HELPERS
+       ------------------------------------------------------------------------ */
+
+    :where(.shell-width) {
+        @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8;
+    }
+
+    :where(.scroll-panel) {
+        @apply overflow-y-auto overscroll-contain;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+    }
+
+    :where(.scroll-panel)::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    :where(.scroll-panel)::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 999px;
+    }
+
+    /* Kept for the legacy builder chrome that still references them. */
     .glass {
-        @apply bg-white/70 backdrop-blur-lg border border-white/50 shadow-sm;
+        @apply bg-card/80 backdrop-blur-lg border border-border shadow-sm;
     }
 
     .glass-card {
-        @apply bg-white/80 backdrop-blur-xl border border-white/60 shadow-lg rounded-2xl;
+        @apply bg-card border border-border rounded-2xl shadow-sm;
     }
 
     .glass-sidebar {
-        @apply bg-white/60 backdrop-blur-2xl border-r border-white/40;
+        @apply bg-sidebar border-r border-sidebar-border;
     }
 
-    /* Vibrant Gradients for Buttons/Accents */
     .gradient-primary {
-        background: linear-gradient(135deg, oklch(0.65 0.22 275), oklch(0.70 0.20 300));
+        background: linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 70%, var(--accent)));
     }
 
     .gradient-text {
-        background: linear-gradient(135deg, oklch(0.60 0.22 275), oklch(0.60 0.20 320));
+        background: linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 55%, var(--accent)));
         -webkit-background-clip: text;
+        background-clip: text;
         -webkit-text-fill-color: transparent;
     }
 

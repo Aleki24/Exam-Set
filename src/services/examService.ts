@@ -60,6 +60,12 @@ export async function createExam(
         institution?: string;
         exam_board?: string;
         question_ids: string[];
+        // Catalog taxonomy — see src/lib/catalog.ts
+        exam_type?: string;
+        level_slug?: string;
+        grade_label?: string;
+        term_slug?: string;
+        year?: number;
     },
     pdfBlob?: Blob
 ): Promise<StoredExam | null> {
@@ -82,6 +88,10 @@ export async function createExam(
         }
     }
 
+    // Row level security ties every paper to its author, so the session user has
+    // to be stamped on the row or the insert is rejected.
+    const { data: { user } } = await supabase.auth.getUser();
+
     const dbExam = {
         title: examData.title,
         subject: examData.subject,
@@ -98,7 +108,16 @@ export async function createExam(
         pdf_url: pdfUrl,
         question_ids: examData.question_ids,
         question_count: examData.question_ids.length,
-        is_public: true,
+        // A paper saved from the setter is private to its author until they
+        // choose to publish it to the shop.
+        source: 'user_set',
+        is_public: false,
+        created_by: user?.id,
+        exam_type: examData.exam_type,
+        level_slug: examData.level_slug,
+        grade_label: examData.grade_label,
+        term_slug: examData.term_slug,
+        year: examData.year,
     };
 
     const { data, error } = await supabase

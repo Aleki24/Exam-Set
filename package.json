@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify:builder": "node scripts/verify-paper-builder.mjs"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",
@@ -61,6 +62,7 @@
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.23",
     "eslint": "^9.39.2",
+    "jiti": "^2.6.1",
     "postcss": "^8.5.6",
     "shadcn": "^3.6.2",
     "tailwindcss": "^4.1.18",

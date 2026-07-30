@@ -5,8 +5,9 @@ import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
-    title: 'MaarifaExams',
-    description: 'AI-powered exam question generator and builder',
+    title: 'Maarifa Exams — CBE exam papers & marking schemes',
+    description:
+        'Buy CBE exam papers with marking schemes for Pre-Primary to Grade 12 and Form 1-4, or set your own paper from the question bank.',
 };
 
 export default function RootLayout({

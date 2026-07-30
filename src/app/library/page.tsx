@@ -1,0 +1,254 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { ClipboardCheck, Download, FileText, Loader2, PenSquare, Receipt } from 'lucide-react';
+import TopNav from '@/components/shell/TopNav';
+import { examTypeName, formatPrice } from '@/lib/catalog';
+import type { Order, PaperListing } from '@/types/shop';
+
+type Tab = 'purchased' | 'sets' | 'orders';
+
+interface LibraryData {
+    purchased: (PaperListing & { entitlement_kind?: string })[];
+    sets: PaperListing[];
+    orders: Order[];
+}
+
+const STATUS_LABELS: Record<string, string> = {
+    pending: 'Not paid',
+    awaiting_confirmation: 'Confirming payment',
+    paid: 'Paid',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+};
+
+/** Everything the user owns: bought papers, their own sets, and receipts. */
+export default function LibraryPage() {
+    const router = useRouter();
+    const [tab, setTab] = useState<Tab>('purchased');
+    const [data, setData] = useState<LibraryData | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('/api/library')
+            .then(async (res) => {
+                if (res.status === 401) {
+                    router.push('/auth/login?next=/library');
+                    return null;
+                }
+                return res.json();
+            })
+            .then((payload) => payload && setData(payload))
+            .catch(() => toast.error('Could not load your library'))
+            .finally(() => setLoading(false));
+    }, [router]);
+
+    const download = async (paper: PaperListing, asset: 'paper' | 'scheme') => {
+        try {
+            const res = await fetch(`/api/papers/${paper.id}/download?asset=${asset}`);
+            const payload = await res.json();
+            if (!res.ok) {
+                toast.error(payload.error || 'Download failed');
+                return;
+            }
+            window.open(payload.url, '_blank', 'noopener');
+        } catch {
+            toast.error('Download failed');
+        }
+    };
+
+    const tabs: { id: Tab; label: string; count: number }[] = [
+        { id: 'purchased', label: 'My papers', count: data?.purchased.length ?? 0 },
+        { id: 'sets', label: 'Papers I set', count: data?.sets.length ?? 0 },
+        { id: 'orders', label: 'Orders', count: data?.orders.length ?? 0 },
+    ];
+
+    return (
+        <div className="min-h-screen bg-background">
+            <TopNav />
+
+            <div className="shell-width py-6">
+                <h1 className="text-2xl font-bold tracking-tight">My library</h1>
+
+                <div className="mt-5 flex gap-1 border-b border-border">
+                    {tabs.map((t) => (
+                        <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setTab(t.id)}
+                            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+                                tab === t.id
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            {t.label}
+                            <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{t.count}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {loading ? (
+                    <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="surface h-36 animate-pulse bg-secondary/60" />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-6">
+                        {tab === 'purchased' &&
+                            (data?.purchased.length ? (
+                                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                    {data.purchased.map((paper) => (
+                                        <OwnedCard key={paper.id} paper={paper} onDownload={download} />
+                                    ))}
+                                </div>
+                            ) : (
+                                <Empty
+                                    title="No papers yet"
+                                    body="Papers you buy or claim for free land here, ready to download any time."
+                                    action={{ href: '/', label: 'Browse papers' }}
+                                />
+                            ))}
+
+                        {tab === 'sets' &&
+                            (data?.sets.length ? (
+                                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                    {data.sets.map((paper) => (
+                                        <OwnedCard key={paper.id} paper={paper} onDownload={download} isOwnSet />
+                                    ))}
+                                </div>
+                            ) : (
+                                <Empty
+                                    title="You have not set a paper yet"
+                                    body="Pick questions from the bank, hit a mark target, and save the paper here."
+                                    action={{ href: '/set', label: 'Set an exam' }}
+                                />
+                            ))}
+
+                        {tab === 'orders' &&
+                            (data?.orders.length ? (
+                                <div className="surface divide-y divide-border">
+                                    {data.orders.map((order) => (
+                                        <div key={order.id} className="flex items-center gap-4 p-4">
+                                            <Receipt className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-mono text-sm font-semibold">{order.reference}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {new Date(order.created_at).toLocaleDateString('en-KE', {
+                                                        day: 'numeric',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                    })}
+                                                </p>
+                                            </div>
+                                            <span className="text-sm font-bold tabular-nums">
+                                                {formatPrice(order.total_cents, order.currency)}
+                                            </span>
+                                            <span
+                                                className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold ${
+                                                    order.status === 'paid'
+                                                        ? 'bg-success/15 text-success'
+                                                        : order.status === 'failed' || order.status === 'cancelled'
+                                                          ? 'bg-destructive/10 text-destructive'
+                                                          : 'bg-accent/15 text-accent-foreground'
+                                                }`}
+                                            >
+                                                {STATUS_LABELS[order.status] ?? order.status}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <Empty
+                                    title="No orders yet"
+                                    body="Your receipts appear here after your first purchase."
+                                    action={{ href: '/', label: 'Browse papers' }}
+                                />
+                            ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function OwnedCard({
+    paper,
+    onDownload,
+    isOwnSet,
+}: {
+    paper: PaperListing;
+    onDownload: (paper: PaperListing, asset: 'paper' | 'scheme') => void;
+    isOwnSet?: boolean;
+}) {
+    const [busy, setBusy] = useState(false);
+
+    const go = async (asset: 'paper' | 'scheme') => {
+        setBusy(true);
+        await onDownload(paper, asset);
+        setBusy(false);
+    };
+
+    return (
+        <article className="card-elevated flex flex-col p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="badge-soft">{examTypeName(paper.exam_type)}</span>
+                {isOwnSet && !paper.is_published && (
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Draft
+                    </span>
+                )}
+            </div>
+            <h3 className="text-[15px] font-bold leading-snug">{paper.title}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+                {[paper.subject, paper.grade_label, paper.year].filter(Boolean).join(' · ')}
+                {paper.total_marks ? ` · ${paper.total_marks} marks` : ''}
+            </p>
+
+            <div className="flex-1" />
+
+            <div className="mt-4 flex gap-2 border-t border-border pt-3">
+                <button type="button" onClick={() => go('paper')} disabled={busy} className="btn-outline flex-1">
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Paper
+                </button>
+                {paper.has_marking_scheme && (
+                    <button type="button" onClick={() => go('scheme')} disabled={busy} className="btn-outline flex-1">
+                        <ClipboardCheck className="h-4 w-4" />
+                        Scheme
+                    </button>
+                )}
+                {isOwnSet && (
+                    <Link href={`/set?load=${paper.id}`} className="btn-outline px-3" aria-label="Edit this paper">
+                        <PenSquare className="h-4 w-4" />
+                    </Link>
+                )}
+            </div>
+        </article>
+    );
+}
+
+function Empty({
+    title,
+    body,
+    action,
+}: {
+    title: string;
+    body: string;
+    action: { href: string; label: string };
+}) {
+    return (
+        <div className="surface flex flex-col items-center px-6 py-16 text-center">
+            <FileText className="mb-4 h-10 w-10 text-muted-foreground" />
+            <h2 className="text-lg font-bold">{title}</h2>
+            <p className="mt-1.5 max-w-md text-sm text-muted-foreground">{body}</p>
+            <Link href={action.href} className="btn-primary mt-6">
+                {action.label}
+            </Link>
+        </div>
+    );
+}

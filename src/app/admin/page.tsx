@@ -1,306 +1,650 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { createClient } from '@/utils/supabase/client';
-import { formatDisplayName, getInitials } from '@/utils/userUtils';
+import { toast } from 'sonner';
 import {
-    FileQuestion,
+    BadgeCheck,
+    Ban,
     BookOpen,
-    BarChart3,
-    ChevronRight,
-    LogOut,
+    Eye,
+    EyeOff,
+    FileUp,
     Loader2,
-    ArrowLeft,
-    Search,
-    Tag,
-    FileText,
-    Layers
+    Lock,
+    Plus,
+    Receipt,
+    Tags,
+    Trash2,
+    Users,
 } from 'lucide-react';
+import TopNav from '@/components/shell/TopNav';
+import { ROLE_LABELS, useRole, type Role } from '@/lib/roles';
+import { examTypeName, formatPrice } from '@/lib/catalog';
+import type { Order, PaperListing } from '@/types/shop';
 
-const adminModules = [
-    {
-        title: 'Question Bank',
-        description: 'Choose the content and composition for your question bank.',
-        href: '/admin/questions',
-        icon: FileQuestion,
-        gradient: 'from-[#FF6B35]/20 to-[#FF8C5A]/10',
-        iconBg: 'from-[#FF6B35] to-[#FF8C5A]',
-    },
-    {
-        title: 'Topics & Strands',
-        description: 'Manage your data with research-backed topics & strands.',
-        href: '/admin/topics',
-        icon: Tag,
-        gradient: 'from-[#00D9FF]/20 to-[#00B8E6]/10',
-        iconBg: 'from-[#00D9FF] to-[#00B8E6]',
-    },
-    {
-        title: 'Exam Builder',
-        description: 'Create your exam for seamless flow and exam builder.',
-        href: '/admin/templates',
-        icon: Layers,
-        gradient: 'from-[#8B5CF6]/20 to-[#A78BFA]/10',
-        iconBg: 'from-[#8B5CF6] to-[#A78BFA]',
-    },
-    {
-        title: 'Analytics',
-        description: 'Manage your analytics and gain insights on performance.',
-        href: '/admin/analytics',
-        icon: BarChart3,
-        gradient: 'from-[#EC4899]/20 to-[#F472B6]/10',
-        iconBg: 'from-[#EC4899] to-[#F472B6]',
-        disabled: true,
-    },
-];
+type Tab = 'payments' | 'catalog' | 'team';
 
+interface TeamMember {
+    id: string;
+    email: string;
+    full_name?: string;
+    role: Role;
+    created_at: string;
+}
+
+interface Summary {
+    paid_orders: number;
+    pending_orders: number;
+    revenue_cents: number;
+    papers_published: number;
+    papers_sold: number;
+}
+
+/**
+ * ADMIN CONSOLE
+ *
+ * Everything needed to run the shop: confirm the payments that came in by
+ * paybill, manage what is listed and at what price, and appoint the admins who
+ * upload papers. Owner-only actions are gated in the UI and again in the
+ * database.
+ */
 export default function AdminPage() {
-    const router = useRouter();
-    const [user, setUser] = useState<any>(null);
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
+    const { isAdmin, isOwner, role, ready, signedIn } = useRole();
+    const [tab, setTab] = useState<Tab>('payments');
 
-    useEffect(() => {
-        const supabase = createClient();
-        supabase.auth.getUser().then(({ data }) => {
-            setUser(data.user);
-            setIsLoading(false);
-        });
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [summary, setSummary] = useState<Summary | null>(null);
+    const [papers, setPapers] = useState<PaperListing[]>([]);
+    const [team, setTeam] = useState<TeamMember[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [busyId, setBusyId] = useState<string | null>(null);
+
+    const loadPayments = useCallback(async () => {
+        const res = await fetch('/api/admin/orders?status=awaiting_confirmation');
+        const data = await res.json();
+        if (data.error) {
+            toast.error(data.error);
+            return;
+        }
+        setOrders(data.orders || []);
+        setSummary(data.summary || null);
     }, []);
 
-    const handleLogout = async () => {
-        setIsLoggingOut(true);
-        const supabase = createClient();
-        await supabase.auth.signOut();
-        router.push('/auth/login');
-        router.refresh();
+    const loadCatalog = useCallback(async () => {
+        const res = await fetch('/api/admin/papers');
+        const data = await res.json();
+        if (data.error) {
+            toast.error(data.error);
+            return;
+        }
+        setPapers(data.papers || []);
+    }, []);
+
+    const loadTeam = useCallback(async () => {
+        const res = await fetch('/api/admin/team');
+        const data = await res.json();
+        if (data.error) {
+            toast.error(data.error);
+            return;
+        }
+        setTeam(data.team || []);
+    }, []);
+
+    useEffect(() => {
+        if (!ready || !isAdmin) return;
+        setLoading(true);
+        Promise.all([loadPayments(), loadCatalog(), loadTeam()]).finally(() => setLoading(false));
+    }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam]);
+
+    // ------------------------------------------------------------------ actions
+
+    const settleOrder = async (order: Order, action: 'confirm' | 'reject') => {
+        setBusyId(order.id);
+        try {
+            const res = await fetch('/api/admin/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: order.id, action, receipt: order.provider_ref }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Could not update the order');
+                return;
+            }
+            toast.success(data.message);
+            await Promise.all([loadPayments(), loadCatalog()]);
+        } finally {
+            setBusyId(null);
+        }
     };
 
-    if (isLoading) {
+    const togglePublished = async (paper: PaperListing) => {
+        setBusyId(paper.id);
+        try {
+            const res = await fetch(`/api/papers/${paper.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_published: !paper.is_published }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Could not update the paper');
+                return;
+            }
+            setPapers((current) =>
+                current.map((p) => (p.id === paper.id ? { ...p, is_published: !paper.is_published } : p))
+            );
+            toast.success(paper.is_published ? 'Unpublished — hidden from the shop' : 'Published to the shop');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const updatePrice = async (paper: PaperListing, shillings: number) => {
+        const cents = Math.max(0, Math.round(shillings * 100));
+        if (cents === paper.price_cents) return;
+        setBusyId(paper.id);
+        try {
+            const res = await fetch(`/api/papers/${paper.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ price_cents: cents }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Could not update the price');
+                return;
+            }
+            setPapers((current) => current.map((p) => (p.id === paper.id ? { ...p, price_cents: cents } : p)));
+            toast.success(`Now listed at ${formatPrice(cents)}`);
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const deletePaper = async (paper: PaperListing) => {
+        setBusyId(paper.id);
+        try {
+            const res = await fetch(`/api/admin/papers?id=${paper.id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Could not delete the paper');
+                return;
+            }
+            setPapers((current) => current.filter((p) => p.id !== paper.id));
+            toast.success('Paper deleted');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    // ------------------------------------------------------------------- gating
+
+    if (ready && !signedIn) {
         return (
-            <div className="h-screen w-full flex items-center justify-center bg-[#FAFAFA]">
-                <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                    className="w-8 h-8 border-4 border-[#FF6B35] border-t-transparent rounded-full"
-                />
+            <Gate
+                title="Sign in to continue"
+                body="The admin console is for the shop owner and the admins they appoint."
+            />
+        );
+    }
+    if (ready && !isAdmin) {
+        return (
+            <Gate
+                title="You do not have admin access"
+                body="Only the shop owner and admins can upload and price papers. You can still set your own exams and buy papers."
+            />
+        );
+    }
+
+    const tabs: { id: Tab; label: string; count?: number }[] = [
+        { id: 'payments', label: 'Payments', count: orders.length },
+        { id: 'catalog', label: 'Catalog', count: papers.length },
+        { id: 'team', label: 'Team', count: team.length },
+    ];
+
+    return (
+        <div className="min-h-screen bg-background">
+            <TopNav />
+
+            <div className="shell-width py-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Shop admin</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Signed in as {role ? ROLE_LABELS[role] : 'user'}
+                            {isOwner ? ' — you can appoint admins' : ''}
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Link href="/papers/new" className="btn-buy">
+                            <FileUp className="h-4 w-4" />
+                            Upload a paper
+                        </Link>
+                        <Link href="/set" className="btn-outline">
+                            <Plus className="h-4 w-4" />
+                            Set a paper
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Numbers */}
+                {summary && (
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        <Metric label="Revenue" value={formatPrice(summary.revenue_cents)} />
+                        <Metric label="Paid orders" value={summary.paid_orders} />
+                        <Metric label="Awaiting payment" value={summary.pending_orders} accent />
+                        <Metric label="Papers listed" value={summary.papers_published} />
+                        <Metric label="Copies sold" value={summary.papers_sold} />
+                    </div>
+                )}
+
+                {/* Question bank tools */}
+                <div className="mt-6 flex flex-wrap gap-2">
+                    <Link href="/admin/questions" className="chip">
+                        <BookOpen className="h-3.5 w-3.5" />
+                        Question bank
+                    </Link>
+                    <Link href="/admin/topics" className="chip">
+                        <Tags className="h-3.5 w-3.5" />
+                        Topics &amp; strands
+                    </Link>
+                    <Link href="/admin/templates" className="chip">
+                        <Receipt className="h-3.5 w-3.5" />
+                        Paper templates
+                    </Link>
+                </div>
+
+                {/* Tabs */}
+                <div className="mt-6 flex gap-1 border-b border-border">
+                    {tabs.map((t) => (
+                        <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setTab(t.id)}
+                            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+                                tab === t.id
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            {t.label}
+                            {typeof t.count === 'number' && (
+                                <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{t.count}</span>
+                            )}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="mt-6">
+                    {loading ? (
+                        <div className="surface h-40 animate-pulse bg-secondary/60" />
+                    ) : tab === 'payments' ? (
+                        <PaymentsQueue orders={orders} busyId={busyId} onSettle={settleOrder} />
+                    ) : tab === 'catalog' ? (
+                        <CatalogTable
+                            papers={papers}
+                            busyId={busyId}
+                            onTogglePublished={togglePublished}
+                            onUpdatePrice={updatePrice}
+                            onDelete={deletePaper}
+                        />
+                    ) : (
+                        <TeamPanel team={team} isOwner={isOwner} onChanged={loadTeam} />
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+function PaymentsQueue({
+    orders,
+    busyId,
+    onSettle,
+}: {
+    orders: Order[];
+    busyId: string | null;
+    onSettle: (order: Order, action: 'confirm' | 'reject') => void;
+}) {
+    if (orders.length === 0) {
+        return (
+            <div className="surface px-6 py-14 text-center">
+                <BadgeCheck className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
+                <h2 className="font-bold">Nothing waiting</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                    Orders paid by M-Pesa express confirm themselves. Ones paid to the paybill land here for you to
+                    verify.
+                </p>
             </div>
         );
     }
 
-    const displayName = user?.user_metadata?.full_name || formatDisplayName(user?.email);
-
     return (
-        <div className="relative min-h-screen bg-[#FAFAFA] overflow-hidden">
-            {/* Animated Atmospheric Gradients */}
-            <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <motion.div
-                    animate={{
-                        x: [0, 50, 0],
-                        y: [0, 30, 0],
-                        scale: [1, 1.1, 1],
-                    }}
-                    transition={{
-                        duration: 20,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                    }}
-                    className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-gradient-radial from-[#FF6B35]/10 via-[#FF6B35]/5 to-transparent blur-3xl"
-                />
-                <motion.div
-                    animate={{
-                        x: [0, -30, 0],
-                        y: [0, 50, 0],
-                        scale: [1, 1.15, 1],
-                    }}
-                    transition={{
-                        duration: 25,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: 5,
-                    }}
-                    className="absolute -bottom-40 -right-40 w-[700px] h-[700px] rounded-full bg-gradient-radial from-[#00D9FF]/10 via-[#00D9FF]/5 to-transparent blur-3xl"
-                />
-                <motion.div
-                    animate={{
-                        x: [0, 40, 0],
-                        y: [0, -40, 0],
-                    }}
-                    transition={{
-                        duration: 18,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: 2,
-                    }}
-                    className="absolute top-1/3 right-1/4 w-[400px] h-[400px] rounded-full bg-gradient-radial from-[#8B5CF6]/8 via-transparent to-transparent blur-3xl"
-                />
-            </div>
-
-            {/* Glassmorphism Header */}
-            <header className="sticky top-0 z-50 w-full bg-[#FFFFFF80] backdrop-blur-[20px] border-b border-gray-200/50">
-                <div className="max-w-7xl mx-auto px-6 lg:px-8 h-20 flex items-center justify-between">
-                    {/* Left: Back + Title */}
-                    <div className="flex items-center gap-4">
-                        <Link
-                            href="/app"
-                            className="p-2.5 hover:bg-gray-100 rounded-full transition-colors group"
-                        >
-                            <ArrowLeft className="w-5 h-5 text-gray-500 group-hover:text-gray-900 transition-colors" />
-                        </Link>
-                        <span className="text-lg font-semibold text-gray-900 tracking-tight">Admin Console</span>
+        <div className="surface divide-y divide-border">
+            {orders.map((order) => (
+                <div key={order.id} className="flex flex-wrap items-center gap-4 p-4">
+                    <div className="min-w-0 flex-1">
+                        <p className="font-mono text-sm font-bold">{order.reference}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            {order.items?.length ?? 0} paper{(order.items?.length ?? 0) === 1 ? '' : 's'} ·{' '}
+                            {order.phone || 'no phone given'} ·{' '}
+                            {new Date(order.created_at).toLocaleString('en-KE', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                            })}
+                        </p>
+                        {order.items && order.items.length > 0 && (
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                                {order.items.map((i) => i.title).join(', ')}
+                            </p>
+                        )}
                     </div>
 
-                    {/* Center: Search Bar */}
-                    <div className="hidden md:flex flex-1 max-w-md mx-8">
-                        <div className="relative w-full">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-gray-100/80 border-0 rounded-full text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/30 transition-all"
-                            />
-                        </div>
+                    <div className="text-right">
+                        <p className="text-sm font-bold tabular-nums">
+                            {formatPrice(order.total_cents, order.currency)}
+                        </p>
+                        {order.provider_ref && (
+                            <p className="font-mono text-xs text-muted-foreground">{order.provider_ref}</p>
+                        )}
                     </div>
 
-                    {/* Right: Profile + Sign Out */}
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FF6B35] to-[#EC4899] flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#FF6B35]/20">
-                                {getInitials(displayName)}
-                            </div>
-                            <div className="hidden sm:block text-right">
-                                <p className="text-sm font-semibold text-gray-900 leading-none">{displayName}</p>
-                                <p className="text-xs text-[#FF6B35] font-medium mt-0.5">Super Admin</p>
-                            </div>
-                        </div>
-
+                    <div className="flex gap-2">
                         <button
-                            onClick={handleLogout}
-                            disabled={isLoggingOut}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-full transition-all disabled:opacity-50 bg-white/50 hover:bg-white"
+                            type="button"
+                            onClick={() => onSettle(order, 'confirm')}
+                            disabled={busyId === order.id}
+                            className="btn-primary text-xs"
                         >
-                            {isLoggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
-                            <span className="hidden sm:inline">Sign Out</span>
+                            {busyId === order.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <BadgeCheck className="h-3.5 w-3.5" />
+                            )}
+                            Confirm
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onSettle(order, 'reject')}
+                            disabled={busyId === order.id}
+                            className="btn-outline text-xs"
+                        >
+                            <Ban className="h-3.5 w-3.5" />
+                            Reject
                         </button>
                     </div>
                 </div>
-            </header>
+            ))}
+        </div>
+    );
+}
 
-            {/* Main Content */}
-            <main className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 py-16">
-                {/* Hero Section */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="mb-16"
-                >
-                    <h1
-                        className="text-4xl md:text-5xl font-black tracking-tight"
-                        style={{
-                            fontFamily: "'Archivo Black', sans-serif",
-                            background: 'linear-gradient(135deg, #1F2937 0%, #FF6B35 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text',
-                        }}
+// ============================================================================
+// CATALOG
+// ============================================================================
+
+function CatalogTable({
+    papers,
+    busyId,
+    onTogglePublished,
+    onUpdatePrice,
+    onDelete,
+}: {
+    papers: PaperListing[];
+    busyId: string | null;
+    onTogglePublished: (paper: PaperListing) => void;
+    onUpdatePrice: (paper: PaperListing, shillings: number) => void;
+    onDelete: (paper: PaperListing) => void;
+}) {
+    if (papers.length === 0) {
+        return (
+            <div className="surface px-6 py-14 text-center">
+                <FileUp className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
+                <h2 className="font-bold">No papers listed yet</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                    Upload a PDF, or build one in the setter and publish it.
+                </p>
+                <Link href="/papers/new" className="btn-buy mt-5 inline-flex">
+                    <FileUp className="h-4 w-4" />
+                    Upload a paper
+                </Link>
+            </div>
+        );
+    }
+
+    return (
+        <div className="surface divide-y divide-border">
+            {papers.map((paper) => (
+                <div key={paper.id} className="flex flex-wrap items-center gap-3 p-4">
+                    <div className="min-w-0 flex-1">
+                        <Link
+                            href={`/papers/${paper.slug || paper.id}`}
+                            className="block truncate text-sm font-bold hover:text-primary"
+                        >
+                            {paper.title}
+                        </Link>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {[
+                                paper.subject,
+                                paper.grade_label,
+                                examTypeName(paper.exam_type),
+                                paper.year,
+                                paper.has_marking_scheme ? 'with scheme' : null,
+                            ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </p>
+                    </div>
+
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                        {paper.purchase_count} sold · {paper.download_count} downloads
+                    </span>
+
+                    <PriceField paper={paper} disabled={busyId === paper.id} onCommit={onUpdatePrice} />
+
+                    <button
+                        type="button"
+                        onClick={() => onTogglePublished(paper)}
+                        disabled={busyId === paper.id}
+                        className={paper.is_published ? 'btn-outline text-xs' : 'btn-primary text-xs'}
                     >
-                        Welcome back, {displayName.split(' ')[0]}
-                    </h1>
-                    <p
-                        className="text-gray-500 mt-3 text-lg"
-                        style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 400 }}
+                        {paper.is_published ? (
+                            <>
+                                <EyeOff className="h-3.5 w-3.5" />
+                                Unpublish
+                            </>
+                        ) : (
+                            <>
+                                <Eye className="h-3.5 w-3.5" />
+                                Publish
+                            </>
+                        )}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => onDelete(paper)}
+                        disabled={busyId === paper.id}
+                        className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`Delete ${paper.title}`}
                     >
-                        What would you like to manage today?
-                    </p>
-                </motion.div>
-
-                {/* Module Grid - 4 columns on desktop */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <AnimatePresence>
-                        {adminModules.map((module, index) => (
-                            <motion.div
-                                key={module.title}
-                                initial={{ opacity: 0, y: 30 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.4, delay: index * 0.1 }}
-                            >
-                                <Link
-                                    href={module.disabled ? '#' : module.href}
-                                    onClick={(e) => module.disabled && e.preventDefault()}
-                                    className={`group relative block h-full bg-white rounded-xl p-5 transition-all duration-300 ${module.disabled
-                                        ? 'cursor-not-allowed opacity-60'
-                                        : 'hover:-translate-y-1.5 hover:shadow-xl'
-                                        }`}
-                                    style={{
-                                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                                        borderRadius: '12px',
-                                    }}
-                                >
-                                    {/* Icon Container */}
-                                    <div
-                                        className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${module.iconBg} flex items-center justify-center text-white mb-5 transition-transform duration-300 ${!module.disabled ? 'group-hover:rotate-[15deg]' : ''
-                                            }`}
-                                        style={{
-                                            boxShadow: `0 8px 20px -4px ${module.iconBg.includes('FF6B35') ? 'rgba(255,107,53,0.3)' :
-                                                module.iconBg.includes('00D9FF') ? 'rgba(0,217,255,0.3)' :
-                                                    module.iconBg.includes('8B5CF6') ? 'rgba(139,92,246,0.3)' :
-                                                        'rgba(236,72,153,0.3)'}`
-                                        }}
-                                    >
-                                        <module.icon className="w-7 h-7" />
-                                    </div>
-
-                                    {/* Title */}
-                                    <h3
-                                        className="text-lg font-bold text-gray-900 mb-2"
-                                        style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}
-                                    >
-                                        {module.title}
-                                    </h3>
-
-                                    {/* Description - 2 lines */}
-                                    <p
-                                        className="text-gray-500 text-sm leading-relaxed line-clamp-2 mb-4"
-                                        style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 300 }}
-                                    >
-                                        {module.description}
-                                    </p>
-
-                                    {/* Explore Link */}
-                                    {!module.disabled ? (
-                                        <div className="flex items-center justify-end">
-                                            <span
-                                                className="text-sm font-medium text-gray-400 group-hover:text-[#FF6B35] transition-colors flex items-center gap-1"
-                                                style={{ fontFamily: "'Outfit', sans-serif" }}
-                                            >
-                                                Explore
-                                                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center justify-end">
-                                            <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
-                                                Coming Soon
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    {/* Subtle gradient overlay on hover */}
-                                    <div
-                                        className={`absolute inset-0 rounded-xl bg-gradient-to-br ${module.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`}
-                                    />
-                                </Link>
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
+                        <Trash2 className="h-4 w-4" />
+                    </button>
                 </div>
-            </main>
+            ))}
+        </div>
+    );
+}
+
+/** Inline price editing — the field an admin touches most often. */
+function PriceField({
+    paper,
+    disabled,
+    onCommit,
+}: {
+    paper: PaperListing;
+    disabled: boolean;
+    onCommit: (paper: PaperListing, shillings: number) => void;
+}) {
+    const [value, setValue] = useState(String(paper.price_cents / 100));
+
+    return (
+        <label className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">KES</span>
+            <input
+                type="number"
+                min={0}
+                step={10}
+                value={value}
+                disabled={disabled}
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={() => onCommit(paper, Number(value) || 0)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                }}
+                className="field w-24 py-1.5 text-right tabular-nums"
+                aria-label={`Price for ${paper.title}`}
+            />
+        </label>
+    );
+}
+
+// ============================================================================
+// TEAM
+// ============================================================================
+
+function TeamPanel({
+    team,
+    isOwner,
+    onChanged,
+}: {
+    team: TeamMember[];
+    isOwner: boolean;
+    onChanged: () => void;
+}) {
+    const [email, setEmail] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const setRole = async (targetEmail: string, role: 'admin' | 'user') => {
+        setBusy(true);
+        try {
+            const res = await fetch('/api/admin/team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: targetEmail, role }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Could not update the role');
+                return;
+            }
+            toast.success(data.message);
+            setEmail('');
+            onChanged();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {isOwner && (
+                <div className="surface p-5">
+                    <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
+                        Appoint an admin
+                    </h2>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                        Admins upload papers, set prices, publish and confirm payments. They need an account here
+                        already.
+                    </p>
+                    <div className="mt-4 flex gap-2">
+                        <input
+                            type="email"
+                            className="field"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="teacher@school.ac.ke"
+                            aria-label="Email of the person to make an admin"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setRole(email, 'admin')}
+                            disabled={busy || !email.includes('@')}
+                            className="btn-primary shrink-0"
+                        >
+                            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                            Make admin
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div className="surface divide-y divide-border">
+                {team.map((member) => (
+                    <div key={member.id} className="flex items-center gap-4 p-4">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                            {(member.full_name || member.email || '?').slice(0, 2).toUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{member.full_name || member.email}</p>
+                            <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                        </div>
+                        <span className="badge-soft">{ROLE_LABELS[member.role]}</span>
+                        {isOwner && member.role === 'admin' && (
+                            <button
+                                type="button"
+                                onClick={() => setRole(member.email, 'user')}
+                                disabled={busy}
+                                className="btn-outline text-xs"
+                            >
+                                Remove access
+                            </button>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ============================================================================
+// SHARED
+// ============================================================================
+
+function Metric({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
+    return (
+        <div className={`surface p-4 ${accent ? 'border-accent/40 bg-accent/5' : ''}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="mt-1 text-xl font-black tabular-nums">{value}</p>
+        </div>
+    );
+}
+
+function Gate({ title, body }: { title: string; body: string }) {
+    return (
+        <div className="min-h-screen bg-background">
+            <TopNav />
+            <div className="shell-width py-20 text-center">
+                <Lock className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
+                <h1 className="text-xl font-bold">{title}</h1>
+                <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{body}</p>
+                <div className="mt-6 flex justify-center gap-2">
+                    <Link href="/" className="btn-primary">
+                        Browse papers
+                    </Link>
+                    <Link href="/set" className="btn-outline">
+                        Set an exam
+                    </Link>
+                </div>
+            </div>
         </div>
     );
 }

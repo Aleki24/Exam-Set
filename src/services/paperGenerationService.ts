@@ -97,16 +97,20 @@ async function fetchQuestionsForSection(
         }
     }
 
-    // Exclude already used questions in this paper
+    // Exclude already used questions in this paper. UUIDs are quoted because an
+    // unquoted PostgREST `in` list breaks on any value it cannot parse cleanly.
     if (excludeIds.length > 0) {
-        query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+        const quoted = excludeIds.map(id => `"${id}"`).join(',');
+        query = query.not('id', 'in', `(${quoted})`);
     }
 
     // Order by usage count to prefer less-used questions
     query = query.order('usage_count', { ascending: true });
 
-    // Get more questions than needed for better randomization
-    const fetchLimit = Math.max(section.question_count * 3, 20);
+    // Pull a generous pool so randomisation has room to work. Sections asking
+    // for many questions previously hit the old flat ceiling and came back
+    // short, which is what made large papers impossible to generate.
+    const fetchLimit = Math.max(section.question_count * 5, 100);
     query = query.limit(fetchLimit);
 
     const { data, error } = await query;
@@ -171,22 +175,28 @@ export async function generatePaper(
             usedQuestionIds
         );
 
-        // Shuffle the available questions
-        let shuffledQuestions = shuffleArray(availableQuestions);
+        // Draw from a shuffled pool, skipping anything already placed in an
+        // earlier section of this same paper.
+        const pool = shuffleArray(availableQuestions).filter(q => !usedQuestionIds.includes(q.id));
 
-        // Select required number of questions
-        const selectedQuestions = shuffledQuestions.slice(0, sectionConfig.question_count);
+        let selectedQuestions = pool.slice(0, sectionConfig.question_count);
 
-        // If shuffle_within_sections is enabled, shuffle again for final order
+        // Order within the section. Without this reassignment the shuffle was
+        // computed and thrown away, so `shuffle_within_sections` did nothing.
         if (template.shuffle_within_sections) {
-            shuffledQuestions = shuffleArray(selectedQuestions);
+            selectedQuestions = shuffleArray(selectedQuestions);
         }
 
         // Track used IDs
         selectedQuestions.forEach(q => usedQuestionIds.push(q.id));
 
-        // Calculate section marks
-        const sectionMarks = selectedQuestions.length * sectionConfig.marks_per_question;
+        // Section marks come from the questions actually drawn. Multiplying the
+        // requested count by marks_per_question overstated the total whenever a
+        // section came back short or held questions of differing weight.
+        const sectionMarks = selectedQuestions.reduce((sum, q) => {
+            const subPartMarks = (q.subParts || []).reduce((s, p) => s + (Number(p.marks) || 0), 0);
+            return sum + (subPartMarks > 0 ? subPartMarks : Number(q.marks) || sectionConfig.marks_per_question);
+        }, 0);
 
         generatedSections.push({
             section_label: sectionConfig.section_label,
@@ -238,12 +248,53 @@ export async function generatePaperWithFallback(
         }
     });
 
-    if (missingQuestions.length > 0) {
-        console.warn('Some sections have fewer questions than expected:', missingQuestions);
-        // In a production system, you might want to:
-        // 1. Try fetching with relaxed criteria
-        // 2. Log this for the admin to add more questions
-        // 3. Return a warning to the user
+    if (missingQuestions.length === 0) return paper;
+
+    // Second pass: refill the short sections with the section-type and topic
+    // constraints dropped, keeping only subject/grade. A paper that is a few
+    // questions light is more useful than one that silently comes back short.
+    const supabase = createClient();
+    const alreadyUsed = new Set(paper.sections.flatMap(s => s.questions.map(q => q.id)));
+
+    for (const { sectionIndex, missing } of missingQuestions) {
+        const section = paper.sections[sectionIndex];
+        const config = paper.template.sections[sectionIndex];
+
+        let query = supabase.from('questions').select('*').order('usage_count', { ascending: true });
+
+        const subjectId = options.subjectId || paper.template.subject_id;
+        const gradeId = options.gradeId || paper.template.grade_id;
+        if (subjectId) query = query.eq('subject_id', subjectId);
+        if (gradeId) query = query.eq('grade_id', gradeId);
+
+        const { data } = await query.limit(missing * 5 + 50);
+        const replacements = shuffleArray(data || [])
+            .filter(q => !alreadyUsed.has(q.id))
+            .slice(0, missing);
+
+        if (replacements.length === 0) continue;
+
+        replacements.forEach(q => alreadyUsed.add(q.id));
+        section.questions = section.questions.concat(replacements);
+        section.section_marks += replacements.reduce(
+            (sum, q) => sum + (Number(q.marks) || config.marks_per_question),
+            0
+        );
+        paper.usedQuestionIds.push(...replacements.map(q => q.id));
+    }
+
+    // Recompute the paper totals after refilling.
+    paper.totalMarks = paper.sections.reduce((sum, s) => sum + s.section_marks, 0);
+    paper.totalQuestions = paper.sections.reduce((sum, s) => sum + s.questions.length, 0);
+
+    const stillShort = paper.sections.filter(
+        (s, i) => s.questions.length < (paper.template.sections[i]?.question_count || 0)
+    );
+    if (stillShort.length > 0) {
+        console.warn(
+            'Question bank is too small to fill every section:',
+            stillShort.map(s => `${s.section_label} (${s.questions.length} questions)`)
+        );
     }
 
     return paper;

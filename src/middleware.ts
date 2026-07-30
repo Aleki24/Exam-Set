@@ -39,27 +39,34 @@ export async function middleware(request: NextRequest) {
             }
         )
 
-        // Protected routes - require authentication
-        const isProtectedRoute = pathname.startsWith('/app') || pathname.startsWith('/admin')
+        // The shop (/ and /papers) and the setter (/set) are open to everyone —
+        // browsing is how the platform sells. Only the pages tied to a specific
+        // account need a session.
+        const isProtectedRoute =
+            pathname.startsWith('/library') ||
+            pathname.startsWith('/admin') ||
+            pathname.startsWith('/exam/')
 
         if (isProtectedRoute) {
             const supabase = createSupabase()
             const { data: { user } } = await supabase.auth.getUser()
 
             if (!user) {
-                // Not logged in - redirect to home page (landing)
-                return NextResponse.redirect(new URL('/', request.url))
+                // Send them to sign in, then straight back to where they were.
+                const login = new URL('/auth/login', request.url)
+                login.searchParams.set('next', pathname)
+                return NextResponse.redirect(login)
             }
         }
 
-        // Redirect authenticated users away from auth pages to main app
+        // Signed-in users have no business on the auth pages.
         if (pathname.startsWith('/auth') && !pathname.includes('/callback')) {
             const supabase = createSupabase()
             const { data: { user } } = await supabase.auth.getUser()
 
             if (user) {
-                // Already logged in - redirect to main app
-                return NextResponse.redirect(new URL('/app', request.url))
+                const next = request.nextUrl.searchParams.get('next')
+                return NextResponse.redirect(new URL(next && next.startsWith('/') ? next : '/', request.url))
             }
         }
 

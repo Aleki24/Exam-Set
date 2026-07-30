@@ -1,13 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Mail, Lock, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Only same-site paths are honoured, so a crafted ?next= cannot bounce
+    // someone off to another host after they sign in.
+    const nextParam = searchParams.get('next');
+    const next = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/';
+
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -21,127 +28,124 @@ export default function LoginPage() {
 
         try {
             const supabase = createClient();
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
+            const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
-            if (error) {
-                setError(error.message);
+            if (signInError) {
+                setError(signInError.message);
                 return;
             }
 
-            // Redirect to app on success
-            router.push('/app');
+            router.push(next);
             router.refresh();
-        } catch (err: any) {
-            setError(err.message || 'An error occurred');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 px-4">
-            <div className="w-full max-w-md">
-                {/* Logo/Title */}
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2">MaarifaExams</h1>
-                    <p className="text-blue-200/70">Sign in to access your account</p>
+        <form onSubmit={handleLogin} className="space-y-4">
+            {error && (
+                <div
+                    role="alert"
+                    className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            <div>
+                <label className="label" htmlFor="login-email">
+                    Email
+                </label>
+                <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                        id="login-email"
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="you@school.ac.ke"
+                        className="field pl-9"
+                    />
+                </div>
+            </div>
+
+            <div>
+                <label className="label" htmlFor="login-password">
+                    Password
+                </label>
+                <div className="relative">
+                    <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                        id="login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        placeholder="Your password"
+                        className="field pl-9 pr-10"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" disabled={isLoading} className="btn-primary w-full">
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isLoading ? 'Signing in…' : 'Sign in'}
+            </button>
+
+            <p className="pt-2 text-center text-sm text-muted-foreground">
+                New here?{' '}
+                <Link
+                    href={`/auth/signup${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`}
+                    className="font-semibold text-primary hover:underline"
+                >
+                    Create an account
+                </Link>
+            </p>
+        </form>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
+            <div className="w-full max-w-sm">
+                <Link href="/" className="mb-8 flex flex-col items-center gap-3">
+                    <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-sm font-black text-primary-foreground">
+                        MX
+                    </span>
+                    <span className="text-center">
+                        <span className="block text-lg font-bold tracking-tight">Maarifa Exams</span>
+                        <span className="block text-xs text-muted-foreground">
+                            Buy CBE exam papers, or set your own
+                        </span>
+                    </span>
+                </Link>
+
+                <div className="surface p-6">
+                    <h1 className="mb-5 text-lg font-bold">Sign in</h1>
+                    <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-secondary/60" />}>
+                        <LoginForm />
+                    </Suspense>
                 </div>
 
-                {/* Login Card */}
-                <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/20">
-                    <h2 className="text-2xl font-semibold text-white mb-6">Welcome back</h2>
-
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-200">
-                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                            <span className="text-sm">{error}</span>
-                        </div>
-                    )}
-
-                    <form onSubmit={handleLogin} className="space-y-5">
-                        {/* Email */}
-                        <div>
-                            <label className="block text-sm font-medium text-blue-100 mb-2">
-                                Email
-                            </label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-300/50" />
-                                <input
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    placeholder="you@example.com"
-                                    className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-200/50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Password */}
-                        <div>
-                            <label className="block text-sm font-medium text-blue-100 mb-2">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-300/50" />
-                                <input
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    placeholder="••••••••"
-                                    className="w-full pl-11 pr-12 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-200/50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300/50 hover:text-blue-200"
-                                >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Submit */}
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Signing in...
-                                </>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
-                    </form>
-
-                    {/* Divider */}
-                    <div className="my-6 flex items-center">
-                        <div className="flex-1 border-t border-white/20"></div>
-                        <span className="px-4 text-sm text-blue-200/50">or</span>
-                        <div className="flex-1 border-t border-white/20"></div>
-                    </div>
-
-                    {/* Sign Up Link */}
-                    <p className="text-center text-blue-200/70">
-                        Don't have an account?{' '}
-                        <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300 font-medium">
-                            Sign up
-                        </Link>
-                    </p>
-                </div>
-
-                {/* Back to home */}
-                <p className="text-center mt-6">
-                    <Link href="/" className="text-blue-300/70 hover:text-blue-200 text-sm">
-                        ← Back to home
+                <p className="mt-6 text-center">
+                    <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+                        ← Back to the paper shop
                     </Link>
                 </p>
             </div>
