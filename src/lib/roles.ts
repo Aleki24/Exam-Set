@@ -26,17 +26,32 @@ export interface RoleState {
     isAdmin: boolean;
     isOwner: boolean;
     email: string | null;
+    /**
+     * The session looks signed in but the database will not answer for it —
+     * an expired or invalidated token.
+     *
+     * This is worth its own flag because of how it presents: `getUser()` reads a
+     * cached user and happily returns one, so the navigation shows a name and a
+     * "Sign out" button, while every authenticated query quietly comes back
+     * empty. An owner is then indistinguishable from a signed-out stranger —
+     * the admin links vanish and the site looks like it demoted them, with
+     * nothing on screen explaining why.
+     */
+    staleSession: boolean;
 }
 
+const SIGNED_OUT: RoleState = {
+    role: null,
+    ready: true,
+    signedIn: false,
+    isAdmin: false,
+    isOwner: false,
+    email: null,
+    staleSession: false,
+};
+
 export function useRole(): RoleState {
-    const [state, setState] = useState<RoleState>({
-        role: null,
-        ready: false,
-        signedIn: false,
-        isAdmin: false,
-        isOwner: false,
-        email: null,
-    });
+    const [state, setState] = useState<RoleState>({ ...SIGNED_OUT, ready: false });
 
     useEffect(() => {
         let cancelled = false;
@@ -50,34 +65,48 @@ export function useRole(): RoleState {
             supabase = createClient();
         } catch (err) {
             console.error('Roles unavailable:', err instanceof Error ? err.message : err);
-            setState({ role: null, ready: true, signedIn: false, isAdmin: false, isOwner: false, email: null });
+            setState(SIGNED_OUT);
             return;
         }
 
         const load = async () => {
-            const { data: auth } = await supabase.auth.getUser();
+            const { data: auth, error: authError } = await supabase.auth.getUser();
             if (cancelled) return;
 
-            if (!auth?.user) {
-                setState({
-                    role: null,
-                    ready: true,
-                    signedIn: false,
-                    isAdmin: false,
-                    isOwner: false,
-                    email: null,
-                });
+            if (authError || !auth?.user) {
+                setState(SIGNED_OUT);
                 return;
             }
 
-            const { data: profile } = await supabase
+            const { data: profile, error } = await supabase
                 .from('profiles')
                 .select('role')
                 .eq('id', auth.user.id)
                 .maybeSingle();
 
             if (cancelled) return;
-            const role = (profile?.role as Role) ?? 'user';
+
+            // Every account gets a profile row from a trigger at signup. So if
+            // the row cannot be seen, the row is not the problem — the request
+            // was not authenticated as far as the database was concerned. Saying
+            // "you are a plain user" here is the wrong answer and an actively
+            // misleading one: it silently strips an owner of every admin surface
+            // and gives them no way to tell why.
+            if (error || !profile) {
+                if (error) console.error('Role lookup failed:', error.message);
+                setState({
+                    role: null,
+                    ready: true,
+                    signedIn: true,
+                    isAdmin: false,
+                    isOwner: false,
+                    email: auth.user.email ?? null,
+                    staleSession: true,
+                });
+                return;
+            }
+
+            const role = profile.role as Role;
             setState({
                 role,
                 ready: true,
@@ -85,6 +114,7 @@ export function useRole(): RoleState {
                 isAdmin: role === 'admin' || role === 'owner',
                 isOwner: role === 'owner',
                 email: auth.user.email ?? null,
+                staleSession: false,
             });
         };
 

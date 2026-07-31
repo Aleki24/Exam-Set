@@ -15,7 +15,7 @@ import { EXAM_TYPES, EXAM_TYPE_GROUPS, LEVELS, TERMS, catalogYears, formatPrice 
  */
 export default function UploadPaperPage() {
     const router = useRouter();
-    const { isAdmin, ready, signedIn } = useRole();
+    const { isAdmin, ready, signedIn, staleSession } = useRole();
 
     const paperInput = useRef<HTMLInputElement>(null);
     const schemeInput = useRef<HTMLInputElement>(null);
@@ -94,6 +94,31 @@ export default function UploadPaperPage() {
             setUploading(false);
         }
     };
+
+    // An expired session and a genuine lack of permission both arrive here as
+    // `!isAdmin`, but they need opposite advice. Telling an owner whose token
+    // lapsed that "selling is for admins" sends them looking for a permissions
+    // problem that does not exist.
+    if (ready && signedIn && staleSession) {
+        return (
+            <div className="min-h-screen bg-background">
+                <TopNav />
+                <div className="shell-width py-20 text-center">
+                    <Lock className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
+                    <h1 className="title-1">Your session has expired</h1>
+                    <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                        You are still signed in on this device, but the server no longer accepts the session, so
+                        it cannot confirm your account. Sign in again and this page will open normally.
+                    </p>
+                    <div className="mt-6 flex justify-center gap-2">
+                        <Link href="/auth/login?next=/papers/new" className="btn-primary">
+                            Sign in again
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (ready && signedIn && !isAdmin) {
         return (

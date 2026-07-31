@@ -26,11 +26,12 @@ export default function TopNav() {
     const router = useRouter();
     const { count, totals } = useCart();
     const { theme, setTheme } = useTheme();
-    const { isAdmin } = useRole();
+    const { isAdmin, staleSession } = useRole();
     const [email, setEmail] = useState<string | null>(null);
     const [name, setName] = useState<string | null>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [signingOut, setSigningOut] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -50,10 +51,41 @@ export default function TopNav() {
 
     useEffect(() => setMobileOpen(false), [pathname]);
 
+    /**
+     * Signing out has to work even when the session is already broken — which is
+     * exactly when people reach for it.
+     *
+     * The default `signOut()` calls the server to revoke the refresh token, and
+     * returns an error if that token is already expired or invalid. The old
+     * version awaited that call and did nothing with the result, so on a stale
+     * session the button looked dead: no navigation, no message, still signed
+     * in. Falling back to a local sign-out clears the browser's own copy, which
+     * is the part that actually decides what the user sees.
+     */
     const signOut = async () => {
-        await createClient().auth.signOut();
-        router.push('/');
-        router.refresh();
+        // Close the sheet first. `router.push('/')` from the shop is a no-op, so
+        // waiting on a route change to close it means it never closes.
+        setMobileOpen(false);
+        setSigningOut(true);
+
+        try {
+            const supabase = createClient();
+            const { error } = await supabase.auth.signOut();
+
+            if (error) {
+                console.warn('Global sign-out refused, clearing this device instead:', error.message);
+                await supabase.auth.signOut({ scope: 'local' });
+            }
+        } catch (err) {
+            console.error('Sign-out failed:', err instanceof Error ? err.message : err);
+        } finally {
+            // Whatever the server said, this browser is signed out now.
+            setEmail(null);
+            setName(null);
+            setSigningOut(false);
+            router.push('/');
+            router.refresh();
+        }
     };
 
     return (
@@ -174,6 +206,7 @@ export default function TopNav() {
                         <button
                             type="button"
                             onClick={signOut}
+                            disabled={signingOut}
                             className="btn-icon"
                             aria-label="Sign out"
                         >
@@ -202,6 +235,29 @@ export default function TopNav() {
                     {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </button>
             </div>
+
+            {/* A session the database will not answer for. Without this the site
+                simply behaves as though the account were an ordinary user, which
+                is the most confusing possible failure for an owner: the admin
+                links are gone and nothing says why. */}
+            {staleSession && (
+                <div className="border-t border-amber-500/30 bg-amber-500/10">
+                    <div className="shell-width flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-xs">
+                        <span className="font-semibold">Your session has expired.</span>
+                        <span className="text-muted-foreground">
+                            You are seeing the site as a signed-out visitor until you sign in again.
+                        </span>
+                        <button
+                            type="button"
+                            onClick={signOut}
+                            disabled={signingOut}
+                            className="font-semibold text-primary underline underline-offset-2 disabled:opacity-60"
+                        >
+                            {signingOut ? 'Signing out…' : 'Sign in again'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Mobile sheet */}
             {mobileOpen && (
@@ -245,10 +301,11 @@ export default function TopNav() {
                                 <button
                                     type="button"
                                     onClick={signOut}
-                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold text-muted-foreground hover:bg-secondary"
+                                    disabled={signingOut}
+                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold text-muted-foreground hover:bg-secondary disabled:opacity-60"
                                 >
                                     <LogOut className="h-4 w-4" />
-                                    Sign out
+                                    {signingOut ? 'Signing out…' : 'Sign out'}
                                 </button>
                             </>
                         ) : (
