@@ -29,14 +29,34 @@ export function publicSupabase() {
     }
 }
 
-/** The site's public origin, used for canonical URLs and the sitemap. */
+/**
+ * The site's public origin, used for canonical URLs, the sitemap, and the M-Pesa
+ * callback Safaricom posts back to.
+ *
+ * Falling through to localhost is not harmless. A sitemap full of
+ * `http://localhost:3000` tells Google the site has no real pages, and the same
+ * value builds the payment callback URL — so a wrong answer here quietly costs
+ * both search traffic and completed payments. `siteUrlIsReal()` exists so the
+ * health check can say so out loud rather than leaving it to be discovered.
+ */
 export function siteUrl(): string {
     const configured = process.env.NEXT_PUBLIC_BASE_URL;
-    if (configured) return configured.replace(/\/$/, '');
-    // Vercel sets this on every deployment, so the sitemap still works before
-    // anyone remembers to set a base URL.
+    if (configured) return configured.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+
+    // Vercel's system variables, when the project exposes them. The production
+    // domain is preferred: VERCEL_URL is the per-deployment URL, which changes
+    // on every push and is useless as a canonical.
     if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
         return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
     }
+    if (process.env.VERCEL_URL) {
+        return `https://${process.env.VERCEL_URL}`;
+    }
+
     return 'http://localhost:3000';
+}
+
+/** False when nothing is configured and the origin fell back to localhost. */
+export function siteUrlIsReal(): boolean {
+    return !siteUrl().includes('localhost');
 }

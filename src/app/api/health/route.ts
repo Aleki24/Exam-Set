@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { missingSupabaseEnv, supabaseAnonKey, supabaseUrl } from '@/lib/supabaseEnv';
+import { siteUrl, siteUrlIsReal } from '@/lib/publicSupabase';
 
 /**
  * GET /api/health — can this deployment reach its database?
@@ -76,6 +77,17 @@ export async function GET() {
             supabase: 'reachable',
             questionsVisibleToPublic: questions.count ?? 0,
             publishedPapers: papers.count ?? 0,
+            siteUrl: siteUrl(),
+            // Surfaced because the symptoms are indirect and slow: a sitemap
+            // full of localhost URLs, and M-Pesa callbacks posted to a host
+            // Safaricom cannot reach, so payments never settle.
+            ...(siteUrlIsReal()
+                ? {}
+                : {
+                      warning:
+                          'NEXT_PUBLIC_BASE_URL is not set, so the public origin fell back to localhost. ' +
+                          'The sitemap will publish localhost URLs and M-Pesa callbacks will not arrive.',
+                  }),
         });
     } catch (err) {
         return NextResponse.json(
