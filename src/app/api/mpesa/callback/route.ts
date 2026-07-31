@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { deliverAfterPayment } from '@/services/whatsappBot';
 
 /**
  * POST /api/mpesa/callback — Daraja STK push result.
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
 
         const { data: order } = await admin
             .from('orders')
-            .select('id, status, total_cents')
+            .select('id, status, total_cents, channel, wa_phone, plan_slug')
             .eq('provider_request_id', checkoutRequestId)
             .maybeSingle();
 
@@ -83,7 +84,30 @@ export async function POST(req: NextRequest) {
             p_receipt: receipt || null,
             p_payload: payload,
         });
-        if (error) console.error('confirm_order_payment failed:', error.message);
+        if (error) {
+            console.error('confirm_order_payment failed:', error.message);
+            return ack;
+        }
+
+        // An order bought over WhatsApp has to be delivered over WhatsApp. The
+        // buyer never opened the website and has no reason to go looking in a
+        // library they have not seen — from their side they paid and expect the
+        // paper to arrive. Awaited rather than fired and forgotten, because the
+        // function returns as soon as this handler does.
+        if (order.channel === 'whatsapp' && order.wa_phone) {
+            const planName = order.plan_slug
+                ? (await admin.from('subscription_plans').select('name').eq('slug', order.plan_slug).maybeSingle())
+                      .data?.name
+                : undefined;
+
+            await deliverAfterPayment(order.wa_phone, planName).catch((deliveryError) =>
+                // A delivery failure must not un-settle a payment that succeeded.
+                console.error(
+                    'WhatsApp delivery after payment failed:',
+                    deliveryError instanceof Error ? deliveryError.message : deliveryError
+                )
+            );
+        }
 
         return ack;
     } catch (err) {

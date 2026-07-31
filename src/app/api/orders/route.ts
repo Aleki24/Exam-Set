@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { bundleDiscount } from '@/lib/catalog';
 import { getMpesaConfig, normalisePhone, stkPush } from '@/lib/mpesa';
+import { createPlanOrder, makeReference } from '@/services/planOrders';
 
 /**
  * POST /api/orders — turn a cart into an order.
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
         // them apart is what lets the M-Pesa flow, the reference and the admin
         // confirmation queue stay identical for the two kinds of sale.
         if (planSlug) {
-            return createPlanOrder(supabase, userId, planSlug, phoneRaw);
+            return planCheckout(supabase, userId, planSlug, phoneRaw);
         }
 
         if (examIds.length === 0) {
@@ -211,102 +212,25 @@ export async function GET() {
  *
  * Structurally the same transaction as a paper sale — an order, a payment, then
  * the database grants what was bought — so it deliberately reuses the same
- * pieces rather than growing a parallel checkout. The only thing that differs is
- * what gets granted on confirmation, and that decision lives in SQL, in
+ * pieces rather than growing a parallel checkout. The implementation lives in
+ * services/planOrders so the WhatsApp bot can create an identical order without
+ * a user session; the only thing that differs is what gets granted on
+ * confirmation, and that decision lives in SQL, in
  * `activate_subscription_for_order`, where a browser cannot reach it.
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-async function createPlanOrder(supabase: any, userId: string, planSlug: string, phoneRaw: string) {
-    // Priced from the table, never from the request body.
-    const { data: plan, error: planError } = await supabase
-        .from('subscription_plans')
-        .select('slug, name, price_cents, currency, duration_days, is_active')
-        .eq('slug', planSlug)
-        .maybeSingle();
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+async function planCheckout(supabase: any, userId: string, planSlug: string, phoneRaw: string) {
+    const result = await createPlanOrder(supabase, userId, planSlug, phoneRaw, { channel: 'web' });
 
-    if (planError) return NextResponse.json({ error: planError.message }, { status: 500 });
-    if (!plan || !plan.is_active) {
-        return NextResponse.json({ error: 'That plan is not available' }, { status: 400 });
-    }
-
-    const total = plan.price_cents;
-    const reference = makeReference();
-    const mpesaReady = Boolean(getMpesaConfig());
-    const phone = phoneRaw ? normalisePhone(phoneRaw) : null;
-
-    if (total > 0 && mpesaReady && phoneRaw && !phone) {
-        return NextResponse.json({ error: 'Enter a valid Safaricom number, e.g. 0712345678' }, { status: 400 });
-    }
-
-    const provider: 'mpesa' | 'manual' = mpesaReady && phone ? 'mpesa' : 'manual';
-
-    const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-            reference,
-            user_id: userId,
-            status: 'pending',
-            subtotal_cents: total,
-            discount_cents: 0,
-            total_cents: total,
-            currency: plan.currency || 'KES',
-            provider,
-            phone: phone ?? null,
-            plan_slug: plan.slug,
-        })
-        .select()
-        .single();
-
-    if (orderError) {
-        console.error('plan order insert failed:', orderError.message);
-        return NextResponse.json({ error: orderError.message }, { status: 500 });
-    }
-
-    if (provider === 'mpesa' && phone) {
-        try {
-            const push = await stkPush({
-                phone,
-                amountCents: total,
-                reference,
-                description: `${plan.name} subscription`,
-            });
-            await supabase.rpc('attach_payment_attempt', {
-                p_order_id: order.id,
-                p_provider: 'mpesa',
-                p_request_id: push.checkoutRequestId,
-                p_receipt: null,
-                p_phone: phone,
-            });
-
-            return NextResponse.json({
-                order: { ...order, status: 'awaiting_confirmation' },
-                plan,
-                stk: push,
-                message: push.customerMessage,
-            });
-        } catch (pushError) {
-            const message = pushError instanceof Error ? pushError.message : 'M-Pesa request failed';
-            console.error('STK push failed:', message);
-            return NextResponse.json({
-                order: { ...order, provider: 'manual' },
-                plan,
-                fallback: 'manual',
-                message: `${message}. Pay to the paybill and enter your transaction code instead.`,
-            });
-        }
+    if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.error?.includes('not available') ? 400 : 500 });
     }
 
     return NextResponse.json({
-        order,
-        plan,
-        message: 'Pay to the paybill shown, then enter your M-Pesa transaction code.',
+        order: result.order,
+        plan: result.plan,
+        ...(result.stkSent ? {} : { fallback: 'manual' }),
+        message: result.message,
     });
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
-/** Short, human-readable, unguessable enough for an M-Pesa account reference. */
-function makeReference(): string {
-    const stamp = Date.now().toString(36).toUpperCase().slice(-5);
-    const rand = Math.random().toString(36).toUpperCase().slice(2, 6);
-    return `EX${stamp}${rand}`;
-}

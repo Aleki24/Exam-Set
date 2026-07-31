@@ -92,6 +92,7 @@ drafts, or delete the question bank. If you add a policy, check
 | `/admin` | Payments queue, catalog and pricing, team |
 | `/admin/questions`, `/admin/topics`, `/admin/templates` | Question-bank tooling |
 | `/api/health` | Public, unauthenticated: says in one line whether this deployment can reach its database |
+| `/api/whatsapp/webhook` | The WhatsApp bot. Signature-verified; rejects anything Meta did not sign |
 
 ## Getting started
 
@@ -108,6 +109,9 @@ the shop are:
   order items and entitlements
 - `013_roles_and_sellers.sql` — the owner/admin/user roles and who may sell
 - `017_subscriptions.sql` — the all-access pass
+- `020_whatsapp.sql` — bot session state, message dedupe, and the fix that makes
+  `handle_new_user` copy the phone number onto the profile (without it, an
+  account created from a phone can never be found again)
 - `018_lock_down_settlement_functions.sql` — closes EXECUTE on the functions that
   settle payments. Postgres grants EXECUTE to PUBLIC by default and Supabase adds
   `anon`/`authenticated` on top, which left `confirm_order_payment` callable by
@@ -157,6 +161,57 @@ current.
 
 Plans are deliberately not split by subject: it would double the pricing surface
 and the support burden for a catalogue this size.
+
+### The WhatsApp bot
+
+A teacher texts *"form 4 mathematics term 3"* and the PDF comes back. No
+browsing, no account, no checkout — which is the point, because most teachers
+already live in WhatsApp and will not create an account to find out whether you
+have what they need.
+
+Optional. Leave the four `WHATSAPP_*` variables unset and the webhook returns 503
+while the rest of the app carries on unchanged.
+
+**How a request is understood.** `src/services/paperQuery.ts` matches the message
+against the catalog vocabulary — grades, subjects, exam types, terms, years —
+rather than calling a language model. The vocabulary is closed and small, so a
+matcher is instant, free, identical every time, and can say precisely which part
+it did not understand. A model would put a network round trip and a bill in front
+of the most common request on the platform and could still invent a subject that
+is not stocked. Words it does not recognise are dropped rather than passed
+through as a search term, so "i want" and "please" cost nothing.
+
+When several papers match, the bot asks with a list instead of guessing — a wrong
+guess ends with the wrong PDF delivered to someone who paid for it. When nothing
+matches exactly it widens the search one filter at a time (year, then term, then
+exam type) and says what it ignored. Grade and subject are never dropped.
+
+**Paying.** The bot's paid path is the subscription, not single papers. Anything
+free, already owned, or covered by a live plan is sent immediately; anything else
+offers the cheapest plan and pushes an M-Pesa prompt to the same number. Payment
+settles through the existing callback, and the paper the buyer was waiting for is
+delivered on confirmation. Every request after that is instant.
+
+**Identity.** The first purchase silently creates an account for that phone
+number, so the papers are waiting in `/library` if they ever visit the website.
+`can_download_paper` governs chat and web alike, so a paper locked in one is
+locked in the other.
+
+**Security.** The webhook is public and hands out paid PDFs, so it is treated as
+hostile until proven otherwise:
+
+- Every delivery must carry a valid `X-Hub-Signature-256`, checked against the
+  raw bytes with `WHATSAPP_APP_SECRET` before the body is parsed. Re-serialised
+  JSON does not reproduce Meta's bytes and would reject every request, which is
+  why the route reads `req.text()` first.
+- Every message id is claimed in `whatsapp_messages` before it is acted on. Meta
+  retries until it gets a 200, and a retry on a delivery path means a second copy
+  of a paid paper.
+- `whatsapp_sessions` and `whatsapp_messages` have RLS enabled with no policies
+  at all. Only the service role touches them, and it bypasses RLS — so nobody
+  holding the publishable key can read another person's conversation. This is the
+  opposite of the app tables, where RLS without policies would lock users out.
+- 25 messages per number per hour.
 
 ### Paper files
 

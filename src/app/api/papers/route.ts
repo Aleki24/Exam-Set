@@ -4,6 +4,7 @@ import { LEVEL_BY_SLUG } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
 import { requireAdmin } from '@/utils/auth/guards';
 import { toListing } from '@/lib/paperMapper';
+import { applyPaperFilters } from '@/services/paperSearch';
 
 /**
  * GET /api/papers — the shop listing.
@@ -35,21 +36,9 @@ export async function GET(req: NextRequest) {
             .eq('source', 'catalog')
             .eq('is_published', true);
 
-        if (level) query = query.eq('level_slug', level);
-        if (grade) query = query.eq('grade_label', grade);
-        if (subject) query = query.eq('subject', subject);
-        if (examType) query = query.eq('exam_type', examType);
-        if (term) query = query.eq('term_slug', term);
-        if (year) query = query.eq('year', parseInt(year));
-        if (price === 'free') query = query.eq('price_cents', 0);
-        if (price === 'paid') query = query.gt('price_cents', 0);
-        if (search) {
-            // Commas and parentheses would otherwise terminate the `or` filter.
-            const safe = search.replace(/[,()]/g, ' ');
-            query = query.or(
-                `title.ilike.%${safe}%,subject.ilike.%${safe}%,description.ilike.%${safe}%,institution.ilike.%${safe}%`
-            );
-        }
+        // Shared with the WhatsApp bot, so the shop and the chat cannot end up
+        // disagreeing about which papers match a request.
+        query = applyPaperFilters(query, { level, grade, subject, examType, term, year, price, search });
 
         switch (sort) {
             case 'popular':

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { missingSupabaseEnv, supabaseAnonKey, supabaseUrl } from '@/lib/supabaseEnv';
 import { siteUrl, siteUrlIsReal } from '@/lib/publicSupabase';
+import { missingWhatsAppEnv } from '@/lib/whatsapp';
 
 /**
  * GET /api/health — can this deployment reach its database?
@@ -78,6 +79,13 @@ export async function GET() {
             questionsVisibleToPublic: questions.count ?? 0,
             publishedPapers: papers.count ?? 0,
             siteUrl: siteUrl(),
+            // Optional, so a missing WhatsApp config is reported rather than
+            // treated as a fault — but reported by name, since a half-configured
+            // bot fails as a 503 on a webhook nobody is watching.
+            whatsapp: missingWhatsAppEnv().length === 0 ? 'configured' : 'not configured',
+            ...(missingWhatsAppEnv().length > 0 && missingWhatsAppEnv().length < 4
+                ? { whatsappMissing: missingWhatsAppEnv() }
+                : {}),
             // Surfaced because the symptoms are indirect and slow: a sitemap
             // full of localhost URLs, and M-Pesa callbacks posted to a host
             // Safaricom cannot reach, so payments never settle.
