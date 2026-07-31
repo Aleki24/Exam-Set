@@ -62,14 +62,32 @@ export async function middleware(request: NextRequest) {
             }
         }
 
-        // Signed-in users have no business on the auth pages.
+        // Signed-in users have no business on the auth pages — but "signed in"
+        // has to mean a session the server actually accepts.
+        //
+        // The error was previously discarded here, and that turned a stale cookie
+        // into a lockout with no way out: tapping "Sign in" bounced straight back
+        // to the shop, which reads exactly like a button that does not work, and
+        // the one page that could have fixed the session was the page being
+        // redirected away from. Sending someone to sign in is only ever helpful
+        // if they can arrive.
         if (pathname.startsWith('/auth') && !pathname.includes('/callback')) {
             const supabase = createSupabase()
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data, error } = await supabase.auth.getUser()
 
-            if (user) {
+            if (!error && data?.user) {
                 const next = request.nextUrl.searchParams.get('next')
                 return NextResponse.redirect(new URL(next && next.startsWith('/') ? next : '/', request.url))
+            }
+
+            if (error) {
+                // The cookie is present but no longer valid. Let the page render
+                // so they can sign in, and drop the dead cookie on the way so the
+                // next request starts clean.
+                console.warn('Stale session on an auth page, clearing it:', error.message)
+                for (const cookie of request.cookies.getAll()) {
+                    if (cookie.name.startsWith('sb-')) response.cookies.delete(cookie.name)
+                }
             }
         }
 
