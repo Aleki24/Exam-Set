@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, ClipboardCheck, Loader2, ShieldCheck, ShoppingCart, Trash2, Smartphone } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import PaymentPending from '@/components/checkout/PaymentPending';
 import { useCart } from '@/lib/cart';
 import { BUNDLE_TIERS, examTypeName, formatPrice } from '@/lib/catalog';
+import { durationLabel, type SubscriptionPlan } from '@/lib/plans';
 import { createClient } from '@/utils/supabase/client';
 import type { Order } from '@/types/shop';
 
@@ -26,11 +28,26 @@ export default function CartPage() {
     const [order, setOrder] = useState<Order | null>(null);
     const [statusMessage, setStatusMessage] = useState('');
     const [receipt, setReceipt] = useState('');
+    const [cheapestPlan, setCheapestPlan] = useState<SubscriptionPlan | null>(null);
 
     useEffect(() => {
         createClient()
             .auth.getUser()
-            .then(({ data }) => setSignedIn(Boolean(data.user)));
+            .then(({ data }) => setSignedIn(Boolean(data.user)))
+            .catch(() => setSignedIn(false));
+    }, []);
+
+    // Only used to compare against the cart total, so a failure here should
+    // silently mean "no comparison to offer" rather than break checkout.
+    useEffect(() => {
+        fetch('/api/plans')
+            .then((res) => res.json())
+            .then((data) => {
+                const active: SubscriptionPlan[] = data.plans || [];
+                if (data.subscription?.active || active.length === 0) return;
+                setCheapestPlan([...active].sort((a, b) => a.price_cents - b.price_cents)[0]);
+            })
+            .catch(() => {});
     }, []);
 
     // While an M-Pesa prompt is outstanding, poll until the callback settles it.
@@ -244,6 +261,26 @@ export default function CartPage() {
                                 </div>
                             </dl>
 
+                            {/* The one place a pass is obviously the better buy:
+                                the moment the basket costs more than a month of
+                                unlimited access. Shown only when the arithmetic
+                                genuinely favours it, so it reads as help rather
+                                than an upsell. */}
+                            {cheapestPlan && totals.totalCents >= cheapestPlan.price_cents && !order && (
+                                <Link
+                                    href="/plans"
+                                    className="settle-in mt-4 block rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm hover:border-primary/60"
+                                >
+                                    <span className="font-semibold text-primary">
+                                        Every paper for {formatPrice(cheapestPlan.price_cents, cheapestPlan.currency)}
+                                    </span>
+                                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                                        Less than this cart, and it covers {durationLabel(cheapestPlan.duration_days)} of
+                                        the whole catalogue.
+                                    </span>
+                                </Link>
+                            )}
+
                             {/* Payment */}
                             {!order ? (
                                 <div className="mt-5">
@@ -305,76 +342,6 @@ export default function CartPage() {
                             </p>
                         </div>
                     </aside>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-/** Shown between "pay" and "paid": the STK prompt or the paybill fallback. */
-function PaymentPending({
-    order,
-    statusMessage,
-    receipt,
-    setReceipt,
-    onSubmitReceipt,
-    submitting,
-}: {
-    order: Order;
-    statusMessage: string;
-    receipt: string;
-    setReceipt: (v: string) => void;
-    onSubmitReceipt: () => void;
-    submitting: boolean;
-}) {
-    const paybill = process.env.NEXT_PUBLIC_MPESA_PAYBILL;
-    const till = process.env.NEXT_PUBLIC_MPESA_TILL;
-
-    return (
-        <div className="mt-5 space-y-4">
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-                <p className="text-sm font-semibold">Order {order.reference}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    {statusMessage || 'Waiting for payment confirmation…'}
-                </p>
-                {order.status === 'awaiting_confirmation' && order.provider === 'mpesa' && (
-                    <p className="mt-3 flex items-center gap-2 text-xs text-primary">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Enter your M-Pesa PIN on your phone
-                    </p>
-                )}
-            </div>
-
-            {/* Manual fallback: always available, because STK can fail. */}
-            <div className="rounded-lg border border-border p-4">
-                <h3 className="overline">Or pay manually</h3>
-                <ol className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    {(paybill || till) && (
-                        <li>
-                            1. M-Pesa → {paybill ? `Paybill ${paybill}` : `Buy Goods, Till ${till}`}
-                        </li>
-                    )}
-                    <li>{paybill || till ? '2.' : '1.'} Account number: <strong className="text-foreground">{order.reference}</strong></li>
-                    <li>{paybill || till ? '3.' : '2.'} Paste the confirmation code below</li>
-                </ol>
-
-                <div className="mt-3 flex gap-2">
-                    <input
-                        value={receipt}
-                        onChange={(e) => setReceipt(e.target.value.toUpperCase())}
-                        placeholder="SGH4X9ZQ12"
-                        className="field font-mono text-sm uppercase"
-                        maxLength={15}
-                        aria-label="M-Pesa transaction code"
-                    />
-                    <button
-                        type="button"
-                        onClick={onSubmitReceipt}
-                        disabled={submitting || receipt.length < 8}
-                        className="btn-outline shrink-0"
-                    >
-                        Submit
-                    </button>
                 </div>
             </div>
         </div>

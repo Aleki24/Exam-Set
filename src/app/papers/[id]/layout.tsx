@@ -22,17 +22,25 @@ interface Props {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function loadPaper(id: string): Promise<any | null> {
-    const supabase = publicSupabase();
-    if (!supabase) return null;
+    // Never throws. This feeds generateMetadata, which runs during the build, so
+    // a database that is unreachable must cost this page its rich title — not
+    // the entire deployment.
+    try {
+        const supabase = publicSupabase();
+        if (!supabase) return null;
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const { data } = await supabase
-        .from('exams')
-        .select('id, slug, title, description, subject, grade_label, level_slug, exam_type, year, term_slug, total_marks, question_count, time_limit, price_cents, currency, has_marking_scheme, institution, created_at')
-        .eq(isUuid ? 'id' : 'slug', id)
-        .maybeSingle();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        const { data } = await supabase
+            .from('exams')
+            .select('id, slug, title, description, subject, grade_label, level_slug, exam_type, year, term_slug, total_marks, question_count, time_limit, price_cents, currency, has_marking_scheme, institution, created_at')
+            .eq(isUuid ? 'id' : 'slug', id)
+            .maybeSingle();
 
-    return data;
+        return data;
+    } catch (err) {
+        console.error('paper metadata unavailable:', err instanceof Error ? err.message : err);
+        return null;
+    }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 

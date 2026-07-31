@@ -16,9 +16,17 @@ export function publicSupabase() {
     // better outcome than a build that falls over.
     if (!url || !key) return null;
 
-    return createClient(url, key, {
-        auth: { persistSession: false, autoRefreshToken: false },
-    });
+    try {
+        return createClient(url, key, {
+            auth: { persistSession: false, autoRefreshToken: false },
+        });
+    } catch (err) {
+        // The sitemap and the per-paper metadata are prerendered, so anything
+        // thrown here aborts the deployment rather than degrading one page.
+        // Nothing this client does is worth failing a build over.
+        console.error('publicSupabase unavailable:', err instanceof Error ? err.message : err);
+        return null;
+    }
 }
 
 /** The site's public origin, used for canonical URLs and the sitemap. */

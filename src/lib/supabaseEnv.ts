@@ -21,9 +21,36 @@
  * file exists to prevent.
  */
 
-/** The project URL, or undefined if nothing is configured. */
+/**
+ * The project URL — cleaned up, and only returned if it is actually usable.
+ *
+ * A value can be present and still be wrong, and the Supabase client rejects it
+ * with "Invalid supabaseUrl" from deep inside the library. During a build that
+ * aborts the whole deployment on a prerendered page, which is a long way from
+ * the real cause: a pasted environment variable.
+ *
+ * Two things are forgiven, because they are what people actually paste:
+ * surrounding quotes or whitespace, and a bare host with no scheme
+ * (`abc.supabase.co`). Anything still not parseable is treated as not
+ * configured, so callers degrade instead of throwing.
+ */
 export function supabaseUrl(): string | undefined {
-    return process.env.NEXT_PUBLIC_SUPABASE_URL || undefined;
+    const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!raw) return undefined;
+
+    const cleaned = raw.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+    if (!cleaned) return undefined;
+
+    const withScheme = /^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
+
+    try {
+        const parsed = new URL(withScheme);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+        if (!parsed.hostname) return undefined;
+        return withScheme;
+    } catch {
+        return undefined;
+    }
 }
 
 /** The public (anon / publishable) key, under whichever name it was given. */

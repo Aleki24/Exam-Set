@@ -23,6 +23,14 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const examIds: string[] = Array.from(new Set<string>(body.exam_ids || []));
         const phoneRaw: string = body.phone || '';
+        const planSlug: string | null = body.plan_slug || null;
+
+        // An order is either a basket of papers or one plan, never both. Keeping
+        // them apart is what lets the M-Pesa flow, the reference and the admin
+        // confirmation queue stay identical for the two kinds of sale.
+        if (planSlug) {
+            return createPlanOrder(supabase, userId, planSlug, phoneRaw);
+        }
 
         if (examIds.length === 0) {
             return NextResponse.json({ error: 'Your cart is empty' }, { status: 400 });
@@ -197,6 +205,104 @@ export async function GET() {
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }
+
+/**
+ * Selling a subscription.
+ *
+ * Structurally the same transaction as a paper sale — an order, a payment, then
+ * the database grants what was bought — so it deliberately reuses the same
+ * pieces rather than growing a parallel checkout. The only thing that differs is
+ * what gets granted on confirmation, and that decision lives in SQL, in
+ * `activate_subscription_for_order`, where a browser cannot reach it.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function createPlanOrder(supabase: any, userId: string, planSlug: string, phoneRaw: string) {
+    // Priced from the table, never from the request body.
+    const { data: plan, error: planError } = await supabase
+        .from('subscription_plans')
+        .select('slug, name, price_cents, currency, duration_days, is_active')
+        .eq('slug', planSlug)
+        .maybeSingle();
+
+    if (planError) return NextResponse.json({ error: planError.message }, { status: 500 });
+    if (!plan || !plan.is_active) {
+        return NextResponse.json({ error: 'That plan is not available' }, { status: 400 });
+    }
+
+    const total = plan.price_cents;
+    const reference = makeReference();
+    const mpesaReady = Boolean(getMpesaConfig());
+    const phone = phoneRaw ? normalisePhone(phoneRaw) : null;
+
+    if (total > 0 && mpesaReady && phoneRaw && !phone) {
+        return NextResponse.json({ error: 'Enter a valid Safaricom number, e.g. 0712345678' }, { status: 400 });
+    }
+
+    const provider: 'mpesa' | 'manual' = mpesaReady && phone ? 'mpesa' : 'manual';
+
+    const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+            reference,
+            user_id: userId,
+            status: 'pending',
+            subtotal_cents: total,
+            discount_cents: 0,
+            total_cents: total,
+            currency: plan.currency || 'KES',
+            provider,
+            phone: phone ?? null,
+            plan_slug: plan.slug,
+        })
+        .select()
+        .single();
+
+    if (orderError) {
+        console.error('plan order insert failed:', orderError.message);
+        return NextResponse.json({ error: orderError.message }, { status: 500 });
+    }
+
+    if (provider === 'mpesa' && phone) {
+        try {
+            const push = await stkPush({
+                phone,
+                amountCents: total,
+                reference,
+                description: `${plan.name} subscription`,
+            });
+            await supabase.rpc('attach_payment_attempt', {
+                p_order_id: order.id,
+                p_provider: 'mpesa',
+                p_request_id: push.checkoutRequestId,
+                p_receipt: null,
+                p_phone: phone,
+            });
+
+            return NextResponse.json({
+                order: { ...order, status: 'awaiting_confirmation' },
+                plan,
+                stk: push,
+                message: push.customerMessage,
+            });
+        } catch (pushError) {
+            const message = pushError instanceof Error ? pushError.message : 'M-Pesa request failed';
+            console.error('STK push failed:', message);
+            return NextResponse.json({
+                order: { ...order, provider: 'manual' },
+                plan,
+                fallback: 'manual',
+                message: `${message}. Pay to the paybill and enter your transaction code instead.`,
+            });
+        }
+    }
+
+    return NextResponse.json({
+        order,
+        plan,
+        message: 'Pay to the paybill shown, then enter your M-Pesa transaction code.',
+    });
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** Short, human-readable, unguessable enough for an M-Pesa account reference. */
 function makeReference(): string {

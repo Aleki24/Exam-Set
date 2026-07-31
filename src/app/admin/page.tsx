@@ -48,6 +48,8 @@ interface Summary {
     revenue_cents: number;
     papers_published: number;
     papers_sold: number;
+    active_subscribers: number;
+    subscription_revenue_cents: number;
 }
 
 /**
@@ -283,12 +285,21 @@ export default function AdminPage() {
 
                 {/* Numbers */}
                 {summary && (
-                    <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <Metric label="Revenue" value={formatPrice(summary.revenue_cents)} />
                         <Metric label="Paid orders" value={summary.paid_orders} />
                         <Metric label="Awaiting payment" value={summary.pending_orders} accent />
                         <Metric label="Papers listed" value={summary.papers_published} />
                         <Metric label="Copies sold" value={summary.papers_sold} />
+                        {/* Subscription revenue is already counted inside Revenue
+                            above; it is broken out because the two are worth
+                            watching apart — recurring income is the number that
+                            says whether the shop is becoming a business. */}
+                        <Metric label="Subscribers" value={summary.active_subscribers ?? 0} />
+                        <Metric
+                            label="Of that, subscriptions"
+                            value={formatPrice(summary.subscription_revenue_cents ?? 0)}
+                        />
                     </div>
                 )}
 

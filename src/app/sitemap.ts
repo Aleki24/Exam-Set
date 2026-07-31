@@ -20,6 +20,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const staticRoutes: MetadataRoute.Sitemap = [
         { url: base, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
         { url: `${base}/set`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
+        // Worth indexing even though it is not in the navigation: "unlimited
+        // KCSE past papers" is a query people type, and this is the page that
+        // answers it.
+        { url: `${base}/plans`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
     ];
 
     // Level landing pages. These match how people actually search — by the class
@@ -31,30 +35,39 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.7,
     }));
 
-    const supabase = publicSupabase();
-    if (!supabase) return [...staticRoutes, ...levelRoutes];
+    // This route is prerendered at build time, so anything thrown here fails the
+    // whole deployment — a sitemap missing its paper URLs is bad for search, but
+    // a site that will not deploy is worse. Every failure degrades to the static
+    // routes instead.
+    try {
+        const supabase = publicSupabase();
+        if (!supabase) return [...staticRoutes, ...levelRoutes];
 
-    // Row level security limits this to published catalog papers, so a draft can
-    // never end up in the sitemap.
-    const { data, error } = await supabase
-        .from('exams')
-        .select('id, slug, updated_at, created_at')
-        .eq('source', 'catalog')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(5000);
+        // Row level security limits this to published catalog papers, so a draft
+        // can never end up in the sitemap.
+        const { data, error } = await supabase
+            .from('exams')
+            .select('id, slug, updated_at, created_at')
+            .eq('source', 'catalog')
+            .eq('is_published', true)
+            .order('created_at', { ascending: false })
+            .limit(5000);
 
-    if (error) {
-        console.error('sitemap: could not list papers —', error.message);
+        if (error) {
+            console.error('sitemap: could not list papers —', error.message);
+            return [...staticRoutes, ...levelRoutes];
+        }
+
+        const paperRoutes: MetadataRoute.Sitemap = (data || []).map((paper) => ({
+            url: `${base}/papers/${paper.slug || paper.id}`,
+            lastModified: new Date(paper.updated_at || paper.created_at),
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        }));
+
+        return [...staticRoutes, ...levelRoutes, ...paperRoutes];
+    } catch (err) {
+        console.error('sitemap: falling back to static routes —', err instanceof Error ? err.message : err);
         return [...staticRoutes, ...levelRoutes];
     }
-
-    const paperRoutes: MetadataRoute.Sitemap = (data || []).map((paper) => ({
-        url: `${base}/papers/${paper.slug || paper.id}`,
-        lastModified: new Date(paper.updated_at || paper.created_at),
-        changeFrequency: 'monthly' as const,
-        priority: 0.9,
-    }));
-
-    return [...staticRoutes, ...levelRoutes, ...paperRoutes];
 }

@@ -33,13 +33,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         let entitled = isFree || isAuthor;
         if (!entitled && userId) {
-            const { data: ent } = await supabase
-                .from('entitlements')
-                .select('id')
-                .eq('user_id', userId)
-                .eq('exam_id', id)
-                .maybeSingle();
-            entitled = Boolean(ent);
+            // One question, answered in the database: bought it, wrote it, it is
+            // free, or a live subscription covers it. Asking SQL rather than
+            // assembling the answer here means the paywall cannot drift apart
+            // between this route and any other that releases a file.
+            const { data: allowed, error: gateError } = await supabase.rpc('can_download_paper', {
+                p_exam_id: id,
+                p_user_id: userId,
+            });
+
+            if (gateError) {
+                // Never fail open. A gate that cannot be evaluated is a closed gate.
+                console.error('can_download_paper failed:', gateError.message);
+                return NextResponse.json({ error: 'Could not verify access. Please try again.' }, { status: 503 });
+            }
+            entitled = Boolean(allowed);
         }
 
         if (!entitled) {

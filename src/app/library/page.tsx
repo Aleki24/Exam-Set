@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ClipboardCheck, Download, FileText, Loader2, PenSquare, Receipt } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { examTypeName, formatPrice } from '@/lib/catalog';
+import type { SubscriptionStatus } from '@/lib/plans';
 import type { Order, PaperListing } from '@/types/shop';
 
 type Tab = 'purchased' | 'sets' | 'orders';
@@ -31,6 +32,16 @@ export default function LibraryPage() {
     const [tab, setTab] = useState<Tab>('purchased');
     const [data, setData] = useState<LibraryData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+
+    useEffect(() => {
+        // A pass changes what "my papers" means — the list stops being the limit
+        // of what can be opened — so the library has to say whether one is live.
+        fetch('/api/plans')
+            .then((res) => res.json())
+            .then((payload) => setSubscription(payload.subscription ?? { active: false }))
+            .catch(() => setSubscription({ active: false }));
+    }, []);
 
     useEffect(() => {
         fetch('/api/library')
@@ -73,6 +84,28 @@ export default function LibraryPage() {
             <div className="shell-width py-6">
                 <p className="overline mb-2">Your account</p>
                 <h1 className="display-2">My library</h1>
+
+                {subscription?.active ? (
+                    <div className="settle-in mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/5 p-3.5">
+                        <p className="text-sm">
+                            <strong>{subscription.plan_name}</strong> · every paper on the site is yours to
+                            download for another {subscription.days_left} day
+                            {subscription.days_left === 1 ? '' : 's'}.
+                        </p>
+                        <Link href="/plans" className="text-sm font-semibold text-primary hover:underline">
+                            Extend
+                        </Link>
+                    </div>
+                ) : subscription ? (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
+                        <p className="text-sm text-muted-foreground">
+                            Buying several papers a term? One pass covers the whole catalogue.
+                        </p>
+                        <Link href="/plans" className="text-sm font-semibold text-primary hover:underline">
+                            See the plans
+                        </Link>
+                    </div>
+                ) : null}
 
                 <div className="mt-5 flex gap-1 border-b border-border">
                     {tabs.map((t) => (

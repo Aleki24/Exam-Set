@@ -87,9 +87,11 @@ drafts, or delete the question bank. If you add a policy, check
 | `/papers/new` | Upload a paper for sale (admin) |
 | `/set` | The exam setter |
 | `/cart` | Cart and M-Pesa checkout in one page |
+| `/plans` | All-access subscriptions. Deliberately not in the navigation — reached from the cart and the library, where a pass is the better buy |
 | `/library` | Papers you own, papers you set, your receipts |
 | `/admin` | Payments queue, catalog and pricing, team |
 | `/admin/questions`, `/admin/topics`, `/admin/templates` | Question-bank tooling |
+| `/api/health` | Public, unauthenticated: says in one line whether this deployment can reach its database |
 
 ## Getting started
 
@@ -105,9 +107,14 @@ the shop are:
 - `012_paper_shop.sql` — turns `exams` into a sellable catalog and adds orders,
   order items and entitlements
 - `013_roles_and_sellers.sql` — the owner/admin/user roles and who may sell
+- `017_subscriptions.sql` — the all-access pass
+- `018_lock_down_settlement_functions.sql` — closes EXECUTE on the functions that
+  settle payments. Postgres grants EXECUTE to PUBLIC by default and Supabase adds
+  `anon`/`authenticated` on top, which left `confirm_order_payment` callable by
+  any visitor — a complete bypass of the paywall
 
-**Deploying to an existing database?** `supabase/production-setup.sql` is those
-two concatenated in order, ready to paste into the Supabase SQL editor in one go.
+**Deploying to an existing database?** `supabase/production-setup.sql` is all of
+them concatenated in order, ready to paste into the Supabase SQL editor in one go.
 It is safe to re-run. Two things it does that you should know about: every exam
 currently marked `is_public` becomes a published free catalog paper (reprice them
 from `/admin` → Catalog), and the first account to sign up becomes the owner.
@@ -125,10 +132,31 @@ present in the environment:
   shown at checkout, submits their transaction code, and an admin confirms it
   from `/admin` → Payments.
 
-Either way a download is only ever released against a row in `entitlements`, and
-only `confirm_order_payment` / `admin_confirm_order` can create one. A browser
-cannot mark its own order paid: buyers have no `UPDATE` policy on `orders` at
-all.
+Either way a download is only ever released against a row in `entitlements` or a
+live subscription, and only `confirm_order_payment` / `admin_confirm_order` can
+create either. A browser cannot mark its own order paid: buyers have no `UPDATE`
+policy on `orders`, and `EXECUTE` on the settlement functions is restricted to
+the service role.
+
+### Subscriptions
+
+An all-access pass, sold through the same orders table and the same M-Pesa flow
+as a single paper — an order carries *either* a basket of papers or one
+`plan_slug`, never both. Prices live in the `subscription_plans` table rather
+than in code, so they can change without a deploy.
+
+Access is decided in one place, `can_download_paper(exam_id, user_id)`: free
+papers, papers you wrote, papers you bought, or a live subscription. Every route
+that releases a file asks that one question, so the paywall cannot drift apart
+between them.
+
+Renewing while a pass is still running extends it from the current expiry rather
+than from today, so paying early never costs days. Nothing runs on a schedule, so
+every check reads `expires_at` instead of trusting the `status` column to be
+current.
+
+Plans are deliberately not split by subject: it would double the pricing surface
+and the support burden for a catalogue this size.
 
 ### Paper files
 
