@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
-import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 
 function LoginForm() {
     const router = useRouter();
@@ -20,11 +20,19 @@ function LoginForm() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    // A failed confirmation link redirects here with the reason attached, so the
+    // page opens already showing what went wrong.
+    const [error, setError] = useState<string | null>(searchParams.get('error'));
+    // Set when the account exists but was never confirmed, which is a dead end
+    // unless we offer a way out of it.
+    const [needsConfirmation, setNeedsConfirmation] = useState(false);
+    const [resent, setResent] = useState(false);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setNeedsConfirmation(false);
+        setResent(false);
         setIsLoading(true);
 
         try {
@@ -32,7 +40,13 @@ function LoginForm() {
             const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
             if (signInError) {
-                setError(signInError.message);
+                const unconfirmed = signInError.message.toLowerCase().includes('not confirmed');
+                setNeedsConfirmation(unconfirmed);
+                setError(
+                    unconfirmed
+                        ? 'This account has not been confirmed yet. Check your inbox for the link, or send it again below.'
+                        : signInError.message
+                );
                 return;
             }
 
@@ -45,15 +59,60 @@ function LoginForm() {
         }
     };
 
+    const resendConfirmation = async () => {
+        setIsLoading(true);
+        try {
+            const supabase = createClient();
+            const { error: resendError } = await supabase.auth.resend({
+                type: 'signup',
+                email,
+                options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+            });
+            if (resendError) {
+                setError(resendError.message);
+                return;
+            }
+            setResent(true);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not send the email. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <form onSubmit={handleLogin} className="space-y-4">
             {error && (
                 <div
                     role="alert"
-                    className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                    className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
                 >
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{error}</span>
+                    <div className="flex items-start gap-2.5">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{error}</span>
+                    </div>
+                    {needsConfirmation && !resent && (
+                        <button
+                            type="button"
+                            onClick={resendConfirmation}
+                            disabled={isLoading || !email}
+                            className="mt-2.5 ml-6.5 font-semibold underline underline-offset-2 disabled:opacity-50"
+                        >
+                            Send the confirmation email again
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {resent && (
+                <div
+                    role="status"
+                    className="flex items-start gap-2.5 rounded-lg border border-success/30 bg-success/5 p-3 text-sm text-success"
+                >
+                    <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                        Sent. Open the link in <strong>{email}</strong> to finish setting up your account.
+                    </span>
                 </div>
             )}
 

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { supabaseAnonKey, supabaseUrl } from './supabaseEnv';
 
 /**
  * A cookie-free Supabase client for things that run outside a request session:
@@ -9,8 +10,10 @@ import { createClient } from '@supabase/supabase-js';
  * never leak a draft or a teacher's private set.
  */
 export function publicSupabase() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+    const url = supabaseUrl();
+    const key = supabaseAnonKey();
+    // Returns null rather than throwing: a sitemap that comes back short is a
+    // better outcome than a build that falls over.
     if (!url || !key) return null;
 
     return createClient(url, key, {

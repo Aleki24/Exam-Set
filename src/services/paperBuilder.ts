@@ -319,10 +319,19 @@ export async function fetchQuestionPool(filters: PoolFilters = {}): Promise<DBQu
     const max = filters.max ?? 1000;
     const collected: DBQuestion[] = [];
 
+    // Filtering on a column of an embedded table only narrows the questions
+    // themselves when that embed is an inner join. Without the `!inner`, PostgREST
+    // happily returns every question and simply nulls out the ones whose grade did
+    // not match — so choosing "Junior school" used to appear to do nothing at all.
+    // The join is only made inner when it is actually being filtered on, because
+    // an inner join would otherwise drop the questions that have no grade set.
+    const joinsOnGrade = Boolean(filters.level || filters.band);
+    const gradeEmbed = joinsOnGrade ? 'grades!inner(name, level, band)' : 'grades(name, level, band)';
+
     for (let offset = 0; offset < max; offset += PAGE_SIZE) {
         let query = supabase
             .from('questions')
-            .select('*, curriculums(name), grades(name, level, band), subjects(name)')
+            .select(`*, curriculums(name), ${gradeEmbed}, subjects(name)`)
             .order('usage_count', { ascending: true })
             .order('created_at', { ascending: false })
             .range(offset, Math.min(offset + PAGE_SIZE, max) - 1);
@@ -342,8 +351,11 @@ export async function fetchQuestionPool(filters: PoolFilters = {}): Promise<DBQu
 
         const { data, error } = await query;
         if (error) {
+            // Raised, not swallowed. Returning an empty array here is
+            // indistinguishable from "the bank is empty", which sent this exact
+            // bug — a broken connection — looking for missing questions instead.
             console.error('fetchQuestionPool failed:', error.message);
-            break;
+            throw new Error(error.message);
         }
         if (!data || data.length === 0) break;
 

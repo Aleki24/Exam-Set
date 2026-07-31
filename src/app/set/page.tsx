@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
+    AlertCircle,
     Download,
     FileUp,
     Layers,
@@ -62,6 +63,10 @@ export default function SetterPage() {
     const [searchDraft, setSearchDraft] = useState('');
     const [pool, setPool] = useState<DBQuestion[]>([]);
     const [loadingPool, setLoadingPool] = useState(true);
+    // Kept separate from "nothing matched": a bank that cannot be reached and a
+    // bank with no matching questions look identical on screen but need opposite
+    // responses from the person looking at it.
+    const [poolError, setPoolError] = useState<string | null>(null);
     const [visible, setVisible] = useState(PAGE_SIZE);
 
     // Lookups
@@ -108,6 +113,7 @@ export default function SetterPage() {
         const level = LEVELS.find((l) => l.slug === filters.levelSlug);
         let cancelled = false;
         setLoadingPool(true);
+        setPoolError(null);
         setVisible(PAGE_SIZE);
 
         fetchQuestionPool({
@@ -120,7 +126,13 @@ export default function SetterPage() {
             search: filters.search || undefined,
         })
             .then((questions) => !cancelled && setPool(questions))
-            .catch(() => !cancelled && toast.error('Could not load the question bank'))
+            .catch((err: unknown) => {
+                if (cancelled) return;
+                const message = err instanceof Error ? err.message : 'Could not load the question bank';
+                setPool([]);
+                setPoolError(message);
+                toast.error('Could not load the question bank');
+            })
             .finally(() => !cancelled && setLoadingPool(false));
 
         return () => {
@@ -387,6 +399,24 @@ export default function SetterPage() {
                             Array.from({ length: 6 }).map((_, i) => (
                                 <div key={i} className="skeleton h-20" />
                             ))
+                        ) : poolError ? (
+                            <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+                                <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
+                                <p className="title-2">The question bank could not be reached</p>
+                                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                                    This is a connection problem, not an empty bank — your questions are safe.
+                                </p>
+                                <p className="mt-3 max-w-sm rounded-lg bg-secondary px-3 py-2 text-left font-mono text-xs text-muted-foreground">
+                                    {poolError}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilters((f) => ({ ...f }))}
+                                    className="btn-outline mt-5"
+                                >
+                                    Try again
+                                </button>
+                            </div>
                         ) : filteredPool.length === 0 ? (
                             <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
                                 <Sparkles className="mb-3 h-8 w-8 text-muted-foreground" />

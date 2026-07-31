@@ -1,20 +1,23 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 import { createServerClient } from '@supabase/ssr'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!;
-
-if (!supabaseUrl || !supabaseKey) {
-    console.warn('Missing Supabase environment variables in middleware. This may cause runtime errors.');
-}
+import { missingSupabaseEnv, supabaseAnonKey, supabaseConfigured, supabaseUrl as resolveUrl } from '@/lib/supabaseEnv'
 
 export async function middleware(request: NextRequest) {
     try {
-        // If env vars are missing, skip middleware to prevent crash
-        if (!supabaseUrl || !supabaseKey) {
+        // Nothing here can work without credentials. Letting the request through
+        // means the page renders and fails later in the browser; saying so in the
+        // log is the only way this ever gets diagnosed.
+        if (!supabaseConfigured()) {
+            console.error(
+                `Supabase is not configured — missing ${missingSupabaseEnv().join(' and ')}. ` +
+                    'Sign-in and every data fetch will fail until this is set.'
+            );
             return NextResponse.next();
         }
+
+        const supabaseUrl = resolveUrl()!;
+        const supabaseKey = supabaseAnonKey()!;
 
         // Update session first
         const response = await updateSession(request)

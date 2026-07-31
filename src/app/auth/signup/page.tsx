@@ -2,12 +2,36 @@
 
 import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Lock, Mail, User } from 'lucide-react';
 
+/**
+ * Supabase reports configuration faults in the same channel as user mistakes.
+ * Left raw, "Database error saving new user" reads as though the person typed
+ * something wrong, and they retry forever instead of telling anyone.
+ */
+function friendlySignupError(message: string): string {
+    const lower = message.toLowerCase();
+
+    if (lower.includes('already registered') || lower.includes('already been registered')) {
+        return 'That email already has an account. Sign in instead, or use a different address.';
+    }
+    if (lower.includes('database error')) {
+        return 'The account could not be created because of a problem on our side, not with what you typed. Please tell us so we can fix it.';
+    }
+    if (lower.includes('not configured') || lower.includes('supabase')) {
+        return message;
+    }
+    if (lower.includes('rate limit') || lower.includes('too many')) {
+        return 'Too many attempts just now. Wait a few minutes and try again.';
+    }
+    return message;
+}
+
 function SignupForm() {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const nextParam = searchParams.get('next');
     const next = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/';
@@ -41,19 +65,31 @@ function SignupForm() {
         setIsLoading(true);
         try {
             const supabase = createClient();
-            const { error: signUpError } = await supabase.auth.signUp({
+            const { data, error: signUpError } = await supabase.auth.signUp({
                 email,
                 password,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/auth/callback`,
+                    emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
                     data: { full_name: fullName.trim() },
                 },
             });
 
             if (signUpError) {
-                setError(signUpError.message);
+                setError(friendlySignupError(signUpError.message));
                 return;
             }
+
+            // Whether a confirmation email is required is a project setting, so
+            // the answer comes back in the response rather than being assumed.
+            // Sending someone to check an inbox that will never receive anything
+            // — because they are already signed in — is how a working account
+            // gets abandoned at the door.
+            if (data.session) {
+                router.push(next);
+                router.refresh();
+                return;
+            }
+
             setSuccess(true);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');

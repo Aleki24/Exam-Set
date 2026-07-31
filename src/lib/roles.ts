@@ -40,7 +40,19 @@ export function useRole(): RoleState {
 
     useEffect(() => {
         let cancelled = false;
-        const supabase = createClient();
+
+        // This hook sits in the top navigation, so it runs on every page. If the
+        // credentials are missing it must report "nobody is signed in" and let
+        // the rest of the page render, rather than taking the whole site down
+        // with it — the shop is still worth reading when auth is not available.
+        let supabase: ReturnType<typeof createClient>;
+        try {
+            supabase = createClient();
+        } catch (err) {
+            console.error('Roles unavailable:', err instanceof Error ? err.message : err);
+            setState({ role: null, ready: true, signedIn: false, isAdmin: false, isOwner: false, email: null });
+            return;
+        }
 
         const load = async () => {
             const { data: auth } = await supabase.auth.getUser();
