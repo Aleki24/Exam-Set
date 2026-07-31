@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import {
+    AlertTriangle,
     BadgeCheck,
     Ban,
     BookOpen,
@@ -33,6 +34,14 @@ interface TeamMember {
     created_at: string;
 }
 
+interface DiagnosticCheck {
+    id: string;
+    label: string;
+    ok: boolean;
+    detail: string;
+    fix: string | null;
+}
+
 interface Summary {
     paid_orders: number;
     pending_orders: number;
@@ -57,6 +66,7 @@ export default function AdminPage() {
     const [summary, setSummary] = useState<Summary | null>(null);
     const [papers, setPapers] = useState<PaperListing[]>([]);
     const [team, setTeam] = useState<TeamMember[]>([]);
+    const [diagnostics, setDiagnostics] = useState<DiagnosticCheck[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -81,6 +91,12 @@ export default function AdminPage() {
         setPapers(data.papers || []);
     }, []);
 
+    const loadDiagnostics = useCallback(async () => {
+        const res = await fetch('/api/admin/diagnostics');
+        const data = await res.json();
+        if (!data.error) setDiagnostics(data.checks || []);
+    }, []);
+
     const loadTeam = useCallback(async () => {
         const res = await fetch('/api/admin/team');
         const data = await res.json();
@@ -94,8 +110,10 @@ export default function AdminPage() {
     useEffect(() => {
         if (!ready || !isAdmin) return;
         setLoading(true);
-        Promise.all([loadPayments(), loadCatalog(), loadTeam()]).finally(() => setLoading(false));
-    }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam]);
+        Promise.all([loadPayments(), loadCatalog(), loadTeam(), loadDiagnostics()]).finally(() =>
+            setLoading(false)
+        );
+    }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam, loadDiagnostics]);
 
     // ------------------------------------------------------------------ actions
 
@@ -229,6 +247,39 @@ export default function AdminPage() {
                         </Link>
                     </div>
                 </div>
+
+                {/* Configuration — only shown when something is actually wrong,
+                    so a healthy deployment does not carry a permanent banner. */}
+                {diagnostics && diagnostics.some((c) => !c.ok) && (
+                    <section className="surface mt-6 border-accent/40 bg-accent/[0.04] p-5">
+                        <div className="rule-heading mb-3">
+                            <h2 className="overline text-accent">Needs configuration</h2>
+                        </div>
+                        <ul className="space-y-3">
+                            {diagnostics
+                                .filter((c) => !c.ok)
+                                .map((check) => (
+                                    <li key={check.id} className="flex items-start gap-3 text-sm">
+                                        <AlertTriangle
+                                            className="mt-0.5 h-4 w-4 shrink-0 text-accent"
+                                            aria-hidden
+                                        />
+                                        <span>
+                                            <span className="font-semibold">{check.label}:</span> {check.detail}
+                                            {check.fix && (
+                                                <span className="figure mt-1 block text-[11px] text-muted-foreground">
+                                                    {check.fix}
+                                                </span>
+                                            )}
+                                        </span>
+                                    </li>
+                                ))}
+                        </ul>
+                        <p className="meta mt-4">
+                            Environment variables only apply to new deployments — redeploy after changing them.
+                        </p>
+                    </section>
+                )}
 
                 {/* Numbers */}
                 {summary && (
