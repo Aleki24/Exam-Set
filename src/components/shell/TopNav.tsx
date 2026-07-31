@@ -35,12 +35,31 @@ export default function TopNav() {
 
     useEffect(() => {
         setMounted(true);
-        const supabase = createClient();
 
-        supabase.auth.getUser().then(({ data }) => {
-            setEmail(data.user?.email ?? null);
-            setName(data.user?.user_metadata?.full_name ?? data.user?.user_metadata?.name ?? null);
-        });
+        // Guarded because this runs on every page. `createClient` throws when the
+        // environment is not configured, and an exception raised in an effect
+        // tears down the React tree — which leaves the server-rendered markup on
+        // screen with nothing wired to it. Every link and button then looks
+        // present and does nothing, and the navigation is the worst possible
+        // place to inflict that.
+        let supabase: ReturnType<typeof createClient>;
+        try {
+            supabase = createClient();
+        } catch (err) {
+            console.error('Navigation auth unavailable:', err instanceof Error ? err.message : err);
+            return;
+        }
+
+        supabase.auth
+            .getUser()
+            .then(({ data }) => {
+                setEmail(data.user?.email ?? null);
+                setName(data.user?.user_metadata?.full_name ?? data.user?.user_metadata?.name ?? null);
+            })
+            .catch(() => {
+                setEmail(null);
+                setName(null);
+            });
 
         const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
             setEmail(session?.user?.email ?? null);
