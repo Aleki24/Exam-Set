@@ -70,6 +70,14 @@ paper for sale is an admin action.
 Every rule above is enforced by Postgres row level security, not just by hidden
 buttons — see `supabase/migrations/013_roles_and_sellers.sql`.
 
+**RLS policies are OR'd together**, so a single permissive policy anywhere
+defeats every strict one on the same table. Migration `016_tighten_rls.sql`
+removes the `FOR ALL USING (true)` policies the early migrations shipped; without
+it, anyone holding the anon key — which is public by design, it ships in the
+frontend bundle — could reprice papers, publish into the shop, read unpublished
+drafts, or delete the question bank. If you add a policy, check
+`get_advisors(type: 'security')` afterwards.
+
 ## Routes
 
 | Route | What it is |
