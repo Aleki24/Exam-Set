@@ -665,7 +665,7 @@ function PublishModal({
     onClose: () => void;
     onPublish: (priceCents: number, description: string, hasScheme: boolean) => void;
 }) {
-    const [priceShillings, setPriceShillings] = useState(100);
+    const [priceShillings, setPriceShillings] = useState(30);
     const [description, setDescription] = useState('');
     const [includeScheme, setIncludeScheme] = useState(schemeCount > 0);
 
@@ -703,7 +703,7 @@ function PublishModal({
                         <p className="mt-1.5 text-xs text-muted-foreground">
                             {priceShillings === 0
                                 ? 'Free papers still need a sign-in to download.'
-                                : `Listed at ${formatPrice(priceShillings * 100)}.`}
+                                : `Listed at ${formatPrice(priceShillings * 100)}. Comparable Kenyan sites charge KES 25–50 a paper.`}
                         </p>
                     </div>
 

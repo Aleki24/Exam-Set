@@ -38,7 +38,7 @@ export default function UploadPaperPage() {
         question_count: '',
         time_limit: '',
         institution: '',
-        price: 100,
+        price: 30,
         is_published: true,
     });
 
@@ -392,6 +392,10 @@ export default function UploadPaperPage() {
                                     {form.price === 0
                                         ? 'Free papers still need a sign-in to download.'
                                         : `Buyers pay ${formatPrice(form.price * 100)} by M-Pesa.`}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Single papers on Kenyan sites typically go for KES 25–50. Price above that
+                                    and buyers compare; a marking scheme is what justifies the premium.
                                 </p>
                             </div>
 

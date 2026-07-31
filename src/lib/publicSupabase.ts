@@ -1,0 +1,31 @@
+import { createClient } from '@supabase/supabase-js';
+
+/**
+ * A cookie-free Supabase client for things that run outside a request session:
+ * the sitemap, and the metadata generated for each paper page.
+ *
+ * Uses the publishable key and therefore sees exactly what an anonymous visitor
+ * sees — published catalog papers only, enforced by row level security. It can
+ * never leak a draft or a teacher's private set.
+ */
+export function publicSupabase() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+    if (!url || !key) return null;
+
+    return createClient(url, key, {
+        auth: { persistSession: false, autoRefreshToken: false },
+    });
+}
+
+/** The site's public origin, used for canonical URLs and the sitemap. */
+export function siteUrl(): string {
+    const configured = process.env.NEXT_PUBLIC_BASE_URL;
+    if (configured) return configured.replace(/\/$/, '');
+    // Vercel sets this on every deployment, so the sitemap still works before
+    // anyone remembers to set a base URL.
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+        return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+    }
+    return 'http://localhost:3000';
+}
