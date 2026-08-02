@@ -53,7 +53,8 @@ export async function middleware(request: NextRequest) {
             pathname.startsWith('/account') ||
             pathname.startsWith('/home') ||
             pathname.startsWith('/progress') ||
-            pathname.startsWith('/teach')
+            pathname.startsWith('/teach') ||
+            pathname.startsWith('/family')
 
         // Whether the auth server answered at all. A dropped request says nothing
         // about the session, so it must not be read as "not signed in".
