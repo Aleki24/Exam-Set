@@ -162,6 +162,32 @@ current.
 Plans are deliberately not split by subject: it would double the pricing surface
 and the support burden for a catalogue this size.
 
+### How a paper becomes a file
+
+There are two kinds of paper in the shop and only one arrives with a PDF:
+
+- **Uploaded** — an admin attached the file. Nothing to do.
+- **Set** — built in the setter from the question bank. It is a list of question
+  ids, so it has no file at all.
+
+A set paper is rendered from its questions the first time anyone asks for it,
+stored, and recorded on the row — generated once, and identical to an uploaded
+paper ever after. That keeps a single delivery path: every route downstream signs
+a storage key and knows nothing about where the file came from.
+
+`services/paperPdf.ts` lays the page out with jsPDF text primitives rather than
+rasterising HTML. Real text is a tenth of the size of a screenshot, prints sharp
+on a staffroom photocopier, stays searchable, and needs no browser on the
+server — which matters inside a serverless request. The layout follows the
+conventions of a Kenyan paper because it gets photocopied for a class: centred
+school name and title, a details line, numbered instructions, questions with
+marks in the right margin, lettered options, labelled sub-parts, and ruled answer
+space scaled to the marks rather than a fixed two lines under a ten-mark essay.
+
+The marking scheme is a separate document, not an appendix — it is sold and
+delivered separately, and a teacher handing out the paper must not hand out the
+answers with it.
+
 ### The WhatsApp bot
 
 A teacher texts *"form 4 mathematics term 3"* and the PDF comes back. No
