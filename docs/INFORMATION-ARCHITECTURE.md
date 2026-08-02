@@ -181,58 +181,67 @@ guardian_learner_subjects(). Raw sessions and the progress views stay shut.
 
 | Piece | State |
 |---|---|
-| `lib/resources.ts` — kind taxonomy, families, level applicability | **Built** |
-| Playgroup / Baby Class level | **Built** |
-| Subject taxonomy per level, CBE-accurate | **Built** |
-| `/learn`, `/learn/[level]`, `/learn/[level]/[subject]` | **Built** |
-| `resource_kind` filter through `/api/papers` | **Built** |
-| Account types — student, teacher, parent, institution | **Built** |
-| `/account` picker, `/home` arranged per account type | **Built** |
+| Resource taxonomy, families, level applicability | **Built** |
+| Playgroup level, CBE subjects per level | **Built** |
+| `/learn` browse hierarchy | **Built** |
+| Account types, `/account`, role-aware `/home` | **Built** |
 | Learner progress — summary, subjects, topics, trend | **Built** |
-| Discovery shelves — picked for you, term essentials, new, most downloaded | **Built** |
-| Similar resources on the detail page | **Built** |
-| Teacher class-share links | **Built** |
-| Teacher bulk download packs | **Built** |
+| Discovery shelves and similar resources | **Built** |
+| Class share links and bulk download packs | **Built** |
 | Parent/guardian view with consent | **Built** |
-| National exam countdown | **Built** |
-| Freshness badges | **Built** |
-| Recently viewed + offline download queue | **Built** |
-| Existing commerce, download gating, auth | **Already existed, untouched** |
+| Exam countdown, freshness badges | **Built** |
+| Recently viewed, offline download queue | **Built** |
+| **Marking — the paper is actually scored** | **Built** |
+| **Practise-this-topic from weakest strands** | **Built** |
+| **Assignments with due dates** | **Built** |
+| **CBA/SBA offline score capture** | **Built** |
 
-Migrations 023–027. Eight verification harnesses run under `npm run verify`.
+Migrations 023–032. Ten verification harnesses under `npm run verify`.
 
-### The three rules that recur
+### The rules that recur
 
-Written down because each was arrived at separately and they turned out to be
-the same rule:
+Arrived at separately, and they turned out to be the same few rules:
 
 1. **Never claim what is not known.** No countdown to an unverified date, no
-   "Updated for 2026" derived from a null year, no "most downloaded this week"
-   computed from a lifetime total, no "New for 2026" quietly containing 2024
-   stock. Where the honest answer is silence, the component renders nothing.
+   "Updated for 2026" from a null year, no "most downloaded this week" from a
+   lifetime total. And its sharpest form: **unmarked is not zero** — a question
+   nobody could mark leaves `marks_awarded` null and is excluded from the
+   denominator, because scoring it zero would report a strand as weak that was
+   never assessed and send somebody to revise the wrong thing.
 
-2. **Preference is not permission.** `account_type` decides what is shown
-   first and grants nothing. A share link shows a list and unlocks no download.
-   A queued download is an intention, not an entitlement. Every one of these
-   had an obvious implementation that was a privilege escalation with a
-   friendly label.
+2. **Preference is not permission.** `account_type` grants nothing. A share link
+   shows a list and unlocks no download. A queued download is an intention. Each
+   had an obvious implementation that was a privilege escalation with a friendly
+   label.
 
-3. **Enforce in the database, present in the app.** The role guard is a
-   trigger, the progress views are `security_invoker`, the guardian door is a
-   `SECURITY DEFINER` function checking consent. Each app route above them
-   could be rewritten carelessly without opening anything.
+3. **Enforce in the database, present in the app.** The role guard is a trigger,
+   progress views are `security_invoker`, the guardian door and assignment
+   counts are `SECURITY DEFINER` functions that check first. Every route above
+   them could be rewritten carelessly without opening anything.
+
+4. **Consent is not implied by convenience.** A guardian sees summaries only,
+   after the learner accepts, revocable by either side. An assignment gives the
+   teacher counts, never named results — making it a way around the consent
+   model would have been invisible and a breach.
+
+### Pricing
+
+KES 550 / month, 799 / term, 999 / year — matching kcserevision.com's anchors
+rather than undercutting them, so the comparison moves onto what the product
+does differently. Migration 029 has the reasoning.
 
 ## 6. What is not built
 
 | Piece | Why not, and what it needs |
 |---|---|
-| **Printable booklet layout** | Its own typesetting problem, not a variation on the PDF renderer. A thin version produces something nobody prints. |
-| **Assignment tracking** | A subsystem: setting work, collecting it, marking it, chasing it. Not a feature that fits beside share links. |
+| **AI marking quality, measured** | The code ships and fails safe to unmarked, but agreement with a human examiner has not been checked against real answers — the only responses in the database are test junk against empty schemes. Hand-mark ~30 real answers before trusting the AI path in production. |
+| **Printable booklet layout** | Its own typesetting problem, not a variation on the PDF renderer. |
+| **Assignment tracking beyond counts** | Per-learner completion needs the consent model extended to classrooms, which is a design question before it is a build. |
 | **Recommended study plan for parents** | Needs the topic breakdown turned into advice. Advice a parent acts on should not come from a rule of thumb invented in an afternoon. |
-| **Educator-verified badge** | Needs somebody to actually perform the review it claims. A badge asserting a verification that never happened is the worst item on this list. |
-| **"Most downloaded this week"** | Needs a downloads-by-day table. Until then the shelf says "Most downloaded" and means it. |
-| **Service worker / true offline** | The queue and recently-viewed survive a dropped connection; cached page shells do not. A service worker is a caching strategy with its own invalidation bugs and deserves its own pass. |
-| **Institution seats** | The account type exists and leads planning material. Seat management, shared billing and a staff directory are a commerce change, not a UI one. |
+| **Educator-verified badge** | Needs somebody to perform the review it claims. |
+| **"Most downloaded this week"** | Needs a downloads-by-day table. |
+| **Service worker / true offline pages** | The queues survive a dropped connection; cached page shells do not. |
+| **Institution seats, school-wide CBA** | The account type exists. Seats, shared billing and a staff directory are a commerce change — and any school-wide read over children's assessment records needs designing, not adding. |
 
 ## 7. Design language
 
