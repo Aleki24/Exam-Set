@@ -71,7 +71,16 @@ export async function middleware(request: NextRequest) {
         // the one page that could have fixed the session was the page being
         // redirected away from. Sending someone to sign in is only ever helpful
         // if they can arrive.
-        if (pathname.startsWith('/auth') && !pathname.includes('/callback')) {
+        // `/auth/reset-password` is exempt: a recovery link signs the user in as
+        // its whole mechanism, so the session that proves they may set a new
+        // password is the same session this rule would bounce them for having.
+        // Redirecting there would make every reset link dead-end on the shop.
+        const isAuthPageToGuard =
+            pathname.startsWith('/auth') &&
+            !pathname.includes('/callback') &&
+            !pathname.startsWith('/auth/reset-password');
+
+        if (isAuthPageToGuard) {
             const supabase = createSupabase()
             const { data, error } = await supabase.auth.getUser()
 

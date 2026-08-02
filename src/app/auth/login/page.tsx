@@ -4,6 +4,7 @@ import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { friendlyAuthError } from '@/lib/authErrors';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 
@@ -42,11 +43,7 @@ function LoginForm() {
             if (signInError) {
                 const unconfirmed = signInError.message.toLowerCase().includes('not confirmed');
                 setNeedsConfirmation(unconfirmed);
-                setError(
-                    unconfirmed
-                        ? 'This account has not been confirmed yet. Check your inbox for the link, or send it again below.'
-                        : signInError.message
-                );
+                setError(friendlyAuthError(signInError.message));
                 return;
             }
 
@@ -69,7 +66,7 @@ function LoginForm() {
                 options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
             });
             if (resendError) {
-                setError(resendError.message);
+                setError(friendlyAuthError(resendError.message));
                 return;
             }
             setResent(true);
@@ -160,6 +157,15 @@ function LoginForm() {
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                 </div>
+            </div>
+
+            <div className="flex justify-end">
+                <Link
+                    href={`/auth/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                    Forgot your password?
+                </Link>
             </div>
 
             <button type="submit" disabled={isLoading} className="btn-primary w-full">

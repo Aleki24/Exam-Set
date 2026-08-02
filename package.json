@@ -9,10 +9,11 @@
     "lint": "next lint",
     "verify:builder": "node scripts/verify-paper-builder.mjs",
     "verify:storage": "node scripts/verify-storage.mjs",
-    "verify": "npm run verify:builder && npm run verify:storage && npm run verify:query && npm run verify:whatsapp && npm run verify:pdf",
+    "verify": "npm run verify:builder && npm run verify:storage && npm run verify:query && npm run verify:whatsapp && npm run verify:pdf && npm run verify:auth",
     "verify:query": "node scripts/verify-paper-query.mjs",
     "verify:whatsapp": "node scripts/verify-whatsapp.mjs",
-    "verify:pdf": "node scripts/verify-paper-pdf.mjs"
+    "verify:pdf": "node scripts/verify-paper-pdf.mjs",
+    "verify:auth": "node scripts/verify-auth.mjs"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",

@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
 import { storageBackend } from '@/utils/storage';
 import { getMpesaConfig } from '@/lib/mpesa';
+import { createAdminClient } from '@/utils/supabase/admin';
 
 /**
  * GET /api/admin/diagnostics — is this deployment configured?
@@ -19,6 +20,23 @@ export async function GET() {
         const supabase = await createClient();
         const { failure } = await requireAdmin(supabase);
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+
+        // Accounts that can never sign in. On this project the built-in mailer
+        // reaches only project members, so an unconfirmed account is usually a
+        // confirmation email that was never delivered rather than a user who
+        // ignored one — and it is invisible until somebody complains.
+        let blockedAccounts = 0;
+        let accountsChecked = false;
+        const admin = createAdminClient();
+        if (admin) {
+            const { data: userPage } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+            if (userPage) {
+                accountsChecked = true;
+                blockedAccounts = userPage.users.filter(
+                    (u) => !u.email_confirmed_at && !u.phone_confirmed_at
+                ).length;
+            }
+        }
 
         const storage = storageBackend();
         const mpesa = getMpesaConfig();
@@ -61,6 +79,22 @@ export async function GET() {
                 fix: !baseUrl && mpesa ? 'Set NEXT_PUBLIC_BASE_URL — the M-Pesa callback URL is built from it.' : null,
             },
         ];
+
+        if (accountsChecked) {
+            checks.push({
+                id: 'accounts',
+                label: 'Sign-in',
+                ok: blockedAccounts === 0,
+                detail:
+                    blockedAccounts === 0
+                        ? 'Every account can sign in'
+                        : `${blockedAccounts} account${blockedAccounts === 1 ? '' : 's'} cannot sign in — the address was never confirmed`,
+                fix:
+                    blockedAccounts > 0
+                        ? 'Confirm them from Team, or turn off "Confirm email" in Supabase → Authentication → Providers, or configure SMTP so the emails actually arrive.'
+                        : null,
+            });
+        }
 
         return NextResponse.json({
             ready: checks.every((c) => c.ok),

@@ -4,31 +4,9 @@ import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { friendlyAuthError } from '@/lib/authErrors';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Lock, Mail, User } from 'lucide-react';
-
-/**
- * Supabase reports configuration faults in the same channel as user mistakes.
- * Left raw, "Database error saving new user" reads as though the person typed
- * something wrong, and they retry forever instead of telling anyone.
- */
-function friendlySignupError(message: string): string {
-    const lower = message.toLowerCase();
-
-    if (lower.includes('already registered') || lower.includes('already been registered')) {
-        return 'That email already has an account. Sign in instead, or use a different address.';
-    }
-    if (lower.includes('database error')) {
-        return 'The account could not be created because of a problem on our side, not with what you typed. Please tell us so we can fix it.';
-    }
-    if (lower.includes('not configured') || lower.includes('supabase')) {
-        return message;
-    }
-    if (lower.includes('rate limit') || lower.includes('too many')) {
-        return 'Too many attempts just now. Wait a few minutes and try again.';
-    }
-    return message;
-}
 
 function SignupForm() {
     const router = useRouter();
@@ -75,7 +53,7 @@ function SignupForm() {
             });
 
             if (signUpError) {
-                setError(friendlySignupError(signUpError.message));
+                setError(friendlyAuthError(signUpError.message));
                 return;
             }
 
