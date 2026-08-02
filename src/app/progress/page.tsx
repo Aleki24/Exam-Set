@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, TrendingDown, TrendingUp, Minus, PlayCircle } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import PractiseTopicButton from '@/components/PractiseTopicButton';
 import { createClient } from '@/utils/supabase/server';
 import {
     EMPTY_PROGRESS,
@@ -165,6 +166,17 @@ export default async function ProgressPage() {
                                                     .join(' · ')}
                                             </p>
                                             <Bar percentage={t.percentage} />
+
+                                            {/* The whole point of ranking topics
+                                                weakest-first: the worst one is
+                                                one tap from being practised. */}
+                                            <div className="mt-3">
+                                                <PractiseTopicButton
+                                                    topic={t.topic}
+                                                    subject={t.subject}
+                                                    className="btn-outline btn-sm"
+                                                />
+                                            </div>
                                         </li>
                                     ))}
                                 </ul>
