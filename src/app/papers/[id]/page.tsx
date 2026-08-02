@@ -10,6 +10,7 @@ import PaperCard from '@/components/shop/PaperCard';
 import { useCart } from '@/lib/cart';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
+import { recordView, enqueueDownload } from '@/lib/recentlyViewed';
 
 /** A single paper: what you get, what it costs, and one button to act. */
 export default function PaperDetailPage() {
@@ -35,6 +36,10 @@ export default function PaperDetailPage() {
                     return;
                 }
                 setPaper(data.paper);
+                // Remembered on the phone, not the account: this is the list
+                // somebody most wants when signal comes back, and a list held
+                // only on the server is gone exactly when it is needed.
+                recordView(data.paper);
             })
             .catch(() => toast.error('Could not load this paper'))
             .finally(() => setLoading(false));
@@ -125,7 +130,18 @@ export default function PaperDetailPage() {
             }
             window.open(data.url, '_blank', 'noopener');
         } catch {
-            toast.error('Download failed');
+            /*
+             * A thrown fetch here means the request never completed — almost
+             * always a dropped connection rather than a refusal, since every
+             * refusal above came back as a status. So the intention is kept on
+             * the phone and offered again from /home when signal returns.
+             *
+             * Queuing grants nothing. The retry goes through this same route
+             * and the same entitlement check; an entry for something unpaid
+             * stays an entry.
+             */
+            enqueueDownload(subject.id, subject.title, asset);
+            toast.error('No connection — saved to your download queue');
         } finally {
             setDownloading(null);
         }

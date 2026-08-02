@@ -96,6 +96,13 @@ either wading through the other's material.
 /learn/[level]                 One level: subjects, kinds, what is new
 /learn/[level]/[subject]       One subject: resources grouped by kind
 /papers/[id]                   Resource detail + download (exists, extended)
+
+/home                          Arranged around whoever is signed in
+/account                       Who you are: type, level, subjects
+/progress                      Your marks, weakest topics first
+/teach                         Class share links and bulk packs
+/family                        Follow a learner, with their consent
+/s/[token]                     A list a teacher handed a class (no account)
 ```
 
 `/` and `/learn` are deliberately different doors to the same stock, because two
@@ -143,13 +150,29 @@ product releases a file. Every route above ends at that same door.
 All of this exists and is unchanged. The one addition is that `/learn` is a
 sensible post-signup destination in a way the flat shop never was.
 
-### Role-aware surfaces (planned — see §6)
+### Role-aware surfaces
 
 ```
-Student      /learn defaults to their grade · progress · attempted papers
-Teacher      /learn defaults to what they teach · bulk packs · class links
-Parent       simplified progress for a linked child · recommended study plan
-Institution  seats, shared library, school-wide downloads
+Student      /home leads with papers and notes · /progress · resume unfinished
+Teacher      /home leads with planning material · /teach share links + packs
+Parent       /family — request, learner consents, summary only
+Institution  /home leads with planning and reference material
+```
+
+`account_type` chooses what leads. It never gates anything: every surface above
+is reachable by every account, and permissions remain entirely a matter of
+`profiles.role` and row level security. The signup form cannot grant an ability.
+
+### Consent, for the parent view
+
+```
+guardian ──invite by exact email──► link created as `pending`
+learner  ──sees it on /family────► accepts ──► `accepted`
+                                  └─ declines ──► `revoked`
+either   ──at any time───────────► `revoked`, no notice required
+
+accepted opens exactly one door: guardian_learner_summary() and
+guardian_learner_subjects(). Raw sessions and the progress views stay shut.
 ```
 
 ---
@@ -161,32 +184,55 @@ Institution  seats, shared library, school-wide downloads
 | `lib/resources.ts` — kind taxonomy, families, level applicability | **Built** |
 | Playgroup / Baby Class level | **Built** |
 | Subject taxonomy per level, CBE-accurate | **Built** |
-| `023_resource_kinds.sql` — column, index, backfill | **Built** |
-| `/learn` hub | **Built** |
-| `/learn/[level]` | **Built** |
-| `/learn/[level]/[subject]` | **Built** |
+| `/learn`, `/learn/[level]`, `/learn/[level]/[subject]` | **Built** |
 | `resource_kind` filter through `/api/papers` | **Built** |
+| Account types — student, teacher, parent, institution | **Built** |
+| `/account` picker, `/home` arranged per account type | **Built** |
+| Learner progress — summary, subjects, topics, trend | **Built** |
+| Discovery shelves — picked for you, term essentials, new, most downloaded | **Built** |
+| Similar resources on the detail page | **Built** |
+| Teacher class-share links | **Built** |
+| Teacher bulk download packs | **Built** |
+| Parent/guardian view with consent | **Built** |
+| National exam countdown | **Built** |
+| Freshness badges | **Built** |
+| Recently viewed + offline download queue | **Built** |
 | Existing commerce, download gating, auth | **Already existed, untouched** |
+
+Migrations 023–027. Eight verification harnesses run under `npm run verify`.
+
+### The three rules that recur
+
+Written down because each was arrived at separately and they turned out to be
+the same rule:
+
+1. **Never claim what is not known.** No countdown to an unverified date, no
+   "Updated for 2026" derived from a null year, no "most downloaded this week"
+   computed from a lifetime total, no "New for 2026" quietly containing 2024
+   stock. Where the honest answer is silence, the component renders nothing.
+
+2. **Preference is not permission.** `account_type` decides what is shown
+   first and grants nothing. A share link shows a list and unlocks no download.
+   A queued download is an intention, not an entitlement. Every one of these
+   had an obvious implementation that was a privilege escalation with a
+   friendly label.
+
+3. **Enforce in the database, present in the app.** The role guard is a
+   trigger, the progress views are `security_invoker`, the guardian door is a
+   `SECURITY DEFINER` function checking consent. Each app route above them
+   could be rewritten carelessly without opening anything.
 
 ## 6. What is not built
 
-Listed plainly, because a plan that hides its own gaps is worse than no plan.
-
 | Piece | Why not, and what it needs |
 |---|---|
-| **Progress tracking** | Needs an `attempts` table and a results pipeline. `exam_sessions` already records sittings, so the data exists; the aggregation, the trend maths and the UI do not. |
-| **Role-aware navigation** | Needs `profiles.role` widened past owner/admin/user to include student/teacher/parent/institution, a role picker at signup, and a per-role default view. Widening the role enum touches every RLS policy in migration 012 — it is not a UI change and must not be done as one. |
-| **Parent view** | Needs a guardian↔learner link table and a consent model. Showing one person another person's results is the single most sensitive thing this product could do, and it needs designing before it needs building. |
-| **Teacher tools** | Bulk packs need a zip-on-demand route; class share links need a token model with expiry; assignment tracking is its own subsystem. |
-| **Personalisation** | "Continue where you left off" needs recently-viewed persistence; recommendations need a signal to recommend from. Both are cheap *after* progress tracking exists and near-meaningless before. |
-| **Offline / download queue** | Needs a service worker and a cache strategy. Genuinely valuable on Kenyan mobile data and genuinely out of scope for a first pass. |
-| **Exam countdown** | Needs a national exam calendar as data. Trivial to build, but wrong to fake — a countdown to a date nobody verified is worse than no countdown. |
-
-Trust signals — "Updated for 2026", last-updated dates, educator-verified badges
-— are partially built: the date is real and rendered, the verification badge is
-not, because nothing yet performs the verification it would claim.
-
----
+| **Printable booklet layout** | Its own typesetting problem, not a variation on the PDF renderer. A thin version produces something nobody prints. |
+| **Assignment tracking** | A subsystem: setting work, collecting it, marking it, chasing it. Not a feature that fits beside share links. |
+| **Recommended study plan for parents** | Needs the topic breakdown turned into advice. Advice a parent acts on should not come from a rule of thumb invented in an afternoon. |
+| **Educator-verified badge** | Needs somebody to actually perform the review it claims. A badge asserting a verification that never happened is the worst item on this list. |
+| **"Most downloaded this week"** | Needs a downloads-by-day table. Until then the shelf says "Most downloaded" and means it. |
+| **Service worker / true offline** | The queue and recently-viewed survive a dropped connection; cached page shells do not. A service worker is a caching strategy with its own invalidation bugs and deserves its own pass. |
+| **Institution seats** | The account type exists and leads planning material. Seat management, shared billing and a staff directory are a commerce change, not a UI one. |
 
 ## 7. Design language
 

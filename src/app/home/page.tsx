@@ -4,6 +4,7 @@ import { ArrowRight, PlayCircle, Settings2 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import ResourceShelf from '@/components/shop/ResourceShelf';
 import ExamCountdown from '@/components/shop/ExamCountdown';
+import OfflinePanel from '@/components/shop/OfflinePanel';
 import { createClient } from '@/utils/supabase/server';
 import { homeShelves, type Shelf } from '@/services/discoveryService';
 import { loadLearnerProgress, EMPTY_PROGRESS, type LearnerProgress } from '@/services/progressService';
@@ -215,6 +216,11 @@ export default async function HomePage() {
                         </div>
                     </section>
                 )}
+
+                {/* Client-only: both lists live in localStorage, and rendering
+                    them on the server would ship markup that is wrong on
+                    arrival and corrected a frame later. */}
+                <OfflinePanel />
 
                 <div className="mt-16 border-t border-border pt-8">
                     <Link
