@@ -17,6 +17,9 @@ interface Share {
     expiresAt: string;
     revokedAt: string | null;
     viewCount: number;
+    openCount: number;
+    dueOn: string | null;
+    isAssignment: boolean;
     active: boolean;
 }
 
@@ -38,6 +41,7 @@ export default function TeachPage() {
     const [selected, setSelected] = useState<string[]>([]);
     const [title, setTitle] = useState('');
     const [note, setNote] = useState('');
+    const [dueOn, setDueOn] = useState('');
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
     const [packing, setPacking] = useState(false);
@@ -75,7 +79,12 @@ export default function TeachPage() {
             const res = await fetch('/api/shares', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: title.trim(), note: note.trim() || null, exam_ids: selected }),
+                body: JSON.stringify({
+                    title: title.trim(),
+                    note: note.trim() || null,
+                    exam_ids: selected,
+                    due_on: dueOn || null,
+                }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not create the link');
@@ -83,8 +92,9 @@ export default function TeachPage() {
             setShares((s) => [data.share, ...s]);
             setTitle('');
             setNote('');
+            setDueOn('');
             setSelected([]);
-            toast.success('Link ready to share');
+            toast.success(dueOn ? 'Assignment ready to share' : 'Link ready to share');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Could not create the link');
         } finally {
@@ -287,6 +297,23 @@ export default function TeachPage() {
                                             className="field mt-2"
                                         />
 
+                                        <label htmlFor="share-due" className="overline mt-4 block">
+                                            Due date <span className="normal-case tracking-normal">(optional)</span>
+                                        </label>
+                                        <input
+                                            id="share-due"
+                                            type="date"
+                                            value={dueOn}
+                                            onChange={(e) => setDueOn(e.target.value)}
+                                            min={new Date().toISOString().slice(0, 10)}
+                                            className="field mt-2"
+                                        />
+                                        <p className="meta mt-1.5 leading-relaxed">
+                                            Add one and this becomes an assignment — your class sees
+                                            the deadline, and you see how many have done it. The link
+                                            stays open a week past the date so late work still opens.
+                                        </p>
+
                                         <button
                                             type="button"
                                             onClick={createShare}
@@ -295,7 +322,7 @@ export default function TeachPage() {
                                         >
                                             {creating && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
                                             <Link2 className="h-4 w-4" aria-hidden />
-                                            Create the link
+                                            {dueOn ? 'Set the assignment' : 'Create the link'}
                                         </button>
                                     </div>
 
@@ -328,17 +355,29 @@ export default function TeachPage() {
                 {shares.length > 0 && (
                     <section aria-labelledby="links-heading" className="mt-16">
                         <h2 id="links-heading" className="title-2">
-                            Your class links
+                            Your class links and assignments
                         </h2>
                         <ul className="mt-4 divide-y divide-border">
                             {shares.map((s) => (
                                 <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
                                     <div className="min-w-0 flex-1">
-                                        <p className="heading-ui">{s.title}</p>
+                                        <p className="heading-ui">
+                                            {s.title}
+                                            {s.isAssignment && (
+                                                <span className="badge-soft ml-2">Assignment</span>
+                                            )}
+                                        </p>
                                         <p className="meta mt-0.5">
-                                            {s.examIds.length} resource{s.examIds.length === 1 ? '' : 's'} ·{' '}
-                                            {s.viewCount} view{s.viewCount === 1 ? '' : 's'} ·{' '}
-                                            {s.active ? `until ${formatDate(s.expiresAt)}` : 'ended'}
+                                            {[
+                                                `${s.examIds.length} resource${s.examIds.length === 1 ? '' : 's'}`,
+                                                `${s.viewCount} view${s.viewCount === 1 ? '' : 's'}`,
+                                                s.isAssignment && s.dueOn
+                                                    ? `due ${formatDate(s.dueOn)}`
+                                                    : null,
+                                                s.active ? `open until ${formatDate(s.expiresAt)}` : 'ended',
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' · ')}
                                         </p>
                                     </div>
 

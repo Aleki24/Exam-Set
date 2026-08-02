@@ -31,7 +31,7 @@ export async function GET() {
     // safety lives in this file.
     const { data, error } = await supabase
         .from('class_shares')
-        .select('id, token, title, note, exam_ids, expires_at, revoked_at, view_count, created_at')
+        .select('id, token, title, note, exam_ids, expires_at, revoked_at, view_count, open_count, due_on, created_at')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -70,7 +70,28 @@ export async function POST(req: NextRequest) {
         MAX_DAYS,
         Math.max(1, Number.isFinite(Number(body.days)) ? Number(body.days) : DEFAULT_DAYS)
     );
-    const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
+
+    /*
+     * A due date turns a reading list into an assignment, and is optional —
+     * plenty of shares are just "here is the material".
+     *
+     * The link is extended to outlive the deadline where necessary. A class
+     * arriving at a dead link the day before work is due is the one failure this
+     * feature must not have, and silently accepting a due date the link cannot
+     * reach would be exactly that. A CHECK constraint refuses the pairing too,
+     * so the rule holds even if this route is rewritten.
+     */
+    const dueOn = typeof body.due_on === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.due_on)
+        ? body.due_on
+        : null;
+
+    let expiryMs = Date.now() + days * 86_400_000;
+    if (dueOn) {
+        // A week past the deadline, so late work still opens.
+        const dueMs = new Date(`${dueOn}T23:59:59Z`).getTime() + 7 * 86_400_000;
+        if (Number.isFinite(dueMs)) expiryMs = Math.max(expiryMs, dueMs);
+    }
+    const expiresAt = new Date(expiryMs).toISOString();
 
     /*
      * 32 bytes from the OS random source, base64url. Not `Math.random`, not a
@@ -90,8 +111,9 @@ export async function POST(req: NextRequest) {
             note: typeof body.note === 'string' ? body.note.slice(0, 2000) : null,
             exam_ids: examIds,
             expires_at: expiresAt,
+            due_on: dueOn,
         })
-        .select('id, token, title, note, exam_ids, expires_at, revoked_at, view_count, created_at')
+        .select('id, token, title, note, exam_ids, expires_at, revoked_at, view_count, open_count, due_on, created_at')
         .single();
 
     if (error) {
@@ -149,6 +171,10 @@ function shape(row: any) {
         expiresAt: row.expires_at,
         revokedAt: row.revoked_at ?? null,
         viewCount: row.view_count ?? 0,
+        openCount: row.open_count ?? 0,
+        dueOn: row.due_on ?? null,
+        /** An assignment is a share with a deadline; without one it is a list. */
+        isAssignment: Boolean(row.due_on),
         createdAt: row.created_at,
         /** One field the UI can trust instead of recomputing two rules. */
         active: !row.revoked_at && !expired,

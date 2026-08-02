@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Clock, Lock } from 'lucide-react';
+import { CalendarClock, Clock, Lock } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { formatPrice } from '@/lib/catalog';
@@ -52,7 +52,7 @@ export default async function SharePage({ params }: Params) {
 
     const { data: share, error } = await admin
         .from('class_shares')
-        .select('id, token, title, note, exam_ids, expires_at, revoked_at, created_by')
+        .select('id, token, title, note, exam_ids, expires_at, revoked_at, due_on, created_by')
         .eq('token', token)
         .maybeSingle();
 
@@ -88,6 +88,10 @@ export default async function SharePage({ params }: Params) {
         () => undefined,
         () => undefined
     );
+    void admin.rpc('record_share_open', { p_token: token }).then(
+        () => undefined,
+        () => undefined
+    );
 
     return (
         <div className="min-h-screen bg-background">
@@ -98,10 +102,18 @@ export default async function SharePage({ params }: Params) {
                     <p className="overline">Shared with your class</p>
                     <h1 className="display-2 mt-3">{share.title}</h1>
                     {share.note && <p className="lead mt-4 whitespace-pre-line">{share.note}</p>}
-                    <p className="meta mt-4 inline-flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5" aria-hidden />
-                        This link works until {formatDate(share.expires_at)}
-                    </p>
+
+                    {/* The deadline leads when there is one — it is the reason
+                        the class opened the link, and burying it under an expiry
+                        date nobody asked about would be perverse. */}
+                    {share.due_on ? (
+                        <Due dueOn={share.due_on} />
+                    ) : (
+                        <p className="meta mt-4 inline-flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5" aria-hidden />
+                            This link works until {formatDate(share.expires_at)}
+                        </p>
+                    )}
                 </header>
 
                 {items.length === 0 ? (
@@ -166,6 +178,48 @@ export default async function SharePage({ params }: Params) {
                 </p>
             </main>
         </div>
+    );
+}
+
+/**
+ * How long is left, said the way somebody reads a deadline.
+ *
+ * "Due in 3 days" is what a learner needs; a date alone makes them do the
+ * arithmetic, and on the day itself the arithmetic is the whole message. Late is
+ * stated plainly rather than hidden — the link still works, and pretending
+ * otherwise helps nobody hand the work in.
+ */
+function Due({ dueOn }: { dueOn: string }) {
+    const today = new Date();
+    const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const due = new Date(`${dueOn}T00:00:00`);
+    const days = Math.round((due.getTime() - midnight.getTime()) / 86_400_000);
+
+    const label =
+        days < 0
+            ? `Was due ${formatDate(dueOn)}`
+            : days === 0
+              ? 'Due today'
+              : days === 1
+                ? 'Due tomorrow'
+                : `Due in ${days} days`;
+
+    const urgent = days <= 1;
+
+    return (
+        <p
+            className={`mt-4 inline-flex items-center gap-2 rounded-[var(--radius)] border px-3 py-2 text-sm font-semibold ${
+                days < 0
+                    ? 'border-border text-muted-foreground'
+                    : urgent
+                      ? 'border-[color:var(--ink-red)]/40 text-[color:var(--ink-red)]'
+                      : 'border-primary/40 text-primary'
+            }`}
+        >
+            <CalendarClock className="h-4 w-4" aria-hidden />
+            {label}
+            <span className="font-normal text-muted-foreground">· {formatDate(dueOn)}</span>
+        </p>
     );
 }
 
