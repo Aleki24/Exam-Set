@@ -50,9 +50,13 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
 -- longer plans priced to make the term option the obvious pick.
 INSERT INTO subscription_plans (slug, name, description, price_cents, duration_days, sort_order, is_featured)
 VALUES
-    ('monthly', 'Monthly',  'Every paper on the site for 30 days.',            50000,  30, 1, FALSE),
-    ('termly',  'One term', 'Covers a full school term — the best value.',    120000, 120, 2, TRUE),
-    ('yearly',  'Yearly',   'A full academic year, billed once.',             350000, 365, 3, FALSE)
+    -- Priced against the market: kcserevision.com, the closest comparable,
+    -- charges KES 999 a year and KES 550 for thirty days. Matched rather than
+    -- undercut — see migration 029, which repriced the live database and is the
+    -- place the reasoning is written down.
+    ('monthly', 'Monthly',  'Every paper and resource on the site for 30 days.',      55000,  30, 1, FALSE),
+    ('termly',  'One term', 'Covers a full school term.',                             79900, 120, 2, FALSE),
+    ('yearly',  'Yearly',   'A full academic year, billed once — the best value.',    99900, 365, 3, TRUE)
 ON CONFLICT (slug) DO NOTHING;
 
 ALTER TABLE subscription_plans ENABLE ROW LEVEL SECURITY;

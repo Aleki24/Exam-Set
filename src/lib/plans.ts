@@ -40,7 +40,7 @@ export function daysLeft(expiresAt: string | Date): number {
 }
 
 /**
- * "KES 1,200 for a term" — the phrase people compare plans with.
+ * "KES 999 for a year" — the phrase people compare plans with.
  * Durations are named rather than counted in days: "30 days" reads like a
  * limitation, "a month" reads like a plan.
  */
