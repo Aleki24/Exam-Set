@@ -139,6 +139,37 @@ section('Awkward inputs from the real question bank');
     assert('a very long question terminates', isPdf(long), `${pageCount(long)} pages`);
 }
 
+section('Shaped like the live question bank');
+{
+    // Every row in the real bank looks like this: HTML-wrapped text, one mark,
+    // empty options/sub_parts, answer_lines 0 and an empty marking scheme.
+    const real = [
+        { text: '<p>State three fundamental principles of freehand sketching.</p>', marks: 1, type: 'Structured', options: [], sub_parts: [], answer_lines: 0, marking_scheme: '' },
+        { text: '<p>Define the term "dimensioning" in technical drawing.</p>', marks: 1, type: 'Structured', options: [], sub_parts: [], answer_lines: 0, marking_scheme: '' },
+    ];
+
+    // 0 must mean "unspecified", so it should lay out exactly like the default
+    // for a one-mark question (two lines) and clearly unlike twelve. Page count
+    // is the honest measure here; byte size is not, because the stream is
+    // compressed.
+    const many = (lines) => Array.from({ length: 30 }, () => ({ ...real[0], answer_lines: lines }));
+    const atZero = pageCount(renderPaperPdf(PAPER, many(0)));
+    const atDefault = pageCount(renderPaperPdf(PAPER, many(2)));
+    const atTwelve = pageCount(renderPaperPdf(PAPER, many(12)));
+
+    assert('answer_lines 0 falls back to the default', atZero === atDefault,
+        `0 -> ${atZero} pages, explicit 2 -> ${atDefault} pages`);
+    assert('and is not simply ignored', atZero < atTwelve,
+        `${atZero} pages vs ${atTwelve} at twelve lines`);
+
+    const withLines = renderPaperPdf(PAPER, real);
+    const body = withLines.toString('latin1');
+    assert('editor HTML is stripped', !body.includes('<p>'), 'clean');
+
+    const scheme = renderMarkingSchemePdf(PAPER, real);
+    assert('empty marking_scheme is reported honestly', isPdf(scheme), `${scheme.length} bytes`);
+}
+
 section('Minimal metadata still produces a usable paper');
 {
     const bare = renderPaperPdf({ title: 'Untitled Paper' }, QUESTIONS);

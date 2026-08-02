@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
             title: String(body.title).slice(0, 255),
             subject: String(body.subject).slice(0, 100),
             description: body.description ?? null,
+            instructions: body.instructions ?? null,
             code: body.code ?? null,
             source: 'catalog',
             slug: await uniqueSlug(supabase, body.title, body.year, body.grade_label),

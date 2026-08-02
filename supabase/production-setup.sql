@@ -27,6 +27,8 @@
 --      function cannot be redirected to another schema's tables.
 --   9. Adds the WhatsApp bot's session state, and makes new-account creation
 --      copy the phone number onto the profile.
+--  10. Adds two columns the code has always read but the database never had:
+--      questions.sub_parts and exams.instructions.
 --
 -- TWO THINGS TO KNOW BEFORE RUNNING
 --
@@ -44,7 +46,7 @@
 
 
 -- ============================================================================
--- PART 1 OF 9
+-- PART 1 OF 10
 -- ============================================================================
 
 -- ============================================================================
@@ -470,7 +472,7 @@ UPDATE exams
 
 
 -- ============================================================================
--- PART 2 OF 9
+-- PART 2 OF 10
 -- ============================================================================
 
 -- ============================================================================
@@ -789,7 +791,7 @@ GRANT EXECUTE ON FUNCTION admin_sales_summary() TO authenticated;
 
 
 -- ============================================================================
--- PART 3 OF 9 — PRIVATE STORAGE BUCKET
+-- PART 3 OF 10 — PRIVATE STORAGE BUCKET
 --
 -- Only needed if you are using Supabase Storage for the paper PDFs (the default
 -- when the R2_* variables are not set). Creates a private bucket; no public
@@ -806,7 +808,7 @@ ON CONFLICT (id) DO UPDATE
 
 
 -- ============================================================================
--- PART 4 OF 9 — QUESTION USAGE TRACKING
+-- PART 4 OF 10 — QUESTION USAGE TRACKING
 -- ============================================================================
 
 -- ============================================================================
@@ -903,7 +905,7 @@ UPDATE questions q
 
 
 -- ============================================================================
--- PART 5 OF 9 — TIGHTEN ROW LEVEL SECURITY
+-- PART 5 OF 10 — TIGHTEN ROW LEVEL SECURITY
 -- ============================================================================
 
 -- ============================================================================
@@ -1002,7 +1004,7 @@ CREATE POLICY image_bank_write_authenticated ON image_bank
 
 
 -- ============================================================================
--- PART 6 OF 9 — SUBSCRIPTIONS
+-- PART 6 OF 10 — SUBSCRIPTIONS
 -- ============================================================================
 
 
@@ -1279,7 +1281,7 @@ GRANT EXECUTE ON FUNCTION admin_sales_summary() TO authenticated;
 
 
 -- ============================================================================
--- PART 7 OF 9 — LOCK DOWN THE FUNCTIONS THAT SETTLE MONEY
+-- PART 7 OF 10 — LOCK DOWN THE FUNCTIONS THAT SETTLE MONEY
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -1318,7 +1320,7 @@ REVOKE ALL ON FUNCTION bump_question_usage_for_exam() FROM PUBLIC, anon, authent
 
 
 -- ============================================================================
--- PART 8 OF 9 — PIN search_path ON EVERY SECURITY DEFINER FUNCTION
+-- PART 8 OF 10 — PIN search_path ON EVERY SECURITY DEFINER FUNCTION
 -- ============================================================================
 
 -- ============================================================================
@@ -1344,7 +1346,7 @@ END $$;
 
 
 -- ============================================================================
--- PART 9 OF 9 — WHATSAPP BOT
+-- PART 9 OF 10 — WHATSAPP BOT
 -- ============================================================================
 
 -- ============================================================================
@@ -1459,3 +1461,19 @@ REVOKE ALL ON FUNCTION handle_new_user() FROM PUBLIC, anon, authenticated;
 
 -- Looking an account up by phone happens on every inbound message.
 CREATE INDEX IF NOT EXISTS idx_profiles_phone ON profiles(phone) WHERE phone IS NOT NULL;
+
+
+-- ============================================================================
+-- PART 10 OF 10 — SCHEMA DRIFT
+-- ============================================================================
+
+
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS sub_parts JSONB DEFAULT '[]'::jsonb;
+
+COMMENT ON COLUMN questions.sub_parts IS
+    'Array of question sub-parts, each with id, label (a, b, c...), text and marks.';
+
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS instructions TEXT;
+
+COMMENT ON COLUMN exams.instructions IS
+    'Rubric printed under INSTRUCTIONS TO CANDIDATES on the generated paper.';

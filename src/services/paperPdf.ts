@@ -295,7 +295,11 @@ export function renderPaperPdf(paper: RenderablePaper, questions: RenderableQues
         // Room to answer. Multiple choice needs none; otherwise scale the space
         // to the marks, because two lines for a ten-mark essay is useless.
         if (parts.length === 0 && options.length === 0) {
-            const lines = question.answer_lines ?? defaultAnswerLines(marks, question.type);
+            // `answer_lines` is 0 on effectively every row in the live bank —
+            // it was written as a placeholder, not as an instruction to leave no
+            // room. Treating 0 as "unspecified" rather than "none" is the
+            // difference between a usable paper and one with nowhere to write.
+            const lines = question.answer_lines || defaultAnswerLines(marks, question.type);
             drawAnswerLines(sheet, lines, MARGIN_X + 22);
         }
 

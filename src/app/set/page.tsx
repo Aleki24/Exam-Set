@@ -285,6 +285,8 @@ export default function SetterPage() {
                     title: meta.title,
                     subject: examPaper.metadata.subject,
                     description,
+                    // Printed under INSTRUCTIONS TO CANDIDATES on the PDF.
+                    instructions: meta.instructions,
                     exam_type: meta.examType,
                     level_slug: meta.levelSlug || undefined,
                     grade_label: meta.gradeLabel || undefined,
