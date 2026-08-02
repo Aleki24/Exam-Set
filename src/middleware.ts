@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { updateSession } from '@/utils/supabase/middleware'
-import { createServerClient } from '@supabase/ssr'
-import { missingSupabaseEnv, supabaseAnonKey, supabaseConfigured, supabaseUrl as resolveUrl } from '@/lib/supabaseEnv'
+import { createMiddlewareClient } from '@/utils/supabase/middleware'
+import { isSessionRejected } from '@/utils/supabase/authFailure'
+import { missingSupabaseEnv, supabaseConfigured } from '@/lib/supabaseEnv'
 
 export async function middleware(request: NextRequest) {
     try {
@@ -16,31 +16,32 @@ export async function middleware(request: NextRequest) {
             return NextResponse.next();
         }
 
-        const supabaseUrl = resolveUrl()!;
-        const supabaseKey = supabaseAnonKey()!;
-
-        // Update session first
-        const response = await updateSession(request)
+        // One client, one `getUser()`, for the whole request.
+        //
+        // This used to be three: `updateSession` built a client and asked, then
+        // each branch below built another and asked again. Every ask can renew the
+        // token, and renewal rotates it — so three asks in one request left room
+        // for a later client to present a refresh token an earlier one had already
+        // spent. The server treats a replayed refresh token as a stolen one and
+        // revokes the whole session family, which is a sign-out nobody asked for
+        // and which nothing reports as an error. Asking once removes the race
+        // outright, and saves two round trips on every request besides.
+        //
+        // `session` is kept whole rather than destructured: renewing the token
+        // replaces the response object, so `session.response` has to be read
+        // after the call below, never before it. Pulling it out here would pin
+        // the response from before the renewal and send the old cookies.
+        const session = createMiddlewareClient(request)
+        const { data, error } = await session.supabase.auth.getUser()
+        const user = data?.user ?? null
 
         const pathname = request.nextUrl.pathname
 
-        // Create supabase client for auth check
-        const createSupabase = () => createServerClient(
-            supabaseUrl,
-            supabaseKey,
-            {
-                cookies: {
-                    getAll() {
-                        return request.cookies.getAll()
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            response.cookies.set(name, value, options)
-                        })
-                    },
-                },
-            }
-        )
+        // Redirects need the renewed cookies copied across by hand: a redirect is
+        // a new response and carries none of what was set on `response`. Losing
+        // them here means losing the renewal, and a browser left holding the spent
+        // token is signed out at its next refresh.
+        const redirectTo = (url: URL) => session.applyAuthCookies(NextResponse.redirect(url))
 
         // The shop (/ and /papers) and the setter (/set) are open to everyone —
         // browsing is how the platform sells. Only the pages tied to a specific
@@ -50,15 +51,28 @@ export async function middleware(request: NextRequest) {
             pathname.startsWith('/admin') ||
             pathname.startsWith('/exam/')
 
-        if (isProtectedRoute) {
-            const supabase = createSupabase()
-            const { data: { user } } = await supabase.auth.getUser()
+        // Whether the auth server answered at all. A dropped request says nothing
+        // about the session, so it must not be read as "not signed in".
+        const unreachable = Boolean(error) && !isSessionRejected(error)
 
-            if (!user) {
+        if (isProtectedRoute) {
+            // A network fault is not grounds to throw someone out of a page they
+            // are entitled to. Bounce only when there is genuinely no user, or the
+            // server has actually rejected the session. If auth simply could not
+            // be reached, let the request through — row level security is the real
+            // guard and is unaffected by any of this.
+            if (!user && !unreachable) {
                 // Send them to sign in, then straight back to where they were.
                 const login = new URL('/auth/login', request.url)
                 login.searchParams.set('next', pathname)
-                return NextResponse.redirect(login)
+                return redirectTo(login)
+            }
+
+            if (unreachable) {
+                console.warn(
+                    `Could not verify the session for ${pathname}; letting it through. ` +
+                        `Row level security still applies. (${error!.message})`
+                )
             }
         }
 
@@ -81,26 +95,30 @@ export async function middleware(request: NextRequest) {
             !pathname.startsWith('/auth/reset-password');
 
         if (isAuthPageToGuard) {
-            const supabase = createSupabase()
-            const { data, error } = await supabase.auth.getUser()
-
-            if (!error && data?.user) {
+            if (!error && user) {
                 const next = request.nextUrl.searchParams.get('next')
-                return NextResponse.redirect(new URL(next && next.startsWith('/') ? next : '/', request.url))
+                return redirectTo(new URL(next && next.startsWith('/') ? next : '/', request.url))
             }
 
-            if (error) {
-                // The cookie is present but no longer valid. Let the page render
-                // so they can sign in, and drop the dead cookie on the way so the
-                // next request starts clean.
+            // Only a session the server has actually rejected gets cleared. The
+            // previous version cleared on any error at all, so a signed-in user
+            // who opened an auth page during one dropped request had their session
+            // deleted for it — the expiries went out with the response, and by the
+            // time they noticed, the sign-out they never asked for was done.
+            if (error && !unreachable) {
                 console.warn('Stale session on an auth page, clearing it:', error.message)
                 for (const cookie of request.cookies.getAll()) {
-                    if (cookie.name.startsWith('sb-')) response.cookies.delete(cookie.name)
+                    if (cookie.name.startsWith('sb-')) session.response.cookies.delete(cookie.name)
                 }
+            } else if (error) {
+                console.warn(
+                    'Could not verify the session on an auth page, leaving it alone:',
+                    error.message
+                )
             }
         }
 
-        return response
+        return session.response
     } catch (e) {
         console.error('Middleware error:', e);
         return NextResponse.next();

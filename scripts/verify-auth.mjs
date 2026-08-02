@@ -3,6 +3,12 @@
  *
  *   node scripts/verify-auth.mjs
  *
+ * `isSessionRejected` decides whether a signed-in user keeps their session. It
+ * is checked hardest in the direction that hurts: every transient fault must
+ * come back false, because a false positive here signs somebody out mid-task
+ * for having a slow connection, and that is the bug this function exists to
+ * prevent. The reverse mistake costs a redirect to a sign-in page.
+ *
  * `safeNext` guards every emailed link in the product. The `next` value travels
  * through the user's inbox, so anyone who can trigger a signup or reset email
  * chooses it — which makes this the one piece of auth an attacker can reach
@@ -20,6 +26,7 @@ const jiti = createJiti(import.meta.url, {
 });
 
 const { safeNext, friendlyAuthError } = await jiti.import('../src/lib/authErrors.ts');
+const { isSessionRejected } = await jiti.import('../src/utils/supabase/authFailure.ts');
 
 let failures = 0;
 let checks = 0;
@@ -89,6 +96,34 @@ section('friendlyAuthError does not swallow the unknown');
 check('unrecognised passes through', friendlyAuthError('Some brand new failure'), 'Some brand new failure');
 check('empty gets a fallback', friendlyAuthError(''), 'Something went wrong. Please try again.');
 check('null gets a fallback', friendlyAuthError(null), 'Something went wrong. Please try again.');
+
+
+// ---------------------------------------------------------------------------
+
+section('isSessionRejected says yes only when the server ruled against the session');
+assert('spent refresh token', isSessionRejected({ status: 400, message: 'Invalid Refresh Token: Already Used' }), 'ok');
+assert('refresh token gone', isSessionRejected({ status: 400, code: 'refresh_token_not_found' }), 'ok');
+assert('session revoked', isSessionRejected({ status: 403, code: 'session_not_found' }), 'ok');
+assert('unparseable jwt', isSessionRejected({ status: 401, code: 'bad_jwt' }), 'ok');
+assert('account deleted', isSessionRejected({ status: 403, code: 'user_not_found' }), 'ok');
+assert('jwt expired', isSessionRejected({ status: 401, message: 'JWT expired' }), 'ok');
+assert('bare 401 counts', isSessionRejected({ status: 401, message: 'Unauthorized' }), 'ok');
+
+section('isSessionRejected never mistakes an unanswered request for a verdict');
+assert('the SDK retryable error', !isSessionRejected({ name: 'AuthRetryableFetchError', message: 'Failed to fetch' }), 'ok');
+assert('a 500 from the auth host', !isSessionRejected({ status: 500, message: 'Internal Server Error' }), 'ok');
+assert('a 502 from a proxy', !isSessionRejected({ status: 502, message: 'Bad Gateway' }), 'ok');
+assert('a 504 timeout', !isSessionRejected({ status: 504, message: 'Gateway Timeout' }), 'ok');
+assert('rate limiting', !isSessionRejected({ status: 429, message: 'Too Many Requests' }), 'ok');
+assert('no status at all', !isSessionRejected({ message: 'fetch failed' }), 'ok');
+assert('status zero', !isSessionRejected({ status: 0, message: 'Network request failed' }), 'ok');
+assert('an aborted request', !isSessionRejected({ name: 'AbortError', message: 'The operation was aborted' }), 'ok');
+assert('a dropped connection', !isSessionRejected({ message: 'TypeError: NetworkError when attempting to fetch resource' }), 'ok');
+assert('nothing at all', !isSessionRejected(null), 'ok');
+assert('undefined', !isSessionRejected(undefined), 'ok');
+
+section('isSessionRejected is not fooled by a retryable error carrying a rejection message');
+assert('retryable wins over wording', !isSessionRejected({ name: 'AuthRetryableFetchError', status: 0, message: 'invalid refresh token' }), 'ok');
 
 // ---------------------------------------------------------------------------
 

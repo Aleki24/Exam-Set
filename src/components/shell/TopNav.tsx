@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload } from 'lucide-react';
 import { useTheme } from 'next-themes';
-import { createClient } from '@/utils/supabase/client';
-import { clearSupabaseCookies, ensureUsableSession } from '@/utils/supabase/session';
+import { createClient, resetClient } from '@/utils/supabase/client';
+import { clearSupabaseCookies, clearSupabaseStorage, ensureUsableSession } from '@/utils/supabase/session';
 import { useCart } from '@/lib/cart';
 import { formatPrice } from '@/lib/catalog';
 import { formatDisplayName, getInitials } from '@/utils/userUtils';
@@ -24,7 +24,6 @@ const PRIMARY_LINKS = [
 
 export default function TopNav() {
     const pathname = usePathname();
-    const router = useRouter();
     const { count, totals } = useCart();
     const { theme, setTheme } = useTheme();
     const { isAdmin, staleSession } = useRole();
@@ -37,9 +36,10 @@ export default function TopNav() {
     useEffect(() => {
         setMounted(true);
 
-        // A session that cannot answer blocks every later Supabase call behind
-        // the token-refresh lock, so it is checked and discarded here — before
-        // the navigation, the setter or the role lookup depend on it.
+        // Checks the stored session and discards it only if the server rejects
+        // it outright. A slow or unreachable check leaves it alone: a session
+        // that is merely being renewed looks identical to one that is broken,
+        // and guessing wrong signs the user out mid-task for nothing.
         void ensureUsableSession();
 
         // Guarded because this runs on every page. `createClient` throws when the
@@ -88,8 +88,8 @@ export default function TopNav() {
      * is the part that actually decides what the user sees.
      */
     const signOut = async () => {
-        // Close the sheet first. `router.push('/')` from the shop is a no-op, so
-        // waiting on a route change to close it means it never closes.
+        // Close the sheet first. Navigating to the shop from the shop is a no-op,
+        // so waiting on a route change to close it means it never closes.
         setMobileOpen(false);
         setSigningOut(true);
 
@@ -125,12 +125,26 @@ export default function TopNav() {
             // Last resort. If the SDK never completed, the cookie it left behind
             // would sign the user straight back in on the next request.
             clearSupabaseCookies();
+            clearSupabaseStorage();
+
+            // The client is shared for the lifetime of the tab now, and it holds
+            // the session in memory. If the races above both timed out, that copy
+            // outlives the cookies we just expired, and the next call would be
+            // served a session the browser no longer has on disk.
+            resetClient();
 
             setEmail(null);
             setName(null);
             setSigningOut(false);
-            router.push('/');
-            router.refresh();
+
+            // A full load rather than `router.push`, and the shared client is why.
+            // Discarding it leaves the mounted components subscribed to an
+            // instance nothing writes to any more, so a subsequent sign-in in the
+            // same tab would not reach the navigation and it would go on showing
+            // a signed-out user until something forced a reload. Reloading here
+            // makes that impossible: new client, new subscriptions, and the server
+            // renders the page without the cookies for good measure.
+            window.location.assign('/');
         }
     };
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { createClient } from './client';
+import { isSessionRejected } from './authFailure';
 
 /**
  * RECOVERING FROM A SESSION THAT CANNOT ANSWER
@@ -16,10 +17,26 @@ import { createClient } from './client';
  * setter hung on "Loading bank…", sign-out sat on "Signing out…", and the owner
  * appeared as an ordinary customer because the profile lookup never returned.
  *
- * The cure is to stop waiting and throw the bad session away. Everything the
- * shop and the setter show is readable anonymously, so a cleared session leaves
- * a working site and a prompt to sign in again — which is a great deal better
- * than a spinner that never resolves.
+ * WHAT THIS FILE MAY AND MAY NOT DO
+ * ----------------------------------------------------------------------------
+ * The first version of this check answered the hang by throwing the session away
+ * whenever it failed to answer within eight seconds. That fixed the freeze and
+ * introduced a worse bug: it signed people out for having a slow connection.
+ *
+ * Eight seconds is not long on a phone. A backgrounded tab, a lift, a tunnel, a
+ * radio waking from idle — any of these outlast it. Worse, the check is slowest
+ * in precisely the case where the session is *fine*: an access token that has
+ * just expired makes `getUser()` queue behind a token refresh, so the one moment
+ * a healthy session takes a while to answer is the moment it is being renewed.
+ * The timeout was landing on renewals and calling them deaths, which is how
+ * someone signs in and is signed out minutes later without touching anything.
+ *
+ * So the ceiling stayed and the punishment went. A session is discarded only
+ * when the auth server has actually rejected it. A timeout is reported to the
+ * caller and nothing more — the hang this was invented to prevent is already
+ * fixed at its source, since public reads now go through a session-free client
+ * (see `publicClient`) and no longer queue behind auth at all. There is nothing
+ * left for a slow session to freeze, so there is nothing to justify killing it.
  */
 
 /** Expires the Supabase cookies directly, for when the SDK itself is stuck. */
@@ -40,7 +57,7 @@ export function clearSupabaseCookies(): void {
 }
 
 /** Also drop anything the SDK kept in local storage. */
-function clearSupabaseStorage(): void {
+export function clearSupabaseStorage(): void {
     if (typeof localStorage === 'undefined') return;
     try {
         for (const key of Object.keys(localStorage)) {
@@ -54,23 +71,24 @@ function clearSupabaseStorage(): void {
 }
 
 export interface SessionHealth {
-    /** True when the session was unusable and has been discarded. */
+    /** True when the server rejected the session and it has been discarded. */
     cleared: boolean;
-    reason?: 'timeout' | 'rejected';
+    /**
+     * `rejected`    — the server ruled the session invalid; it is gone.
+     * `unreachable` — the check could not complete. The session is untouched and
+     *                 may be perfectly good; carry on as before.
+     */
+    reason?: 'unreachable' | 'rejected';
 }
 
-const CHECK_TIMEOUT_MS = 8000;
+const CHECK_TIMEOUT_MS = 15000;
 
 /**
- * Verifies the stored session can still be used, and discards it if not.
+ * Verifies the stored session can still be used, and discards it if — and only
+ * if — the server says it cannot.
  *
- * A timeout counts as a failure: a session that cannot answer within eight
- * seconds is, from the user's side, indistinguishable from one that is broken —
- * and leaving it in place is what blocks every later request.
- *
- * Only ever clears locally. It never revokes anything server-side, so a session
- * dropped here because of a passing network fault costs one sign-in, nothing
- * more.
+ * Never revokes anything server-side, so a session cleared here costs one
+ * sign-in on this device and nothing on any other.
  */
 export async function ensureUsableSession(): Promise<SessionHealth> {
     let supabase: ReturnType<typeof createClient>;
@@ -95,30 +113,57 @@ export async function ensureUsableSession(): Promise<SessionHealth> {
             supabase.auth.getUser(),
             new Promise((resolve) => setTimeout(() => resolve(timedOut), CHECK_TIMEOUT_MS)),
         ]);
-    } catch {
-        outcome = timedOut;
+    } catch (err) {
+        // A thrown error still counts if it is the server's answer.
+        if (isSessionRejected(err)) {
+            await discard();
+            console.warn('Stored session was rejected by the server; it has been cleared.');
+            return { cleared: true, reason: 'rejected' };
+        }
+        return { cleared: false, reason: 'unreachable' };
     }
 
     if (outcome === timedOut) {
-        discard();
-        console.warn('Session check timed out; the stored session has been cleared.');
-        return { cleared: true, reason: 'timeout' };
+        // Slow, not dead — and leaving it alone is the whole point. This is what
+        // a healthy session looks like while its token is being refreshed.
+        console.warn('Session check did not answer in time; leaving the session in place.');
+        return { cleared: false, reason: 'unreachable' };
     }
 
     const result = outcome as Awaited<ReturnType<typeof supabase.auth.getUser>>;
-    if (result?.error || !result?.data?.user) {
-        discard();
-        console.warn('Stored session was rejected; it has been cleared.');
+
+    if (result?.error) {
+        if (!isSessionRejected(result.error)) {
+            console.warn('Session check could not reach the auth server:', result.error.message);
+            return { cleared: false, reason: 'unreachable' };
+        }
+        await discard();
+        console.warn('Stored session was rejected by the server; it has been cleared.');
+        return { cleared: true, reason: 'rejected' };
+    }
+
+    // No error and no user is the server answering "nobody is signed in". That
+    // is a verdict, not a silence.
+    if (!result?.data?.user) {
+        await discard();
         return { cleared: true, reason: 'rejected' };
     }
 
     return { cleared: false };
 
-    function discard() {
-        // Local scope only, and not awaited — the SDK may be exactly what is
-        // stuck, and the cookie and storage removal below is what actually
-        // decides whether the next request carries a dead token.
-        void supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    async function discard() {
+        // Waited on, unlike before — letting the SDK finish first stops it
+        // writing a session back into storage that has just been emptied.
+        //
+        // But waited on with a ceiling, because `signOut` takes the same lock a
+        // stuck refresh may be holding, and this must not become another thing
+        // that hangs. If the ceiling wins, the manual clear below is what decides
+        // whether the next request carries a dead token, and it always runs.
+        await Promise.race([
+            supabase.auth.signOut({ scope: 'local' }).catch(() => undefined),
+            new Promise((resolve) => setTimeout(resolve, 2000)),
+        ]);
+
         clearSupabaseCookies();
         clearSupabaseStorage();
     }
