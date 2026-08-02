@@ -27,6 +27,7 @@ import { normalisePhone } from '@/lib/mpesa';
 import { formatPrice, examTypeName } from '@/lib/catalog';
 import { durationLabel } from '@/lib/plans';
 import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
+import { ensurePaperFile, paperFilename } from './paperFiles';
 import { describeQuery, parsePaperQuery } from './paperQuery';
 import { findPapersRelaxing, stockedSubjects } from './paperSearch';
 import { createPlanOrder } from './planOrders';
@@ -222,7 +223,7 @@ async function deliverOrOffer(
 ): Promise<void> {
     const { data: paper } = await admin
         .from('exams')
-        .select('id, title, subject, grade_label, exam_type, term_slug, year, total_marks, question_count, price_cents, currency, has_marking_scheme, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url, is_published, source')
+        .select('id, title, subject, grade_label, exam_type, term_slug, year, time_limit, institution, total_marks, question_count, question_ids, price_cents, currency, has_marking_scheme, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url, is_published, source')
         .eq('id', examId)
         .maybeSingle();
 
@@ -252,26 +253,23 @@ async function deliverOrOffer(
  * fifteen minutes later — long before it could be forwarded usefully.
  */
 async function sendPaper(config: WhatsAppConfig, admin: any, phone: string, paper: any): Promise<void> {
-    const unavailable = storageUnavailableReason();
-    if (unavailable && paper.pdf_storage_key) {
-        console.error('WhatsApp delivery blocked:', unavailable);
-        await sendText(config, phone, 'Downloads are temporarily unavailable. Please try again later.');
-        return;
-    }
+    const paperUrl = await deliverableUrl(admin, paper, 'paper');
 
-    const paperUrl = await fileUrl(paper.pdf_storage_key, paper.pdf_url);
     if (!paperUrl) {
-        await sendText(config, phone, 'That paper has no file attached yet. I have flagged it.');
-        console.error('Paper has no file:', paper.id);
+        await sendText(
+            config,
+            phone,
+            'That paper is not available as a file yet. I have flagged it — please try another.'
+        );
         return;
     }
 
-    await sendDocument(config, phone, paperUrl, `${shortTitle(paper)}.pdf`, paper.title);
+    await sendDocument(config, phone, paperUrl, paperFilename(paper, 'paper'), paper.title);
 
     if (paper.has_marking_scheme) {
-        const schemeUrl = await fileUrl(paper.marking_scheme_storage_key, paper.marking_scheme_url);
+        const schemeUrl = await deliverableUrl(admin, paper, 'scheme');
         if (schemeUrl) {
-            await sendDocument(config, phone, schemeUrl, `${shortTitle(paper)}-marking-scheme.pdf`, 'Marking scheme');
+            await sendDocument(config, phone, schemeUrl, paperFilename(paper, 'scheme'), 'Marking scheme');
         }
     }
 
@@ -280,9 +278,38 @@ async function sendPaper(config: WhatsAppConfig, admin: any, phone: string, pape
     if (error) console.warn('download counter failed:', error.message);
 }
 
-async function fileUrl(storageKey?: string | null, directUrl?: string | null): Promise<string | null> {
-    if (storageKey) return signedDownloadUrl(storageKey, 900);
-    return directUrl ?? null;
+/**
+ * A URL Meta can fetch.
+ *
+ * Papers built in the setter have no file until one is rendered, so this goes
+ * through the same generate-and-store path the website uses — the bot must not
+ * be the reason a paper is undeliverable, and it must not grow a second answer
+ * to "where is the file".
+ *
+ * Streaming is not an option here: Meta collects the document from its own
+ * servers and cannot authenticate, so without storage there is no link to give
+ * it.
+ */
+async function deliverableUrl(admin: any, paper: any, asset: 'paper' | 'scheme'): Promise<string | null> {
+    const file = await ensurePaperFile(admin, paper, asset);
+
+    if (file.directUrl) return file.directUrl;
+
+    if (file.storageKey) {
+        if (storageUnavailableReason()) {
+            console.error('WhatsApp delivery blocked:', storageUnavailableReason());
+            return null;
+        }
+        return signedDownloadUrl(file.storageKey, 900);
+    }
+
+    if (file.buffer) {
+        console.error('Cannot deliver over WhatsApp without storage configured — Meta fetches the file by URL.');
+        return null;
+    }
+
+    console.error('Paper has no deliverable file:', paper.id, file.error);
+    return null;
 }
 
 /**
@@ -442,7 +469,7 @@ export async function deliverAfterPayment(phone: string, planName?: string): Pro
 
         const { data: paper } = await admin
             .from('exams')
-            .select('id, title, has_marking_scheme, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url, subject, grade_label, exam_type, term_slug, year, total_marks, question_count')
+            .select('id, title, has_marking_scheme, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url, subject, grade_label, exam_type, term_slug, year, time_limit, institution, total_marks, question_count, question_ids')
             .eq('id', examId)
             .maybeSingle();
 

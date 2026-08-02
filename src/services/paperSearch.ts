@@ -69,7 +69,7 @@ export async function findPapers(
 ): Promise<any[]> {
     let query = supabase
         .from('exams')
-        .select('id, slug, title, subject, grade_label, level_slug, exam_type, term_slug, year, total_marks, question_count, price_cents, currency, has_marking_scheme, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url')
+        .select('id, slug, title, subject, grade_label, level_slug, exam_type, term_slug, year, total_marks, question_count, price_cents, currency, has_marking_scheme, time_limit, institution, question_ids, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url')
         .eq('source', 'catalog')
         .eq('is_published', true);
 

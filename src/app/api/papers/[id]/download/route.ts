@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { ensurePaperFile, paperFilename } from '@/services/paperFiles';
 
 /**
  * GET /api/papers/:id/download?asset=paper|scheme
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const { data: paper, error } = await supabase
             .from('exams')
             .select(
-                'id, title, price_cents, created_by, is_published, source, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url, has_marking_scheme'
+                'id, title, subject, grade_label, exam_type, term_slug, year, time_limit, institution, total_marks, question_ids, price_cents, created_by, is_published, source, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url, has_marking_scheme'
             )
             .eq('id', id)
             .maybeSingle();
@@ -63,15 +65,40 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Sign in to download', requiresAuth: true }, { status: 401 });
         }
 
-        const storageKey = asset === 'scheme' ? paper.marking_scheme_storage_key : paper.pdf_storage_key;
-        const directUrl = asset === 'scheme' ? paper.marking_scheme_url : paper.pdf_url;
-
         if (asset === 'scheme' && !paper.has_marking_scheme) {
             return NextResponse.json({ error: 'No marking scheme for this paper' }, { status: 404 });
         }
 
-        let url: string | null = null;
-        if (storageKey) {
+        // A paper built in the setter is a list of questions, not a file, so it
+        // gets rendered on first request and stored. Needs the service role: the
+        // buyer is not the author, and recording the generated key is a
+        // privileged write.
+        const admin = createAdminClient();
+        const file = await ensurePaperFile(admin ?? supabase, paper, asset);
+
+        if (file.error) {
+            return NextResponse.json({ error: file.error }, { status: 404 });
+        }
+
+        // Fire-and-forget counter; a failed increment must not block a download.
+        const { error: countError } = await supabase.rpc('increment_paper_download', { p_exam_id: id });
+        if (countError) console.warn('download counter failed:', countError.message);
+
+        // Storage is not configured, so the freshly rendered bytes are streamed
+        // instead. Slower and uncached, but somebody who paid still gets their
+        // paper.
+        if (file.buffer) {
+            return new NextResponse(new Uint8Array(file.buffer), {
+                headers: {
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': `attachment; filename="${paperFilename(paper, asset)}"`,
+                    'Cache-Control': 'private, no-store',
+                },
+            });
+        }
+
+        let url: string | null = file.directUrl ?? null;
+        if (file.storageKey) {
             const unavailable = storageUnavailableReason();
             if (unavailable) {
                 console.error('download blocked:', unavailable);
@@ -82,18 +109,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
             // 15 minutes is long enough to start a download, short enough that a
             // leaked link is worthless.
-            url = await signedDownloadUrl(storageKey, 900);
-        } else if (directUrl) {
-            url = directUrl;
+            url = await signedDownloadUrl(file.storageKey, 900);
         }
 
         if (!url) {
             return NextResponse.json({ error: 'This paper has no file attached yet' }, { status: 404 });
         }
-
-        // Fire-and-forget counter; a failed increment must not block a download.
-        const { error: countError } = await supabase.rpc('increment_paper_download', { p_exam_id: id });
-        if (countError) console.warn('download counter failed:', countError.message);
 
         return NextResponse.json({ url, asset, title: paper.title });
     } catch (err) {
