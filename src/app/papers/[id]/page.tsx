@@ -19,6 +19,8 @@ export default function PaperDetailPage() {
 
     const [paper, setPaper] = useState<PaperListing | null>(null);
     const [related, setRelated] = useState<PaperListing[]>([]);
+    /** True when the strip really is the same subject, which the heading claims. */
+    const [relatedBySubject, setRelatedBySubject] = useState(false);
     const [loading, setLoading] = useState(true);
     const [downloading, setDownloading] = useState<'paper' | 'scheme' | null>(null);
 
@@ -40,17 +42,64 @@ export default function PaperDetailPage() {
 
     // Cross-sell: other papers for the same level, which is what a teacher who
     // needs one paper almost always needs more of.
+    /*
+     * More like this — genuinely like this.
+     *
+     * This used to match on level alone, so a Grade 9 Mathematics paper
+     * suggested any Grade 9 paper at all: Kiswahili, Agriculture, whatever was
+     * most downloaded. That is not a recommendation, it is the catalogue with a
+     * heading on it, and it is worse than nothing because the heading claims
+     * otherwise.
+     *
+     * Now it matches subject and level, and asks for more than it needs so the
+     * same kind can be floated to the front. Same kind first but not
+     * exclusively: somebody reading a Grade 9 maths paper is often glad to see
+     * the scheme of work for it, and filtering to one kind hides exactly that.
+     *
+     * Falls back to the level-only query when a subject match returns nothing,
+     * because an empty strip on a thin catalogue helps nobody — but never falls
+     * back to a different subject silently while the heading still says
+     * otherwise. The heading changes with it.
+     */
     useEffect(() => {
         if (!paper) return;
-        const params = new URLSearchParams({ limit: '4', sort: 'popular' });
-        if (paper.level_slug) params.set('level', paper.level_slug);
+        let cancelled = false;
 
-        fetch(`/api/papers?${params}`)
-            .then((res) => res.json())
-            .then((data) => setRelated((data.papers || []).filter((p: PaperListing) => p.id !== paper.id).slice(0, 3)))
-            .catch(() => {
+        const ask = async (withSubject: boolean): Promise<PaperListing[]> => {
+            const params = new URLSearchParams({ limit: '12', sort: 'newest' });
+            if (paper.level_slug) params.set('level', paper.level_slug);
+            if (withSubject && paper.subject) params.set('subject', paper.subject);
+
+            const res = await fetch(`/api/papers?${params}`);
+            const data = await res.json();
+            return (data.papers || []).filter((p: PaperListing) => p.id !== paper.id);
+        };
+
+        (async () => {
+            try {
+                let found = paper.subject ? await ask(true) : [];
+                let matched = found.length > 0;
+
+                if (found.length === 0) {
+                    found = await ask(false);
+                    matched = false;
+                }
+
+                if (cancelled) return;
+
+                const sameKind = found.filter((p) => p.resource_kind === paper.resource_kind);
+                const rest = found.filter((p) => p.resource_kind !== paper.resource_kind);
+
+                setRelatedBySubject(matched);
+                setRelated([...sameKind, ...rest].slice(0, 3));
+            } catch {
                 /* a missing cross-sell strip is not worth an error toast */
-            });
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
     }, [paper]);
 
     const download = async (asset: 'paper' | 'scheme', target?: PaperListing) => {
@@ -280,7 +329,9 @@ export default function PaperDetailPage() {
                     <section className="mt-16 border-t border-border pt-8" aria-labelledby="related-heading">
                         <div className="rule-heading mb-5">
                             <h2 id="related-heading" className="overline">
-                                More for {level?.name ?? 'this level'}
+                                {relatedBySubject && paper.subject
+                                    ? `More ${paper.subject} for ${level?.short ?? 'this level'}`
+                                    : `More for ${level?.name ?? 'this level'}`}
                             </h2>
                         </div>
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
