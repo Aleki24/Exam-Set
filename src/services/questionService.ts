@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/client';
+import { publicBrowserClient } from '@/utils/supabase/publicClient';
 import {
     Question,
     DBQuestion,
@@ -34,7 +35,9 @@ export async function getCurriculums(): Promise<DBCurriculum[]> {
  * Fetch grades for a specific curriculum
  */
 export async function getGrades(curriculumId?: string): Promise<DBGrade[]> {
-    const supabase = createClient();
+    // Public lookup — kept off the authenticated client so a stale session
+    // cannot leave the filter dropdowns permanently empty.
+    const supabase = publicBrowserClient();
     let query = supabase
         .from('grades')
         .select('*')
@@ -57,7 +60,7 @@ export async function getGrades(curriculumId?: string): Promise<DBGrade[]> {
  * Fetch all subjects
  */
 export async function getSubjects(): Promise<DBSubject[]> {
-    const supabase = createClient();
+    const supabase = publicBrowserClient();
     const { data, error } = await supabase
         .from('subjects')
         .select('*')

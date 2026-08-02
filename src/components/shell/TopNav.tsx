@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { createClient } from '@/utils/supabase/client';
+import { clearSupabaseCookies, ensureUsableSession } from '@/utils/supabase/session';
 import { useCart } from '@/lib/cart';
 import { formatPrice } from '@/lib/catalog';
 import { formatDisplayName, getInitials } from '@/utils/userUtils';
@@ -16,29 +17,6 @@ import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
  * The whole navigation of the product: two places to go, plus your cart and
  * your library. Anything more belongs inside one of the two surfaces.
  */
-/**
- * Removes the Supabase session cookies by hand.
- *
- * Only reached when the SDK failed or timed out. Without it a sign-out that did
- * not complete leaves the cookie in place, the next request is authenticated
- * again, and the user appears to have been silently signed back in.
- */
-function clearSupabaseCookies(): void {
-    if (typeof document === 'undefined') return;
-
-    for (const entry of document.cookie.split(';')) {
-        const name = entry.split('=')[0]?.trim();
-        if (!name || !name.startsWith('sb-')) continue;
-
-        // Expired on every path/domain combination the cookie might carry,
-        // because a mismatch leaves it alive and the sign-out silently undone.
-        const expiry = 'Thu, 01 Jan 1970 00:00:00 GMT';
-        document.cookie = `${name}=; expires=${expiry}; path=/`;
-        document.cookie = `${name}=; expires=${expiry}; path=/; domain=${location.hostname}`;
-        document.cookie = `${name}=; expires=${expiry}; path=/; domain=.${location.hostname}`;
-    }
-}
-
 const PRIMARY_LINKS = [
     { href: '/', label: 'Exam papers', icon: FileText, match: (p: string) => p === '/' || p.startsWith('/papers') },
     { href: '/set', label: 'Set an exam', icon: PenSquare, match: (p: string) => p.startsWith('/set') },
@@ -58,6 +36,11 @@ export default function TopNav() {
 
     useEffect(() => {
         setMounted(true);
+
+        // A session that cannot answer blocks every later Supabase call behind
+        // the token-refresh lock, so it is checked and discarded here — before
+        // the navigation, the setter or the role lookup depend on it.
+        void ensureUsableSession();
 
         // Guarded because this runs on every page. `createClient` throws when the
         // environment is not configured, and an exception raised in an effect

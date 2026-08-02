@@ -11,7 +11,7 @@
  *     limit that made large papers impossible to fill).
  */
 
-import { createClient } from '@/utils/supabase/client';
+import { publicBrowserClient } from '@/utils/supabase/publicClient';
 import type { Difficulty, DBQuestion, Question, QuestionType } from '@/types';
 import type { PaperBlueprint } from '@/types/shop';
 
@@ -351,7 +351,10 @@ function withTimeout<T>(work: PromiseLike<T>, label: string): Promise<T> {
  * of a bank of 900 is impossible if the query stops at 50 rows.
  */
 export async function fetchQuestionPool(filters: PoolFilters = {}): Promise<DBQuestion[]> {
-    const supabase = createClient();
+    // Session-free on purpose: the bank is public, and reading it through the
+    // authenticated client made it wait behind the auth token-refresh lock —
+    // which is how this came to hang for ever behind an expired session.
+    const supabase = publicBrowserClient();
     const max = filters.max ?? 1000;
     const collected: DBQuestion[] = [];
 
