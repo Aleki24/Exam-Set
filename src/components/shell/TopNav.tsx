@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen, Home, Settings2 } from 'lucide-react';
+import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen, Home, Settings2, TrendingUp } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { createClient, resetClient } from '@/utils/supabase/client';
 import { clearSupabaseCookies, clearSupabaseStorage, ensureUsableSession } from '@/utils/supabase/session';
@@ -403,6 +403,13 @@ export default function TopNav() {
                                 >
                                     <Home className="h-4 w-4" />
                                     My home
+                                </Link>
+                                <Link
+                                    href="/progress"
+                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
+                                >
+                                    <TrendingUp className="h-4 w-4" />
+                                    My progress
                                 </Link>
                                 <Link
                                     href="/library"
