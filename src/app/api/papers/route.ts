@@ -21,6 +21,10 @@ export async function GET(req: NextRequest) {
         const grade = searchParams.get('grade') || '';
         const subject = searchParams.get('subject') || '';
         const examType = searchParams.get('exam_type') || '';
+        const kind = searchParams.get('kind') || '';
+        // Repeatable, so the browse hierarchy can ask for one subject under all
+        // the names it has ever been stored under.
+        const subjectAliases = searchParams.getAll('subject_alias').filter(Boolean);
         const term = searchParams.get('term') || '';
         const year = searchParams.get('year') || '';
         const price = searchParams.get('price') || '';
@@ -38,7 +42,9 @@ export async function GET(req: NextRequest) {
 
         // Shared with the WhatsApp bot, so the shop and the chat cannot end up
         // disagreeing about which papers match a request.
-        query = applyPaperFilters(query, { level, grade, subject, examType, term, year, price, search });
+        query = applyPaperFilters(query, {
+            level, grade, subject, subjectAliases, examType, kind, term, year, price, search,
+        });
 
         switch (sort) {
             case 'popular':

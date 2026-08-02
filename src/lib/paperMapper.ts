@@ -19,6 +19,7 @@ export function toListing(row: any): PaperListing {
         code: row.code ?? undefined,
         source: row.source ?? 'catalog',
         exam_type: row.exam_type ?? undefined,
+        resource_kind: row.resource_kind ?? 'past-paper',
         level_slug: row.level_slug ?? undefined,
         grade_label: row.grade_label ?? undefined,
         term_slug: row.term_slug ?? undefined,

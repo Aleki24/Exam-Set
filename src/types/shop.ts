@@ -23,6 +23,8 @@ export interface PaperListing {
 
     source: PaperSource;
     exam_type?: ExamTypeSlug | string;
+    /** What the artefact is — see lib/resources.ts. Distinct from exam_type. */
+    resource_kind?: string;
     level_slug?: LevelSlug | string;
     grade_label?: string;
     term_slug?: TermSlug | string;

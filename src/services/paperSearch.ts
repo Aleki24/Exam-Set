@@ -16,6 +16,20 @@ export interface CatalogFilters {
     grade?: string;
     subject?: string;
     examType?: string;
+    /**
+     * What the artefact is — a paper, notes, a scheme of work. Distinct from
+     * `examType`, which says which sitting it belongs to. See lib/resources.ts.
+     */
+    kind?: string;
+    /**
+     * Alternative spellings of one subject, for the browse hierarchy.
+     *
+     * `subject` is free text on older rows, so "History" and "History and
+     * Government" are the same shelf to a teacher and two different strings to
+     * Postgres. Passing the set keeps one subject page from showing half its
+     * stock. Takes precedence over `subject` when both are given.
+     */
+    subjectAliases?: string[];
     term?: string;
     year?: number | string;
     /** 'free' | 'paid' */
@@ -33,8 +47,16 @@ export interface CatalogFilters {
 export function applyPaperFilters(query: any, filters: CatalogFilters): any {
     if (filters.level) query = query.eq('level_slug', filters.level);
     if (filters.grade) query = query.eq('grade_label', filters.grade);
-    if (filters.subject) query = query.eq('subject', filters.subject);
+    if (filters.subjectAliases?.length) {
+        // Quoted because learning-area names contain spaces, and an unquoted
+        // value would end the `in` list at the first one.
+        const list = filters.subjectAliases.map((name) => `"${name.replace(/"/g, '')}"`).join(',');
+        query = query.or(`subject.in.(${list})`);
+    } else if (filters.subject) {
+        query = query.eq('subject', filters.subject);
+    }
     if (filters.examType) query = query.eq('exam_type', filters.examType);
+    if (filters.kind) query = query.eq('resource_kind', filters.kind);
     if (filters.term) query = query.eq('term_slug', filters.term);
     if (filters.year) query = query.eq('year', Number(filters.year));
     if (filters.price === 'free') query = query.eq('price_cents', 0);

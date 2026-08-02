@@ -15,6 +15,7 @@
 // ============================================================================
 
 export type LevelSlug =
+    | 'pg'
     | 'pp'
     | 'lower-primary'
     | 'upper-primary'
@@ -42,13 +43,27 @@ export interface LevelDef {
  */
 export const LEVELS: LevelDef[] = [
     {
+        slug: 'pg',
+        name: 'Playgroup',
+        short: 'Baby Class',
+        grades: ['Playgroup', 'Baby Class'],
+        dbLevel: 'pre_primary',
+        curriculum: 'CBE',
+        blurb: 'Baby class and playgroup activity sheets',
+    },
+    {
+        // Playgroup used to live in this blurb and nowhere else — mentioned in
+        // prose, absent from the data. A level that cannot be selected cannot
+        // be filtered, browsed or stocked, so the youngest learners on the
+        // platform were invisible to every surface that reads LEVELS. It is now
+        // its own level above, and this one covers what it actually says.
         slug: 'pp',
         name: 'Pre-Primary',
         short: 'PP1-PP2',
         grades: ['PP1', 'PP2'],
         dbLevel: 'pre_primary',
         curriculum: 'CBE',
-        blurb: 'Playgroup, PP1 and PP2 assessment activities',
+        blurb: 'PP1 and PP2 assessment activities',
     },
     {
         slug: 'lower-primary',

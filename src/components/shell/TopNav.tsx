@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload } from 'lucide-react';
+import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { createClient, resetClient } from '@/utils/supabase/client';
 import { clearSupabaseCookies, clearSupabaseStorage, ensureUsableSession } from '@/utils/supabase/session';
@@ -14,11 +14,20 @@ import { useRole } from '@/lib/roles';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 
 /**
- * The whole navigation of the product: two places to go, plus your cart and
- * your library. Anything more belongs inside one of the two surfaces.
+ * The whole navigation of the product: three places to go, plus your cart and
+ * your library. Anything more belongs inside one of the three surfaces.
+ *
+ * "Exam papers" and "Library" are two doors onto the same stock, and both earn
+ * their place because two different people arrive. Someone who knows what they
+ * want types it, and search over everything is the fastest way to that. Someone
+ * who does not know browses down a hierarchy — level, then learning area — and
+ * is never asked a question they cannot answer. A parent knows their child is
+ * in Grade 4; they do not know what a summative assessment is, and a filter
+ * rail opening with twenty-six exam types is a wall to them.
  */
 const PRIMARY_LINKS = [
     { href: '/', label: 'Exam papers', icon: FileText, match: (p: string) => p === '/' || p.startsWith('/papers') },
+    { href: '/learn', label: 'Library', icon: BookOpen, match: (p: string) => p.startsWith('/learn') },
     { href: '/set', label: 'Set an exam', icon: PenSquare, match: (p: string) => p.startsWith('/set') },
 ];
 
