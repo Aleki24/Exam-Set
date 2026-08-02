@@ -16,6 +16,29 @@ import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
  * The whole navigation of the product: two places to go, plus your cart and
  * your library. Anything more belongs inside one of the two surfaces.
  */
+/**
+ * Removes the Supabase session cookies by hand.
+ *
+ * Only reached when the SDK failed or timed out. Without it a sign-out that did
+ * not complete leaves the cookie in place, the next request is authenticated
+ * again, and the user appears to have been silently signed back in.
+ */
+function clearSupabaseCookies(): void {
+    if (typeof document === 'undefined') return;
+
+    for (const entry of document.cookie.split(';')) {
+        const name = entry.split('=')[0]?.trim();
+        if (!name || !name.startsWith('sb-')) continue;
+
+        // Expired on every path/domain combination the cookie might carry,
+        // because a mismatch leaves it alive and the sign-out silently undone.
+        const expiry = 'Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = `${name}=; expires=${expiry}; path=/`;
+        document.cookie = `${name}=; expires=${expiry}; path=/; domain=${location.hostname}`;
+        document.cookie = `${name}=; expires=${expiry}; path=/; domain=.${location.hostname}`;
+    }
+}
+
 const PRIMARY_LINKS = [
     { href: '/', label: 'Exam papers', icon: FileText, match: (p: string) => p === '/' || p.startsWith('/papers') },
     { href: '/set', label: 'Set an exam', icon: PenSquare, match: (p: string) => p.startsWith('/set') },
@@ -89,16 +112,37 @@ export default function TopNav() {
 
         try {
             const supabase = createClient();
-            const { error } = await supabase.auth.signOut();
 
-            if (error) {
-                console.warn('Global sign-out refused, clearing this device instead:', error.message);
-                await supabase.auth.signOut({ scope: 'local' });
-            }
+            // A global sign-out is a network round trip to revoke the token on
+            // the server. On a slow or dropped mobile connection that request can
+            // hang indefinitely — and because the button was awaiting it, it sat
+            // disabled on "Signing out…" for ever, which is precisely when
+            // somebody most wants out.
+            //
+            // Signing out is a local decision. The server revocation is worth
+            // attempting, but never worth waiting on: after a moment we stop
+            // waiting and clear this device regardless.
+            // The rejection handler matters: once the timeout wins the race, a
+            // later rejection from the abandoned call would otherwise surface as
+            // an unhandled promise rejection.
+            await Promise.race([
+                supabase.auth.signOut().catch(() => undefined),
+                new Promise((resolve) => setTimeout(resolve, 3000)),
+            ]);
+
+            // Local scope touches no network, so this is what actually
+            // guarantees the browser forgets the session.
+            await Promise.race([
+                supabase.auth.signOut({ scope: 'local' }).catch(() => undefined),
+                new Promise((resolve) => setTimeout(resolve, 1000)),
+            ]);
         } catch (err) {
             console.error('Sign-out failed:', err instanceof Error ? err.message : err);
         } finally {
-            // Whatever the server said, this browser is signed out now.
+            // Last resort. If the SDK never completed, the cookie it left behind
+            // would sign the user straight back in on the next request.
+            clearSupabaseCookies();
+
             setEmail(null);
             setName(null);
             setSigningOut(false);
@@ -282,6 +326,25 @@ export default function TopNav() {
             {mobileOpen && (
                 <div className="border-t bg-card md:hidden">
                     <nav className="shell-width flex flex-col gap-1 py-3">
+                        {/* Which account this is. The desktop bar shows initials
+                            with the address in a tooltip; on a phone there was
+                            nothing at all, so somebody with two accounts had no
+                            way to tell which one they were using — and no reason
+                            to trust what their library showed them. */}
+                        {email && (
+                            <div className="mb-1 flex items-center gap-3 border-b border-border px-3 pb-3">
+                                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary">
+                                    {getInitials(name || formatDisplayName(email))}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-semibold">
+                                        {name || formatDisplayName(email)}
+                                    </span>
+                                    <span className="block truncate text-xs text-muted-foreground">{email}</span>
+                                </span>
+                                {isAdmin && <span className="chip shrink-0 text-[10px]">Admin</span>}
+                            </div>
+                        )}
                         {PRIMARY_LINKS.map(({ href, label, icon: Icon }) => (
                             <Link
                                 key={href}
@@ -299,6 +362,20 @@ export default function TopNav() {
                             <ShoppingCart className="h-4 w-4" />
                             Cart {count > 0 && `(${count})`}
                         </Link>
+                        {/* The theme control was desktop-only (`hidden sm:inline-grid`),
+                            so on a phone — where most of these teachers are —
+                            dark mode simply could not be switched. */}
+                        {mounted && (
+                            <button
+                                type="button"
+                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                                className="flex min-h-12 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold hover:bg-secondary"
+                            >
+                                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                            </button>
+                        )}
+
                         {email ? (
                             <>
                                 <Link
