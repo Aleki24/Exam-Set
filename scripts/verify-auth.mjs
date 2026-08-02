@@ -109,6 +109,15 @@ assert('account deleted', isSessionRejected({ status: 403, code: 'user_not_found
 assert('jwt expired', isSessionRejected({ status: 401, message: 'JWT expired' }), 'ok');
 assert('bare 401 counts', isSessionRejected({ status: 401, message: 'Unauthorized' }), 'ok');
 
+section('isSessionRejected treats "no session at all" as a verdict, not a fault');
+// Every signed-out visitor to /library produces exactly this. It is decided
+// locally, without a request, and arrives as a 400 — so no status rule catches
+// it. Reading it as "could not reach the server" waves them all past the
+// sign-in redirect, which is what it did until this check existed.
+assert('the SDK missing-session error', isSessionRejected({ name: 'AuthSessionMissingError', message: 'Auth session missing!', status: 400 }), 'ok');
+assert('by message alone', isSessionRejected({ message: 'Auth session missing!', status: 400 }), 'ok');
+assert('by code alone', isSessionRejected({ code: 'session_missing', status: 400 }), 'ok');
+
 section('isSessionRejected never mistakes an unanswered request for a verdict');
 assert('the SDK retryable error', !isSessionRejected({ name: 'AuthRetryableFetchError', message: 'Failed to fetch' }), 'ok');
 assert('a 500 from the auth host', !isSessionRejected({ status: 500, message: 'Internal Server Error' }), 'ok');

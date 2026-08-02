@@ -27,6 +27,13 @@ interface AuthErrorLike {
  * no longer exists. None of these improve on a retry.
  */
 const REJECTED_CODES = new Set([
+    // "There is no session here at all." Reported as an error, but the client
+    // decides it locally without a request ever leaving — so it is a verdict of
+    // the most certain kind, and it arrives as a 400, which no status rule
+    // below would catch. Every signed-out visitor to a protected route produces
+    // exactly this, so reading it as "could not reach the server" would let all
+    // of them straight past the sign-in redirect.
+    'session_missing',
     'bad_jwt',
     'session_expired',
     'session_not_found',
@@ -38,6 +45,7 @@ const REJECTED_CODES = new Set([
 ]);
 
 const REJECTED_PHRASES = [
+    'auth session missing',
     'invalid refresh token',
     'refresh token not found',
     'already used',
@@ -62,6 +70,10 @@ export function isSessionRejected(error: unknown): boolean {
 
     // The SDK's own name for "the request did not complete, try again later".
     if (e.name === 'AuthRetryableFetchError') return false;
+
+    // And its name for "there is no session", which is the opposite: settled
+    // locally, with certainty, before any request was attempted.
+    if (e.name === 'AuthSessionMissingError') return true;
 
     if (e.code && REJECTED_CODES.has(e.code)) return true;
 
