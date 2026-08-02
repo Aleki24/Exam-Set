@@ -308,6 +308,42 @@ export interface PoolFilters {
 
 const PAGE_SIZE = 200;
 
+/** How long a single page of the bank may take before we give up on it. */
+const REQUEST_TIMEOUT_MS = 15000;
+
+/**
+ * Settles a request that would otherwise hang for ever.
+ *
+ * The Supabase client applies no timeout of its own, so a request made on a
+ * dropped mobile connection — or while the client is stuck trying to refresh an
+ * expired token — simply never settles. The caller's `.then`, `.catch` and
+ * `.finally` all wait indefinitely, which is why the setter sat on
+ * "Loading bank…" for ever with no error and no way back: there was nothing to
+ * catch, because nothing had failed yet.
+ *
+ * A rejection is a far better outcome than silence. The setter already knows how
+ * to show a reason and offer a retry; it just needed the promise to end.
+ */
+function withTimeout<T>(work: PromiseLike<T>, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(
+            () => reject(new Error(`${label} took too long to respond. Check your connection and try again.`)),
+            REQUEST_TIMEOUT_MS
+        );
+
+        Promise.resolve(work).then(
+            (value) => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            }
+        );
+    });
+}
+
 /**
  * Pulls every question matching `filters`, paging until exhausted.
  *
@@ -349,7 +385,7 @@ export async function fetchQuestionPool(filters: PoolFilters = {}): Promise<DBQu
         if (filters.topics && filters.topics.length > 0) query = query.in('topic', filters.topics);
         if (filters.search) query = query.ilike('text', `%${filters.search}%`);
 
-        const { data, error } = await query;
+        const { data, error } = await withTimeout(query, 'The question bank');
         if (error) {
             // Raised, not swallowed. Returning an empty array here is
             // indistinguishable from "the bank is empty", which sent this exact

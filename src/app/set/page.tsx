@@ -93,10 +93,16 @@ export default function SetterPage() {
     const signedIn = roleReady ? roleSignedIn : null;
 
     useEffect(() => {
-        Promise.all([getGrades(), getSubjects()]).then(([g, s]) => {
-            setGrades(g);
-            setSubjects(s);
-        });
+        // No rejection handler here previously: a failure left the filter
+        // dropdowns permanently empty with nothing said about it.
+        Promise.all([getGrades(), getSubjects()])
+            .then(([g, s]) => {
+                setGrades(g);
+                setSubjects(s);
+            })
+            .catch((err) => {
+                console.error('Could not load the setter lookups:', err);
+            });
     }, []);
 
     // Debounce search into the filter state.
