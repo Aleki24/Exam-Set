@@ -166,6 +166,15 @@ section('Shaped like the live question bank');
     const body = withLines.toString('latin1');
     assert('editor HTML is stripped', !body.includes('<p>'), 'clean');
 
+    // A large part of the bank was imported from marked-up sources, so the
+    // emphasis markers must not survive into a printed paper.
+    const md = renderPaperPdf(PAPER, [
+        { text: 'The **four main points of a compass** are called.', marks: 1, type: 'Structured' },
+        { text: 'Name the *eight* compass points and __explain__ them.', marks: 2, type: 'Structured' },
+    ]).toString('latin1');
+    assert('markdown bold is stripped', !md.includes('**'), 'no ** in output');
+    assert('markdown italics are stripped', !md.includes('__'), 'no __ in output');
+
     const scheme = renderMarkingSchemePdf(PAPER, real);
     assert('empty marking_scheme is reported honestly', isPdf(scheme), `${scheme.length} bytes`);
 }

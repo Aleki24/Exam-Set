@@ -409,6 +409,12 @@ function cleanText(value: string): string {
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        // Markdown emphasis. A good part of the bank was imported from marked-up
+        // sources, and the PDF is plain text — without this a paper prints
+        // "The **four main points of a compass** are called", asterisks and all.
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/(?<![\w*])\*([^*\n]+)\*(?![\w*])/g, '$1')
+        .replace(/(?<![\w_])__([^_\n]+)__(?![\w_])/g, '$1')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
