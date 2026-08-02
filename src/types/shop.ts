@@ -39,11 +39,18 @@ export interface PaperListing {
     is_published: boolean;
     is_featured: boolean;
 
-    pdf_url?: string;
     thumbnail_url?: string;
-    marking_scheme_url?: string;
     has_marking_scheme: boolean;
     preview_pages: number;
+
+    /*
+     * No `pdf_url` or `marking_scheme_url`. The `exams` row has both columns and
+     * the server still reads them, but a listing is what unauthenticated
+     * browsers receive from /api/papers — and a link to a paid PDF has no
+     * business in it. Downloads are minted per request by
+     * /api/papers/[id]/download, after the entitlement check, and expire in
+     * fifteen minutes. Anything else is a paywall with the file next to it.
+     */
 
     download_count: number;
     purchase_count: number;

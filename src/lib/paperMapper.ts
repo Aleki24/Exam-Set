@@ -32,9 +32,12 @@ export function toListing(row: any): PaperListing {
         currency: row.currency ?? 'KES',
         is_published: row.is_published ?? false,
         is_featured: row.is_featured ?? false,
-        pdf_url: row.pdf_url ?? undefined,
         thumbnail_url: row.thumbnail_url ?? undefined,
-        marking_scheme_url: row.marking_scheme_url ?? undefined,
+        // `pdf_url` and `marking_scheme_url` are deliberately not carried over.
+        // The row holds them and `ensurePaperFile` still honours them for papers
+        // that arrived with a direct link, but this shape is what /api/papers
+        // hands to anyone browsing the shop signed out. Copying a download link
+        // into it puts the file beside the price tag.
         has_marking_scheme: row.has_marking_scheme ?? false,
         preview_pages: row.preview_pages ?? 1,
         download_count: row.download_count ?? 0,

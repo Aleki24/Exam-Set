@@ -121,8 +121,9 @@ function formatExam(row: any) {
         time_limit: row.time_limit,
         institution: row.institution,
         exam_board: row.exam_board,
-        pdf_storage_key: row.pdf_storage_key,
-        pdf_url: row.pdf_url,
+        // Neither the link nor the key. A search result is a description of a
+        // paper, not a way to fetch one — /api/papers/[id]/download is the only
+        // route that hands out a file, and it checks entitlement before it does.
         thumbnail_url: row.thumbnail_url,
         question_ids: row.question_ids || [],
         question_count: row.question_count || 0,
