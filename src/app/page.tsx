@@ -4,8 +4,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion } from 'lucide-react';
+import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion, Upload } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import { useRole } from '@/lib/roles';
 import PaperCard, { PaperCardSkeleton } from '@/components/shop/PaperCard';
 import LevelStrip from '@/components/shop/LevelStrip';
 import FilterRail from '@/components/shop/FilterRail';
@@ -422,18 +423,33 @@ function AppliedFilters({
     );
 }
 
+/**
+ * The empty shop.
+ *
+ * An owner and a shopper are looking at the same screen for opposite reasons:
+ * one has nothing to buy, the other has nothing stocked. Telling the person who
+ * runs the shop to go and set an exam — when what they need is to upload the
+ * PDFs sitting on their laptop — is the wrong instruction to the wrong person,
+ * and it was the only one offered.
+ */
 function EmptyState({ hasFilters, onReset }: { hasFilters: boolean; onReset: () => void }) {
+    const { isAdmin } = useRole();
+
     return (
         <div className="surface relative overflow-hidden px-6 py-20 text-center">
             {/* Ruled exercise-book lines, faded out — a blank page. */}
             <div className="ruled pointer-events-none absolute inset-0 opacity-40" aria-hidden />
             <div className="relative">
                 <FileQuestion className="mx-auto mb-5 h-9 w-9 text-muted-foreground" aria-hidden />
-                <h2 className="title-1">No papers match this yet</h2>
+                <h2 className="title-1">
+                    {hasFilters ? 'No papers match this yet' : isAdmin ? 'Your shop has no papers yet' : 'No papers match this yet'}
+                </h2>
                 <p className="lead mx-auto mt-3 max-w-md text-sm sm:text-base">
                     {hasFilters
                         ? 'Try a wider level or exam type — or build the paper yourself from the question bank.'
-                        : 'The catalog is empty. Publish your first paper from the setter and it appears here.'}
+                        : isAdmin
+                          ? 'Upload the PDFs you already have, or build one from your question bank. Either way it appears here for sale straight away.'
+                          : 'The catalog is empty. Check back shortly.'}
                 </p>
                 <div className="mt-8 flex flex-wrap justify-center gap-2">
                     {hasFilters && (
@@ -441,7 +457,13 @@ function EmptyState({ hasFilters, onReset }: { hasFilters: boolean; onReset: () 
                             Clear filters
                         </button>
                     )}
-                    <Link href="/set" className="btn-primary">
+                    {isAdmin && (
+                        <Link href="/papers/new" className="btn-buy">
+                            <Upload className="h-4 w-4" aria-hidden />
+                            Upload a paper
+                        </Link>
+                    )}
+                    <Link href="/set" className={isAdmin ? 'btn-outline' : 'btn-primary'}>
                         <PenSquare className="h-4 w-4" aria-hidden />
                         Set an exam
                     </Link>

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck } from 'lucide-react';
+import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { createClient } from '@/utils/supabase/client';
 import { useCart } from '@/lib/cart';
@@ -230,19 +230,30 @@ export default function TopNav() {
                     </Link>
                 )}
 
-                {/* Admin — only the owner and admins ever see this */}
+                {/* Admin — only the owner and admins ever see these two.
+                    Uploading a paper is the owner's main job and was buried two
+                    clicks inside the admin console, so it gets its own control. */}
                 {isAdmin && (
-                    <Link
-                        href="/admin"
-                        className={`hidden min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors sm:flex ${
-                            pathname.startsWith('/admin')
-                                ? 'text-foreground'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        <ShieldCheck className="h-4 w-4" aria-hidden />
-                        Admin
-                    </Link>
+                    <>
+                        <Link
+                            href="/papers/new"
+                            className="hidden min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition-colors hover:border-primary/40 hover:bg-primary/[0.04] sm:flex"
+                        >
+                            <Upload className="h-4 w-4" aria-hidden />
+                            Upload paper
+                        </Link>
+                        <Link
+                            href="/admin"
+                            className={`hidden min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors sm:flex ${
+                                pathname.startsWith('/admin')
+                                    ? 'text-foreground'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <ShieldCheck className="h-4 w-4" aria-hidden />
+                            Admin
+                        </Link>
+                    </>
                 )}
 
                 {/* Theme */}
@@ -386,13 +397,22 @@ export default function TopNav() {
                                     My library
                                 </Link>
                                 {isAdmin && (
-                                    <Link
-                                        href="/admin"
-                                        className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
-                                    >
-                                        <ShieldCheck className="h-4 w-4" />
-                                        Admin
-                                    </Link>
+                                    <>
+                                        <Link
+                                            href="/papers/new"
+                                            className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
+                                        >
+                                            <Upload className="h-4 w-4" />
+                                            Upload a paper
+                                        </Link>
+                                        <Link
+                                            href="/admin"
+                                            className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
+                                        >
+                                            <ShieldCheck className="h-4 w-4" />
+                                            Admin
+                                        </Link>
+                                    </>
                                 )}
                                 <button
                                     type="button"
