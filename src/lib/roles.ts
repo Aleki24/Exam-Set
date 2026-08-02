@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { EMPTY_ACCOUNT_PROFILE, toAccountProfile, type AccountProfile } from './accounts';
 
 export type Role = 'owner' | 'admin' | 'user';
 
@@ -38,6 +39,18 @@ export interface RoleState {
      * nothing on screen explaining why.
      */
     staleSession: boolean;
+    /**
+     * Who they are, as opposed to what they may do.
+     *
+     * Carried alongside the permission role rather than folded into it, because
+     * they answer different questions and one column could not hold both
+     * without the signup form becoming a way to grant yourself permissions.
+     * Nothing on this object is ever consulted to decide whether an action is
+     * allowed — it only decides what gets shown first.
+     */
+    account: AccountProfile;
+    /** True when the account exists but has never been asked who they are. */
+    needsOnboarding: boolean;
 }
 
 const SIGNED_OUT: RoleState = {
@@ -48,6 +61,8 @@ const SIGNED_OUT: RoleState = {
     isOwner: false,
     email: null,
     staleSession: false,
+    account: EMPTY_ACCOUNT_PROFILE,
+    needsOnboarding: false,
 };
 
 export function useRole(): RoleState {
@@ -80,7 +95,7 @@ export function useRole(): RoleState {
 
             const { data: profile, error } = await supabase
                 .from('profiles')
-                .select('role')
+                .select('role, account_type, level_slug, grade_label, subject_interests, school_name, onboarded_at')
                 .eq('id', auth.user.id)
                 .maybeSingle();
 
@@ -102,11 +117,14 @@ export function useRole(): RoleState {
                     isOwner: false,
                     email: auth.user.email ?? null,
                     staleSession: true,
+                    account: EMPTY_ACCOUNT_PROFILE,
+                    needsOnboarding: false,
                 });
                 return;
             }
 
             const role = profile.role as Role;
+            const account = toAccountProfile(profile);
             setState({
                 role,
                 ready: true,
@@ -115,6 +133,11 @@ export function useRole(): RoleState {
                 isOwner: role === 'owner',
                 email: auth.user.email ?? null,
                 staleSession: false,
+                account,
+                // Never asked, rather than asked and declined. `onboarded_at` is
+                // what tells those apart, and prompting somebody who already
+                // said no is how a helpful question becomes nagging.
+                needsOnboarding: !account.accountType && !account.onboardedAt,
             });
         };
 

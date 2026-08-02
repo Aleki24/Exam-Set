@@ -12,7 +12,19 @@ function SignupForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const nextParam = searchParams.get('next');
-    const next = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/';
+    /*
+     * A brand-new account goes to the "who are you" question, not the shop.
+     * Asked once, at the only moment somebody is already filling in a form and
+     * has not yet been given a page to lose interest in.
+     *
+     * Unless they arrived heading somewhere: a visitor who hit sign-up from a
+     * paper they wanted is telling us where they want to be, and interrupting
+     * that to ask which class they teach is how a purchase gets abandoned.
+     */
+    const next =
+        nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
+            ? nextParam
+            : '/account?welcome=1';
 
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');

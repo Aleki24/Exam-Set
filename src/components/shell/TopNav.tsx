@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen } from 'lucide-react';
+import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen, Home, Settings2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { createClient, resetClient } from '@/utils/supabase/client';
 import { clearSupabaseCookies, clearSupabaseStorage, ensureUsableSession } from '@/utils/supabase/session';
@@ -277,12 +277,14 @@ export default function TopNav() {
                 {/* Account */}
                 {email ? (
                     <div className="hidden items-center gap-2 sm:flex">
-                        <span
-                            className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary"
-                            title={email}
+                        <Link
+                            href="/account"
+                            className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                            title={`${email} — your account`}
+                            aria-label="Your account"
                         >
                             {getInitials(name || formatDisplayName(email))}
-                        </span>
+                        </Link>
                         <button
                             type="button"
                             onClick={signOut}
@@ -396,11 +398,25 @@ export default function TopNav() {
                         {email ? (
                             <>
                                 <Link
+                                    href="/home"
+                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
+                                >
+                                    <Home className="h-4 w-4" />
+                                    My home
+                                </Link>
+                                <Link
                                     href="/library"
                                     className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
                                 >
                                     <Library className="h-4 w-4" />
                                     My library
+                                </Link>
+                                <Link
+                                    href="/account"
+                                    className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold hover:bg-secondary"
+                                >
+                                    <Settings2 className="h-4 w-4" />
+                                    Account
                                 </Link>
                                 {isAdmin && (
                                     <>
