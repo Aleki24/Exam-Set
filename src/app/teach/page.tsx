@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Check, Copy, Download, Link2, Loader2, Trash2, Users } from 'lucide-react';
+import { Check, ClipboardCheck, Copy, Download, Link2, Loader2, Trash2, Users } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { useRole } from '@/lib/roles';
 import type { PaperListing } from '@/types/shop';
@@ -190,6 +190,14 @@ export default function TeachPage() {
             <TopNav />
 
             <main className="shell-width py-10 sm:py-14">
+                <nav aria-label="Teacher tools" className="mb-8 flex flex-wrap gap-2">
+                    <span className="chip chip-active">Share &amp; download</span>
+                    <Link href="/teach/assess" className="chip">
+                        <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
+                        Score a class (SBA)
+                    </Link>
+                </nav>
+
                 <header className="max-w-2xl">
                     <p className="overline">Teacher tools</p>
                     <h1 className="display-2 mt-3">Share with a class, download in one go</h1>
