@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { markSession } from '@/services/sessionMarker';
 
 interface RouteParams {
     params: Promise<{ id: string }>;
@@ -101,38 +102,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
 
         if (action === 'submit' || action === 'timeout') {
-            // Calculate score from responses
-            const { data: responses } = await supabase
-                .from('exam_responses')
-                .select('marks_awarded, marks_possible')
-                .eq('session_id', sessionId);
-
-            let totalScore = 0;
-            let maxScore = 0;
-
-            if (responses) {
-                responses.forEach((r) => {
-                    totalScore += r.marks_awarded || 0;
-                    maxScore += r.marks_possible || 0;
-                });
-            }
-
-            const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
+            /*
+             * Submitting is where the paper gets marked.
+             *
+             * This block used to sum `marks_awarded` from every response — a
+             * column nothing in the product had ever written — so every score,
+             * percentage, subject average and topic diagnostic came out zero.
+             * The arithmetic was right; there was simply nothing to add up.
+             *
+             * Marking happens here rather than per answer because marking during
+             * a sitting would leak the scheme, and here rather than on the client
+             * because a mark a browser sent is a claim, not a mark.
+             */
+            const outcome = await markSession(supabase, sessionId);
 
             const { data: updated, error } = await supabase
                 .from('exam_sessions')
                 .update({
                     status: action === 'timeout' ? 'timed_out' : 'submitted',
                     submitted_at: new Date().toISOString(),
-                    score: totalScore,
-                    max_score: maxScore || session.max_score,
-                    percentage,
+                    score: outcome.score,
+                    // Out of what was actually marked. A paper with one
+                    // unmarkable question is scored out of the rest, never out
+                    // of the whole paper — that would charge the learner for a
+                    // marking scheme we are missing.
+                    max_score: outcome.maxScore,
+                    percentage: outcome.percentage ?? 0,
+                    marked_count: outcome.markedCount,
+                    unmarked_count: outcome.unmarkedCount,
                 })
                 .eq('id', sessionId)
                 .select()
                 .single();
 
             if (error) {
+                console.error('Failed to submit session:', error.message);
                 return NextResponse.json({ error: 'Failed to submit session' }, { status: 500 });
             }
 

@@ -33,11 +33,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         const body = await request.json();
-        const { question_id, response, marks_possible, time_spent, is_flagged } = body;
+        /*
+         * `marks_possible` is deliberately NOT read from the body any more.
+         *
+         * It used to be, and since a percentage is score over total, a client
+         * could post `marks_possible: 0` on every answer and hand itself a
+         * perfect paper — the marks it was scored against were whatever it said
+         * they were. The value now comes from the `questions` row below, which
+         * is the only copy the learner cannot reach.
+         */
+        const { question_id, response, time_spent, is_flagged } = body;
 
         if (!question_id) {
             return NextResponse.json({ error: 'question_id is required' }, { status: 400 });
         }
+
+        // The authoritative marks for this question. A question that has since
+        // been deleted is worth nothing rather than whatever was last claimed.
+        const { data: question } = await supabase
+            .from('questions')
+            .select('marks')
+            .eq('id', question_id)
+            .maybeSingle();
+
+        const marksPossible = Number(question?.marks) || 0;
 
         // Check for existing response
         const { data: existing } = await supabase
@@ -53,6 +72,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             // Update existing response
             const updateData: Record<string, unknown> = {
                 last_updated_at: now,
+                // Refreshed on every save: a question's marks can be edited
+                // between the answer being written and the paper being marked.
+                marks_possible: marksPossible,
             };
 
             if (response !== undefined) {
@@ -86,7 +108,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     session_id: sessionId,
                     question_id,
                     response: response || {},
-                    marks_possible: marks_possible || 0,
+                    marks_possible: marksPossible,
                     time_spent_seconds: time_spent || 0,
                     is_flagged: is_flagged || false,
                     first_answered_at: now,
