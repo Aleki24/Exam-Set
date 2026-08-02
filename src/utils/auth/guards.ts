@@ -64,6 +64,22 @@ export async function requireAdmin(
     return { actor };
 }
 
+/**
+ * Requires any signed-in account.
+ *
+ * The floor for anything that costs money to run, writes to storage, or reaches
+ * out to the internet on the server's behalf. Row level security already covers
+ * the database, but it says nothing about a route that spends an API credit or
+ * launches a browser — those need a person attached to the request.
+ */
+export async function requireUser(
+    supabase: SupabaseClient
+): Promise<{ actor: Actor; failure?: never } | { actor?: never; failure: GuardFailure }> {
+    const actor = await getActor(supabase);
+    if (!actor) return { failure: { error: 'Sign in to continue', status: 401 } };
+    return { actor };
+}
+
 export async function requireOwner(
     supabase: SupabaseClient
 ): Promise<{ actor: Actor; failure?: never } | { actor?: never; failure: GuardFailure }> {

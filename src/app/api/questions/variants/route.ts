@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireUser } from '@/utils/auth/guards';
 
 // POST /api/questions/variants - Generate variant questions
 export async function POST(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const body = await request.json();

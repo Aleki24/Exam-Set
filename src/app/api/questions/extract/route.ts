@@ -1,3 +1,5 @@
+import { createClient } from '@/utils/supabase/server';
+import { requireUser } from '@/utils/auth/guards';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Dynamic import to avoid bundling issues
@@ -27,6 +29,13 @@ async function parseWord(buffer: Buffer): Promise<string> {
 
 // Extract questions from uploaded document using AI
 export async function POST(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File | null;

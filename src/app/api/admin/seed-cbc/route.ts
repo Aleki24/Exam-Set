@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireAdmin } from '@/utils/auth/guards';
 
 // POST /api/admin/seed-cbc - Seed CBC curriculum data
 export async function POST(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireAdmin(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
 

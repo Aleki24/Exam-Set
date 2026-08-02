@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireAdmin } from '@/utils/auth/guards';
 
 // GET /api/admin/lookup - Fetch lookup data for dropdowns
 export async function GET(request: NextRequest) {

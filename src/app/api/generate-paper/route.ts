@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireUser } from '@/utils/auth/guards';
 
 // ============================================================================
 // PAPER GENERATION API
@@ -20,6 +21,13 @@ function shuffleArray<T>(array: T[]): T[] {
 
 // POST: Generate a paper from a template
 export async function POST(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const body = await request.json();
@@ -205,6 +213,13 @@ export async function POST(request: NextRequest) {
 
 // GET: Get available templates for a subject/grade
 export async function GET(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const { searchParams } = new URL(request.url);

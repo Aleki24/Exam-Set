@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireUser } from '@/utils/auth/guards';
 
 // GET /api/questions/[id] - Get single question
 export async function GET(
@@ -43,6 +44,13 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const { id } = await params;
         const supabase = await createClient();
@@ -109,6 +117,13 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const { id } = await params;
         const supabase = await createClient();

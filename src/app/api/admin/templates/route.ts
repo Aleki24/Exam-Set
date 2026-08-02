@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireAdmin } from '@/utils/auth/guards';
 
 // GET: Fetch paper templates
 export async function GET(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireAdmin(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const { searchParams } = new URL(request.url);
@@ -70,6 +78,13 @@ export async function GET(request: NextRequest) {
 
 // POST: Create a new paper template
 export async function POST(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireAdmin(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const body = await request.json();
@@ -126,6 +141,13 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update a paper template
 export async function PUT(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireAdmin(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const body = await request.json();
@@ -171,6 +193,13 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete a paper template
 export async function DELETE(request: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireAdmin(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const { searchParams } = new URL(request.url);

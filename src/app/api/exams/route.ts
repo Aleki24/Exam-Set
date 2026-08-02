@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { requireUser } from '@/utils/auth/guards';
 import { putObject, signedDownloadUrl } from '@/utils/storage';
 
 // GET /api/exams - Get list of exams with optional filters
@@ -68,6 +69,13 @@ export async function GET(req: NextRequest) {
 
 // POST /api/exams - Create a new exam with optional PDF upload
 export async function POST(req: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const supabase = await createClient();
         const formData = await req.formData();

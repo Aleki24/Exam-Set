@@ -1,12 +1,86 @@
+import { createClient } from '@/utils/supabase/server';
+import { requireAdmin } from '@/utils/auth/guards';
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
 
+/**
+ * Returns why a URL may not be fetched, or null when it is acceptable.
+ *
+ * Deny by default: only http and https, never an address that resolves inside
+ * the infrastructure. The literal forms below are the ones that actually get
+ * used — link-local metadata at 169.254.169.254, loopback, and the three
+ * private ranges.
+ */
+function rejectionReason(raw: string): string | null {
+    let parsed: URL;
+    try {
+        parsed = new URL(raw);
+    } catch {
+        return 'That is not a valid URL.';
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return 'Only http and https addresses can be fetched.';
+    }
+
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+    if (
+        host === 'localhost' ||
+        host.endsWith('.localhost') ||
+        host.endsWith('.internal') ||
+        host.endsWith('.local') ||
+        host === '::1' ||
+        host === '0.0.0.0'
+    ) {
+        return 'That address is not reachable from here.';
+    }
+
+    // IPv4 literals in a private, loopback or link-local range.
+    const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (v4) {
+        const [a, b] = [Number(v4[1]), Number(v4[2])];
+        const isPrivate =
+            a === 10 ||
+            a === 127 ||
+            (a === 169 && b === 254) ||
+            (a === 172 && b >= 16 && b <= 31) ||
+            (a === 192 && b === 168) ||
+            (a === 100 && b >= 64 && b <= 127);
+        if (isPrivate) return 'That address is not reachable from here.';
+    }
+
+    // IPv6 unique-local and link-local.
+    if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) {
+        return 'That address is not reachable from here.';
+    }
+
+    return null;
+}
+
 export async function POST(req: NextRequest) {
+    {
+        // Guarded: this route had no authentication at all.
+        const supabase = await createClient();
+        const { failure } = await requireAdmin(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+    }
+
     try {
         const { url } = await req.json();
 
         if (!url) {
             return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+        }
+
+        // Server-side fetch of a caller-supplied address is a request forgery
+        // primitive: the server can reach places the caller cannot — cloud
+        // metadata endpoints, loopback services, anything on the private
+        // network. Being an admin does not make that safe, so the destination is
+        // restricted to ordinary public web addresses regardless of who asks.
+        const blocked = rejectionReason(url);
+        if (blocked) {
+            return NextResponse.json({ error: blocked }, { status: 400 });
         }
 
         const browser = await puppeteer.launch({
