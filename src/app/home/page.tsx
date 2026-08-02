@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowRight, PlayCircle, Settings2 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import ResourceShelf from '@/components/shop/ResourceShelf';
+import ExamCountdown from '@/components/shop/ExamCountdown';
 import { createClient } from '@/utils/supabase/server';
 import { homeShelves, type Shelf } from '@/services/discoveryService';
 import { loadLearnerProgress, EMPTY_PROGRESS, type LearnerProgress } from '@/services/progressService';
@@ -106,6 +107,10 @@ export default async function HomePage() {
                 </header>
 
                 {needsSetup && <SetupPrompt hasType={Boolean(account.accountType)} />}
+
+                {/* Renders nothing when there is no national exam at this level,
+                    or no level chosen, or the calendar is past review. */}
+                <ExamCountdown level={account.level} />
 
                 {/* Unfinished papers first. It is the only thing on this page
                     that is an unfinished action rather than a suggestion, and

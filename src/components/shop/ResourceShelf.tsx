@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import type { Shelf } from '@/services/discoveryService';
 import { formatPrice, examTypeName } from '@/lib/catalog';
 import { resourceKindName } from '@/lib/resources';
+import { freshnessLabel } from '@/lib/examCalendar';
 
 /**
  * One horizontal shelf of resources.
@@ -65,6 +66,7 @@ function ShelfCard({ item, index }: { item: Shelf['items'][number]; index: numbe
         : examTypeName(item.exam_type);
 
     const meta = [item.grade_label, item.subject, item.year].filter(Boolean).join(' · ');
+    const freshness = freshnessLabel(item.year);
 
     return (
         <Link
@@ -90,8 +92,15 @@ function ShelfCard({ item, index }: { item: Shelf['items'][number]; index: numbe
                         formatPrice(item.price_cents, item.currency)
                     )}
                 </span>
-                {item.has_marking_scheme && (
-                    <span className="figure text-[10px] text-muted-foreground">+ scheme</span>
+                {/* Only ever what the row actually says. A paper with no year
+                    gets no badge rather than an optimistic one — this is the
+                    specific claim a teacher checks before paying. */}
+                {freshness ? (
+                    <span className="badge-soft">{freshness}</span>
+                ) : (
+                    item.has_marking_scheme && (
+                        <span className="figure text-[10px] text-muted-foreground">+ scheme</span>
+                    )
                 )}
             </div>
         </Link>
