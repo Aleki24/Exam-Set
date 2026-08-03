@@ -31,6 +31,7 @@ import {
     sendTemplate,
     sendText,
     windowIsOpen,
+    type MessageStatus,
     type WhatsAppConfig,
 } from '@/lib/whatsapp';
 import { createAdminClient } from '@/utils/supabase/admin';
@@ -99,7 +100,8 @@ export async function sendPaper(
     admin: any,
     phone: string,
     paper: any,
-    alreadyPaid = false
+    alreadyPaid = false,
+    orderId: string | null = null
 ): Promise<boolean> {
     const paperUrl = await deliverableUrl(admin, paper, 'paper');
 
@@ -114,18 +116,26 @@ export async function sendPaper(
         return false;
     }
 
-    await sendDocument(config, phone, paperUrl, paperFilename(paper, 'paper'), paper.title);
+    const paperMessageId = await sendDocument(
+        config,
+        phone,
+        paperUrl,
+        paperFilename(paper, 'paper'),
+        paper.title
+    );
+    await recordOutbound(admin, paperMessageId, phone, paper.id, 'paper', orderId);
 
     if (paper.has_marking_scheme) {
         const schemeUrl = await deliverableUrl(admin, paper, 'scheme');
         if (schemeUrl) {
-            await sendDocument(
+            const schemeMessageId = await sendDocument(
                 config,
                 phone,
                 schemeUrl,
                 paperFilename(paper, 'scheme'),
                 `Marking scheme — ${paper.title}`
             );
+            await recordOutbound(admin, schemeMessageId, phone, paper.id, 'scheme', orderId);
         }
     }
 
@@ -134,6 +144,36 @@ export async function sendPaper(
     if (error) console.warn('download counter failed:', error.message);
 
     return true;
+}
+
+/**
+ * Notes that Meta accepted a document, so a later delivery report can be matched
+ * back to the paper it carried.
+ *
+ * Never allowed to fail a delivery. The paper is already gone; losing the audit
+ * row is a diagnosis problem, and refusing to send because bookkeeping failed
+ * would be trading a real delivery for a record of one.
+ */
+async function recordOutbound(
+    admin: any,
+    messageId: string | null,
+    phone: string,
+    examId: string | null,
+    asset: 'paper' | 'scheme',
+    orderId: string | null
+): Promise<void> {
+    if (!messageId) return;
+
+    const { error } = await admin.from('whatsapp_outbound').insert({
+        message_id: messageId,
+        phone,
+        kind: 'document',
+        exam_id: examId,
+        asset,
+        order_id: orderId,
+    });
+
+    if (error) console.warn('Could not record an outbound message:', error.message);
 }
 
 // ============================================================================
@@ -184,7 +224,7 @@ export async function queueText(
 export async function flushOutbox(config: WhatsAppConfig, admin: any, phone: string): Promise<number> {
     const { data: pending, error } = await admin
         .from('whatsapp_outbox')
-        .select('id, kind, body, exam_id, asset, attempts')
+        .select('id, kind, body, exam_id, asset, attempts, order_id')
         .eq('phone', phone)
         .is('sent_at', null)
         .lt('attempts', 5)
@@ -215,12 +255,20 @@ export async function flushOutbox(config: WhatsAppConfig, admin: any, phone: str
                 const url = await deliverableUrl(admin, paper, row.asset ?? 'paper');
                 if (!url) throw new Error('no deliverable file');
 
-                await sendDocument(
+                const messageId = await sendDocument(
                     config,
                     phone,
                     url,
                     paperFilename(paper, row.asset ?? 'paper'),
                     row.asset === 'scheme' ? `Marking scheme — ${paper.title}` : paper.title
+                );
+                await recordOutbound(
+                    admin,
+                    messageId,
+                    phone,
+                    row.exam_id,
+                    row.asset ?? 'paper',
+                    row.order_id ?? null
                 );
             }
 
@@ -240,6 +288,82 @@ export async function flushOutbox(config: WhatsAppConfig, admin: any, phone: str
     }
 
     return sent;
+}
+
+// ============================================================================
+// DELIVERY REPORTS
+// ============================================================================
+
+/**
+ * Records what Meta says became of a message, and rescues the ones that failed.
+ *
+ * A 200 at send time only means Meta accepted the message. A document can still
+ * fail minutes later — the signed link expired before Meta fetched it, the file
+ * is over the 100 MB limit, the number blocked the business — and until now all
+ * of that arrived on the webhook and was thrown away. The bot had already said
+ * "Your papers have been sent ✅".
+ *
+ * A failed document goes back on the outbox so it is retried on the customer's
+ * next message, and the conversation is put in front of a person, because a
+ * paper that failed once will very likely fail again for the same reason and
+ * nobody should have to ask twice for something they paid for.
+ *
+ * Failed *text* is logged and left alone. Losing "sending 2 papers now…" is not
+ * worth a second message about, and re-sending chatter would be noise.
+ */
+export async function recordStatuses(admin: any, statuses: MessageStatus[]): Promise<void> {
+    if (statuses.length === 0) return;
+
+    for (const status of statuses) {
+        const { data: row, error } = await admin
+            .from('whatsapp_outbound')
+            .update({
+                status: status.status,
+                error: status.error,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('message_id', status.id)
+            .select('message_id, phone, kind, exam_id, asset, order_id, recovered_at')
+            .maybeSingle();
+
+        if (error) {
+            console.warn('Could not record a delivery status:', error.message);
+            continue;
+        }
+
+        // Not one of ours, or one we never recorded. Read receipts for old
+        // messages land here constantly and are not worth a log line.
+        if (!row) continue;
+        if (status.status !== 'failed') continue;
+
+        console.error(
+            `WhatsApp delivery failed for ${row.phone}: ${status.error ?? 'no reason given'}`
+        );
+
+        // Meta can report the same failure more than once.
+        if (row.kind !== 'document' || !row.exam_id || row.recovered_at) continue;
+
+        await queueDocument(admin, row.phone, row.exam_id, row.asset ?? 'paper', row.order_id);
+
+        await admin
+            .from('whatsapp_outbound')
+            .update({ recovered_at: new Date().toISOString() })
+            .eq('message_id', row.message_id);
+
+        // Only a paid delivery gets a person involved. A free sample that failed
+        // is worth retrying and not worth interrupting anybody over.
+        if (row.order_id) {
+            await admin
+                .from('whatsapp_sessions')
+                .update({
+                    needs_human: true,
+                    human_since: new Date().toISOString(),
+                    human_reason: 'a paid paper failed to deliver',
+                })
+                .eq('phone', row.phone)
+                .eq('needs_human', false);
+        }
+    }
 }
 
 // ============================================================================
@@ -377,7 +501,7 @@ export async function deliverOrder(orderId: string): Promise<void> {
                 .maybeSingle();
 
             if (!paper) continue;
-            if (await sendPaper(config, admin, phone, paper, true)) delivered++;
+            if (await sendPaper(config, admin, phone, paper, true, orderId)) delivered++;
         }
 
         // Only claimed when something actually arrived. Saying "sent" after

@@ -80,7 +80,17 @@ export function verifySignature(rawBody: string, header: string | null, appSecre
 // SENDING
 // ============================================================================
 
-async function send(config: WhatsAppConfig, payload: Record<string, unknown>): Promise<void> {
+/**
+ * Returns Meta's id for the message just sent, or null when the response did
+ * not carry one.
+ *
+ * A 200 from this endpoint means Meta accepted the message, not that it
+ * arrived. Delivery is reported later, asynchronously, on the webhook — and the
+ * only thing tying that report back to what was sent is this id. Discarding it,
+ * which this function used to do, made "the customer says the PDF never came"
+ * permanently un-diagnosable.
+ */
+async function send(config: WhatsAppConfig, payload: Record<string, unknown>): Promise<string | null> {
     const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${config.phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
@@ -94,10 +104,19 @@ async function send(config: WhatsAppConfig, payload: Record<string, unknown>): P
         const detail = await res.text().catch(() => '');
         throw new Error(`WhatsApp send failed (${res.status}): ${detail.slice(0, 300)}`);
     }
+
+    // A response that cannot be parsed is not a failed send — the message is
+    // gone either way — so this degrades to "no id" rather than throwing.
+    try {
+        const body = await res.json();
+        return body?.messages?.[0]?.id ?? null;
+    } catch {
+        return null;
+    }
 }
 
-export async function sendText(config: WhatsAppConfig, to: string, body: string): Promise<void> {
-    await send(config, {
+export async function sendText(config: WhatsAppConfig, to: string, body: string): Promise<string | null> {
+    return send(config, {
         to,
         type: 'text',
         // Link previews add a large unwanted card to short replies.
@@ -116,8 +135,8 @@ export async function sendDocument(
     link: string,
     filename: string,
     caption?: string
-): Promise<void> {
-    await send(config, {
+): Promise<string | null> {
+    return send(config, {
         to,
         type: 'document',
         document: {
@@ -335,6 +354,53 @@ export function deliveryTemplateName(): string | null {
 // ============================================================================
 // INBOUND
 // ============================================================================
+
+/**
+ * A delivery report for something we sent.
+ *
+ * Meta reports `sent` → `delivered` → `read`, or `failed`. The failures are the
+ * reason this type exists: a document Meta could not fetch, a file over the
+ * 100 MB limit, a number that has blocked the business. All of those return 200
+ * at send time and fail minutes later on the webhook, so without reading these
+ * the bot believes it delivered a paid paper that never arrived.
+ */
+export interface MessageStatus {
+    /** The id `sendDocument`/`sendText` returned when the message was accepted. */
+    id: string;
+    recipient: string;
+    status: 'sent' | 'delivered' | 'read' | 'failed' | string;
+    /** Meta's explanation, when the status is `failed`. */
+    error: string | null;
+}
+
+/** Pulls the delivery reports out of a webhook payload. */
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+export function extractStatuses(payload: any): MessageStatus[] {
+    const out: MessageStatus[] = [];
+
+    for (const entry of payload?.entry ?? []) {
+        for (const change of entry?.changes ?? []) {
+            for (const status of change?.value?.statuses ?? []) {
+                if (!status?.id) continue;
+
+                const first = status.errors?.[0];
+                out.push({
+                    id: status.id,
+                    recipient: status.recipient_id ?? '',
+                    status: status.status ?? 'unknown',
+                    error: first
+                        ? [first.code, first.title, first.error_data?.details]
+                              .filter(Boolean)
+                              .join(' — ')
+                              .slice(0, 500)
+                        : null,
+                });
+            }
+        }
+    }
+
+    return out;
+}
 
 export interface InboundMessage {
     /** Meta's message id. Used to discard retries. */

@@ -41,8 +41,14 @@ const { cartTotal, addToCart, removeFromCart, describeCart } = await jiti.import
     '../src/services/whatsappCart.ts'
 );
 
-const { windowIsOpen, SERVICE_WINDOW_MS, verifySignature, extractMessages, deliveryTemplateName } =
-    await jiti.import('../src/lib/whatsapp.ts');
+const {
+    windowIsOpen,
+    SERVICE_WINDOW_MS,
+    verifySignature,
+    extractMessages,
+    extractStatuses,
+    deliveryTemplateName,
+} = await jiti.import('../src/lib/whatsapp.ts');
 
 let failures = 0;
 let checks = 0;
@@ -254,6 +260,59 @@ section('reading a webhook payload');
     const image = extractMessages(wrap({ id: 'wamid.4', from: '254712345678', type: 'image' }));
     check('an image still produces a message', image.length, 1);
     check('with empty text, so it gets a reply', image[0].text, '');
+}
+
+section('delivery reports — the half that says whether a paper landed');
+{
+    const wrapStatus = (status) => ({ entry: [{ changes: [{ value: { statuses: [status] } }] }] });
+
+    const delivered = extractStatuses(
+        wrapStatus({ id: 'wamid.1', recipient_id: '254712345678', status: 'delivered' })
+    );
+    check('a delivery report is read', delivered.length, 1);
+    check('with its status', delivered[0].status, 'delivered');
+    check('and no error', delivered[0].error, null);
+
+    // The one that matters. A 200 at send time is not delivery: a document can
+    // fail minutes later because the signed link expired before Meta fetched it.
+    // Losing this is a paid paper that never arrived and nothing to show for it.
+    const failed = extractStatuses(
+        wrapStatus({
+            id: 'wamid.2',
+            recipient_id: '254712345678',
+            status: 'failed',
+            errors: [
+                {
+                    code: 131053,
+                    title: 'Media upload error',
+                    error_data: { details: 'Failed to download media from the provided link' },
+                },
+            ],
+        })
+    );
+    check('a failure is read', failed[0].status, 'failed');
+    assert(
+        'and carries a reason a human can act on',
+        failed[0].error.includes('131053') && failed[0].error.includes('Media upload error'),
+        failed[0].error
+    );
+
+    // A failure with no error array still has to parse — Meta does not always
+    // include one, and throwing here would drop the whole webhook payload.
+    const bare = extractStatuses(wrapStatus({ id: 'wamid.3', status: 'failed' }));
+    check('a failure with no detail still parses', bare[0].status, 'failed');
+    check('with a null reason rather than a crash', bare[0].error, null);
+
+    check('a status with no id is skipped', extractStatuses(wrapStatus({ status: 'read' })).length, 0);
+    check('an empty payload is not a crash', extractStatuses({}).length, 0);
+    check('null is not a crash', extractStatuses(null).length, 0);
+
+    // The two directions must not bleed into each other: an inbound message is
+    // not a delivery report, and answering a read receipt would reply to a
+    // message nobody sent.
+    const inbound = { entry: [{ changes: [{ value: { messages: [{ id: 'w.1', from: '254', type: 'text', text: { body: 'hi' } }] } }] }] };
+    check('an inbound message yields no statuses', extractStatuses(inbound).length, 0);
+    check('a status payload yields no messages', extractMessages(wrapStatus({ id: 'w.9', status: 'read' })).length, 0);
 }
 
 // ---------------------------------------------------------------------------

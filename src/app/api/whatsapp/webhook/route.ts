@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractMessages, getWhatsAppConfig, markRead, verifySignature } from '@/lib/whatsapp';
+import {
+    extractMessages,
+    extractStatuses,
+    getWhatsAppConfig,
+    markRead,
+    verifySignature,
+} from '@/lib/whatsapp';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { handleMessage } from '@/services/whatsappBot';
+import { recordStatuses } from '@/services/whatsappDelivery';
 
 /**
  * WhatsApp webhook.
@@ -67,9 +74,9 @@ export async function POST(req: NextRequest) {
     }
 
     const messages = extractMessages(payload);
-    if (messages.length === 0) {
-        // Delivery and read receipts arrive on this same webhook. Acknowledge
-        // and do nothing — answering them would reply to messages nobody sent.
+    const statuses = extractStatuses(payload);
+
+    if (messages.length === 0 && statuses.length === 0) {
         return NextResponse.json({ ok: true });
     }
 
@@ -77,6 +84,17 @@ export async function POST(req: NextRequest) {
     if (!admin) {
         console.error('WhatsApp webhook received but SUPABASE_SERVICE_ROLE_KEY is not set.');
         return NextResponse.json({ ok: true });
+    }
+
+    // Delivery reports arrive on this same webhook and used to be discarded.
+    // They are what turns "the customer says the PDF never came" from an
+    // unanswerable claim into a record — and a failed document is put back on
+    // the outbox rather than lost. Never allowed to block an inbound message:
+    // somebody waiting for a reply must not wait on bookkeeping.
+    if (statuses.length > 0) {
+        await recordStatuses(admin, statuses).catch((err) =>
+            console.error('Could not record delivery statuses:', err instanceof Error ? err.message : err)
+        );
     }
 
     for (const message of messages) {

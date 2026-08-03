@@ -120,6 +120,8 @@ the shop are:
   losing the papers that overlap
 - `035_delivery_claims.sql` — one delivery per order, enforced by a primary key
   rather than by a hopeful read
+- `036_outbound_tracking.sql` — what was sent and whether it landed, so a failed
+  PDF is re-queued instead of disappearing
 - `018_lock_down_settlement_functions.sql` — closes EXECUTE on the functions that
   settle payments. Postgres grants EXECUTE to PUBLIC by default and Supabase adds
   `anon`/`authenticated` on top, which left `confirm_order_payment` callable by
@@ -227,9 +229,19 @@ matches exactly it widens the search one filter at a time (year, then term, then
 exam type) and says what it ignored. Grade and subject are never dropped.
 
 **Browsing without typing.** `MENU` opens an interactive list: browse by level,
-search, my papers, set your own exam, talk to a person. Levels lead to subjects
-lead to papers, each a tap. Typing still works everywhere, so somebody who knows
-what they want never sees the menu — the fastest path stays the fastest path.
+search, my papers, my orders, set your own exam, talk to a person. Levels lead to
+subjects lead to papers, each a tap. Typing still works everywhere, so somebody
+who knows what they want never sees the menu — the fastest path stays the fastest
+path.
+
+**Getting it again.** `MY PAPERS` lists what you own; `MY ORDERS` lists receipts,
+and picking one resends everything that order bought. A reference typed straight
+in works too — `resend order EX8ZK3AB2C`, or just the reference — because that
+string is already in front of the customer, on the receipt and in the M-Pesa
+message. Order lookups are scoped to the account: a reference is short and
+guessable, and an unscoped lookup is a way to read somebody else's purchases by
+typing until something matches. There is no charge and no limit beyond the rate
+limit; the files are already theirs.
 
 **Paying for one paper.** The chat has a cart. Add papers, see the running total,
 confirm the exact figure, and an M-Pesa prompt goes to the same handset. The
@@ -271,6 +283,15 @@ received nothing. So a delivery that cannot be sent goes to `whatsapp_outbox` an
 flushes the moment that number writes again. Set `WHATSAPP_TEMPLATE_DELIVERY` to
 an approved Meta template and they are nudged immediately instead; without one,
 nothing is lost, only delayed.
+
+**Did it actually arrive?** A 200 from Meta's send endpoint means the message was
+accepted, not delivered. A document can fail minutes later — the signed link
+expired before Meta fetched it, the file is over 100 MB, the number blocked the
+business — and that failure arrives as a status report on the same webhook. The
+bot used to discard both the message id and the reports, so a paid paper could
+fail silently after the customer had been told "sent ✅". Now every document send
+is recorded in `whatsapp_outbound`, a `failed` report puts the paper back on the
+outbox, and if it was paid for the conversation goes to `/admin/whatsapp`.
 
 **When the bot cannot help.** Asking for a person flags the conversation and the
 bot goes quiet — nothing is worse than a bot talking over a real conversation.

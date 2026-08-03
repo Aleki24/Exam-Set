@@ -78,7 +78,8 @@ const HELP = [
     '• grade 9 integrated science end term 2',
     '• kcse biology past paper 2024',
     '',
-    'Or send MENU to browse. STOP to stop messages.',
+    'MENU to browse · MY PAPERS for what you own',
+    'MY ORDERS for receipts · STOP to stop messages',
 ].join('\n');
 
 // ============================================================================
@@ -230,8 +231,28 @@ async function route(
         await sendText(config, phone, 'List cleared. Send MENU to start again.');
         return;
     }
-    if (['MY PAPERS', 'MY ORDERS', 'MYPAPERS', 'ORDERS', 'LIBRARY'].includes(command)) {
+    if (['MY PAPERS', 'MYPAPERS', 'LIBRARY'].includes(command)) {
         await showMyPapers(config, admin, phone, session);
+        return;
+    }
+    if (['MY ORDERS', 'MYORDERS', 'ORDERS', 'RECEIPTS'].includes(command)) {
+        await showMyOrders(config, admin, phone, session);
+        return;
+    }
+    if (text.startsWith('order:')) {
+        await resendOrder(config, admin, phone, session, text.slice('order:'.length), 'id');
+        return;
+    }
+
+    // "resend order EX8ZK3AB2C", "order EX8ZK3AB2C", "resend EX8ZK3AB2C".
+    //
+    // The reference is what a customer has in front of them — it is on the
+    // receipt the bot sent and in the M-Pesa message — so it is the thing they
+    // will type. Requiring them to open a list and find the right row first
+    // would be asking them to look up something they are already holding.
+    const byReference = command.match(/^(?:RESEND\s+)?(?:ORDER\s+)?(EX[A-Z0-9]{6,12})$/);
+    if (byReference) {
+        await resendOrder(config, admin, phone, session, byReference[1], 'reference');
         return;
     }
     if (isHumanRequest(command)) {
@@ -329,6 +350,7 @@ async function sendMenu(config: WhatsAppConfig, phone: string, greeting?: string
                 title: 'Your account',
                 rows: [
                     { id: 'menu:papers', title: 'My papers', description: 'Everything you have bought' },
+                    { id: 'menu:orders', title: 'My orders', description: 'Receipts — resend a whole order' },
                     { id: 'menu:cart', title: 'My list', description: 'What you are about to buy' },
                 ],
             },
@@ -359,6 +381,9 @@ async function handleMenuChoice(
             return;
         case 'papers':
             await showMyPapers(config, admin, phone, session);
+            return;
+        case 'orders':
+            await showMyOrders(config, admin, phone, session);
             return;
         case 'cart':
             await showCart(config, admin, phone, session);
@@ -938,6 +963,177 @@ async function resendPaper(config: WhatsAppConfig, admin: any, phone: string, ex
     }
 
     await sendPaper(config, admin, phone, paper);
+}
+
+/**
+ * Past orders, as receipts.
+ *
+ * Distinct from "my papers" on purpose. `showMyPapers` answers "what do I own",
+ * which is one flat list; this answers "what did I buy on the 3rd", which is how
+ * somebody thinks when they are looking for a receipt or want the whole of one
+ * purchase resent rather than picking papers out of it one at a time.
+ */
+async function showMyOrders(
+    config: WhatsAppConfig,
+    admin: any,
+    phone: string,
+    session: any
+): Promise<void> {
+    const userId = await findOrCreateUserForPhone(admin, phone, session);
+    if (!userId) {
+        await sendText(config, phone, 'I could not find your account. Send MENU to start again.');
+        return;
+    }
+
+    const { data: orders } = await admin
+        .from('orders')
+        .select('id, reference, total_cents, currency, created_at, plan_slug, order_items(exam_id)')
+        .eq('user_id', userId)
+        .eq('status', 'paid')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+    if (!orders || orders.length === 0) {
+        await sendText(
+            config,
+            phone,
+            'You have no paid orders yet. Send MENU to find your first paper.'
+        );
+        return;
+    }
+
+    await sendList(
+        config,
+        phone,
+        'Your paid orders. Pick one to have everything in it sent again — there is no charge.',
+        'Choose an order',
+        orders.map((order: any) => {
+            const count = (order.order_items ?? []).length;
+            const what = order.plan_slug
+                ? 'Subscription'
+                : `${count} paper${count === 1 ? '' : 's'}`;
+            return {
+                id: `order:${order.id}`,
+                // The reference is the title because it is the one string that
+                // appears on the receipt, in M-Pesa and in the chat — it is what
+                // somebody matches against when they are checking a payment.
+                title: order.reference,
+                description: `${what} · ${formatPrice(order.total_cents, order.currency || 'KES')} · ${shortDate(order.created_at)}`,
+            };
+        }),
+        'Your orders'
+    );
+}
+
+/** "3 Aug" — short enough for a list row, unambiguous enough to recognise. */
+function shortDate(iso: string | null): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/**
+ * Sends everything one past order bought.
+ *
+ * Looked up by id (from a tapped list row) or by reference (typed). Either way
+ * it is scoped to this account's orders — a reference is short and guessable,
+ * and an order lookup that is not scoped is a way to read somebody else's
+ * purchases by typing until something matches.
+ *
+ * Each paper is re-checked against `can_download_paper` rather than trusted
+ * because it appears on a paid order. Entitlements can be moved by an account
+ * merge and a subscription can lapse; the gate is the gate.
+ */
+async function resendOrder(
+    config: WhatsAppConfig,
+    admin: any,
+    phone: string,
+    session: any,
+    key: string,
+    lookup: 'id' | 'reference'
+): Promise<void> {
+    const userId = await findOrCreateUserForPhone(admin, phone, session);
+    if (!userId) return;
+
+    const query = admin
+        .from('orders')
+        .select('id, reference, status, plan_slug, order_items(exam_id, title)')
+        .eq('user_id', userId);
+
+    const { data: order } = await (lookup === 'id'
+        ? query.eq('id', key)
+        : query.ilike('reference', key)
+    ).maybeSingle();
+
+    if (!order) {
+        await sendText(
+            config,
+            phone,
+            `I cannot find order ${key} on this number. Send MY ORDERS to see your receipts, or LINK if you bought it on the website.`
+        );
+        return;
+    }
+
+    if (order.status !== 'paid') {
+        await sendText(
+            config,
+            phone,
+            `Order ${order.reference} has not been paid yet. Send PAY to try the M-Pesa prompt again.`
+        );
+        return;
+    }
+
+    const items = order.order_items ?? [];
+
+    if (items.length === 0) {
+        await sendText(
+            config,
+            phone,
+            order.plan_slug
+                ? `Order ${order.reference} is your subscription — there are no files attached to it. Tell me which paper you need and I will send it.`
+                : `Order ${order.reference} has no papers attached to it. Send HELP and a person will look into it.`
+        );
+        return;
+    }
+
+    await sendText(
+        config,
+        phone,
+        `Order ${order.reference} — sending ${items.length} paper${items.length === 1 ? '' : 's'} again. No charge.`
+    );
+
+    let sent = 0;
+    let denied = 0;
+
+    for (const item of items) {
+        if (!(await mayDownload(admin, item.exam_id, userId))) {
+            denied++;
+            continue;
+        }
+        const paper = await loadPaper(admin, item.exam_id);
+        if (paper && (await sendPaper(config, admin, phone, paper))) sent++;
+    }
+
+    if (sent === 0) {
+        await sendText(
+            config,
+            phone,
+            'I could not send any of those. Reply HELP and a person will sort it out — nothing has been charged.'
+        );
+        return;
+    }
+
+    if (denied > 0 || sent < items.length) {
+        await sendText(
+            config,
+            phone,
+            `Sent ${sent} of ${items.length}. Reply HELP about the rest — nothing extra has been charged.`
+        );
+        return;
+    }
+
+    await sendText(config, phone, 'Sent again ✅');
 }
 
 // ============================================================================
