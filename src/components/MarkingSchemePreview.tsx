@@ -1,70 +1,134 @@
 'use client';
 
-import React from 'react';
-import { ExamPaper } from '@/types';
+import React, { useMemo } from 'react';
+import {
+    layoutPaper,
+    markingSchemeOf,
+    partMarkingScheme,
+    type PaperSource,
+    type QuestionSource,
+} from '@/services/paperLayout';
 
 interface MarkingSchemePreviewProps {
-    paper: ExamPaper;
+    paper: PaperSource;
+    questions: QuestionSource[];
 }
 
-const MarkingSchemePreview: React.FC<MarkingSchemePreviewProps> = ({ paper }) => {
-    const { metadata, questions } = paper;
+/**
+ * THE MARKING SCHEME, ON SCREEN
+ * ----------------------------------------------------------------------------
+ * The teacher's copy of the same paper, drawn from the same layout so the
+ * numbering and marks cannot drift from the question paper's.
+ *
+ * Black on white like the paper. The old version set the answers in a tinted
+ * panel with green headings, which photocopies as a grey box with grey writing
+ * in it — this is the document somebody marks forty scripts against.
+ */
+export default function MarkingSchemePreview({ paper, questions }: MarkingSchemePreviewProps) {
+    const layout = useMemo(() => layoutPaper(paper, questions), [paper, questions]);
+    const { identity } = layout;
 
-    const getFontFamily = () => {
-        switch (metadata.layoutConfig.fontFamily) {
-            case 'serif': return 'font-serif';
-            case 'mono': return 'font-mono';
-            default: return 'font-sans';
-        }
-    };
-
-    const pageBaseClass = `bg-white w-[210mm] min-h-[297mm] p-[20mm] relative shadow-[0_20px_50px_rgba(0,0,0,0.1)] mb-12 last:mb-0 print:shadow-none print:m-0 print:w-full flex flex-col ${getFontFamily()} ${metadata.layoutConfig.fontSize} text-foreground`;
+    const schemes = useMemo(() => questions.map(markingSchemeOf), [questions]);
+    const partSchemes = useMemo(
+        () =>
+            questions.map((q) => {
+                const parts = q.sub_parts ?? q.subParts;
+                return (Array.isArray(parts) ? parts : []).map(partMarkingScheme);
+            }),
+        [questions]
+    );
 
     return (
-        <div className="exam-container print:bg-white bg-secondary/50 flex flex-col items-center">
-            <div id="marking-scheme-content" className={pageBaseClass}>
-                {/* Header */}
-                <div className="border-b-[4px] border-foreground pb-6 mb-8 text-center">
-                    <h1 className="text-2xl font-black uppercase mb-2 text-foreground">{metadata.institution}</h1>
-                    <h2 className="text-xl font-bold uppercase text-muted-foreground mb-4">{metadata.title} - MARKING SCHEME</h2>
-                    <div className="flex justify-center gap-6 text-sm font-bold uppercase tracking-widest text-muted-foreground/60">
-                        <span>{metadata.subject}</span>
-                        <span>•</span>
-                        <span>{metadata.code}</span>
-                    </div>
+        <div className="flex flex-col items-center">
+            <article className={SHEET} style={INK}>
+                <header className="text-center">
+                    {identity.institution && (
+                        <h1 className="font-serif text-[15px] font-bold uppercase leading-tight">
+                            {identity.institution}
+                        </h1>
+                    )}
+                    <h2 className="font-serif text-[18px] font-bold uppercase leading-tight">
+                        {identity.title}
+                    </h2>
+                    <p className="text-[12px] font-bold uppercase">Marking Scheme</p>
+                    {identity.context && (
+                        <p className="mt-1 font-serif text-[11px]">{identity.context}</p>
+                    )}
+                </header>
+
+                <div className="mt-2 border-t-[3px] border-black pt-[2px]">
+                    <div className="border-t border-black" />
                 </div>
 
-                {/* Questions & Answers */}
-                <div className="flex-1 space-y-8">
-                    {questions.map((q, index) => (
-                        <div key={q.id} className="page-break-inside-avoid border-b border-border pb-6 last:border-0">
-                            <div className="flex gap-4 mb-2">
-                                <span className="font-bold text-lg text-foreground w-8 shrink-0">{index + 1}.</span>
-                                <div className="flex-1">
-                                    <p className="text-sm text-muted-foreground italic mb-2 line-clamp-2">{q.text}</p>
-                                    <div className="bg-accent-green/10 border border-accent-green/20 p-4 rounded-lg">
-                                        <p className="text-xs font-black uppercase text-accent-green mb-2 tracking-widest">Answer Key</p>
-                                        <div className="text-sm font-medium text-foreground whitespace-pre-wrap leading-relaxed">
-                                            {q.markingScheme || "No marking scheme provided."}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="shrink-0 w-16 text-right">
-                                    <span className="font-bold text-sm bg-secondary px-2 py-1 rounded">
-                                        {q.marks} mks
+                <div className="mt-2 flex justify-between text-[10px] font-bold uppercase">
+                    <span>Confidential — for the teacher only</span>
+                    {layout.totalMarks > 0 && <span>Total marks: {layout.totalMarks}</span>}
+                </div>
+                <div className="mt-1 border-t border-black" />
+
+                <ol className="mt-2">
+                    {layout.questions.map((question, index) => {
+                        const scheme = schemes[index] ?? '';
+                        const parts = partSchemes[index] ?? [];
+
+                        return (
+                            <li
+                                key={question.number}
+                                className="break-inside-avoid border-b border-black py-2 last:border-0"
+                            >
+                                <div className="flex items-baseline gap-2">
+                                    <span className="w-5 shrink-0 font-serif text-[11.5px] font-bold">
+                                        {question.number}.
                                     </span>
+                                    <p className="flex-1 font-serif text-[10.5px] whitespace-pre-wrap">
+                                        {question.text}
+                                    </p>
+                                    {question.marks > 0 && (
+                                        <span className="shrink-0 font-serif text-[10.5px]">
+                                            ({question.marks} mark{question.marks === 1 ? '' : 's'})
+                                        </span>
+                                    )}
                                 </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
 
-                <div className="mt-auto pt-8 text-center border-t-2 border-border">
-                    <p className="font-bold uppercase tracking-[0.2em] text-[10px] text-muted-foreground">Confidential • Marking Guide</p>
-                </div>
-            </div>
+                                <div className="ml-7 mt-1 font-serif text-[11.5px] font-bold">
+                                    {scheme ? (
+                                        <p className="whitespace-pre-wrap">{scheme}</p>
+                                    ) : question.parts.length > 0 ? (
+                                        <ul className="space-y-[2px]">
+                                            {question.parts.map((part, i) => (
+                                                <li key={i}>
+                                                    {part.label} {parts[i] || '—'}
+                                                    {part.marks > 0
+                                                        ? `  (${part.marks} mark${part.marks === 1 ? '' : 's'})`
+                                                        : ''}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        // Said plainly rather than left blank: a blank
+                                        // here reads as an answer of "nothing".
+                                        <p className="font-normal">
+                                            [ No marking scheme recorded for this question. ]
+                                        </p>
+                                    )}
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ol>
+
+                {layout.questionCount > 0 && (
+                    <p className="mt-4 border-t border-black pt-1.5 text-right text-[9px] font-bold uppercase">
+                        End of marking scheme
+                    </p>
+                )}
+            </article>
         </div>
     );
-};
+}
 
-export default MarkingSchemePreview;
+const SHEET =
+    'w-[210mm] min-h-[297mm] bg-white px-[18mm] py-[14mm] font-sans text-black ' +
+    'shadow-[0_10px_30px_rgba(0,0,0,0.15)] print:shadow-none print:w-full';
+
+const INK: React.CSSProperties = { color: '#000000', backgroundColor: '#ffffff' };

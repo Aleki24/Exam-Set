@@ -22,7 +22,7 @@ import PaperPanel, { type PaperMeta } from '@/components/setter/PaperPanel';
 import AutoBuildModal from '@/components/setter/AutoBuildModal';
 import ExamPreview from '@/components/ExamPreview';
 import MarkingSchemePreview from '@/components/MarkingSchemePreview';
-import PdfDownloader from '@/components/PdfDownloader';
+import PaperPdfButton from '@/components/PaperPdfButton';
 import QuestionEntryModal from '@/components/QuestionEntryModal';
 import EnhancedBulkImport from '@/components/EnhancedBulkImport';
 import { assemblePaper, fetchQuestionPool, paperStats, totalMarks } from '@/services/paperBuilder';
@@ -31,6 +31,7 @@ import { createExam } from '@/services/examService';
 import { LEVELS, formatPrice } from '@/lib/catalog';
 import { useRole } from '@/lib/roles';
 import type { DBGrade, DBQuestion, DBSubject, ExamMetadata, ExamPaper, Question } from '@/types';
+import type { PaperSource } from '@/services/paperLayout';
 import type { PaperBlueprint } from '@/types/shop';
 
 const DEFAULT_META: PaperMeta = {
@@ -218,6 +219,37 @@ export default function SetterPage() {
         } else {
             toast.success(`Built a ${built}-mark paper from ${result.questions.length} questions`);
         }
+    };
+
+    /**
+     * The paper as the renderer sees it. The preview on screen and the PDF that
+     * downloads are both drawn from this and from the questions themselves, so
+     * what is approved here is what prints.
+     */
+    const paperSource: PaperSource = useMemo(
+        () => ({
+            title: meta.title,
+            subject: meta.subject || selected[0]?.subject || '',
+            grade_label: meta.gradeLabel,
+            exam_type: meta.examType,
+            term_slug: meta.termSlug,
+            year: meta.year,
+            time_limit: meta.duration,
+            institution: meta.institution,
+            total_marks: totalMarks(selected),
+            instructions: meta.instructions,
+        }),
+        [meta, selected]
+    );
+
+    /** Something a teacher will recognise in their downloads folder. */
+    const pdfFilename = (asset: 'paper' | 'scheme') => {
+        const base = [meta.gradeLabel, meta.subject || selected[0]?.subject, meta.title, meta.year]
+            .filter(Boolean)
+            .join('-')
+            .replace(/\s+/g, '-')
+            .replace(/[^\w-]/g, '');
+        return `${base || 'exam-paper'}${asset === 'scheme' ? '-marking-scheme' : ''}.pdf`.toLowerCase();
     };
 
     // Build the shape the preview and PDF components expect.
@@ -595,16 +627,16 @@ export default function SetterPage() {
                         </div>
 
                         <div className="ml-auto flex items-center gap-2">
-                            <PdfDownloader
-                                elementId={previewMode === 'paper' ? 'setter-paper-print' : 'setter-scheme-print'}
-                                filename={`${meta.title.replace(/\s+/g, '-').toLowerCase()}${
-                                    previewMode === 'scheme' ? '-marking-scheme' : ''
-                                }.pdf`}
+                            <PaperPdfButton
+                                paper={paperSource}
+                                questions={selected}
+                                asset={previewMode === 'paper' ? 'paper' : 'scheme'}
+                                filename={pdfFilename(previewMode === 'paper' ? 'paper' : 'scheme')}
                                 className="btn-primary"
                             >
                                 <Download className="h-4 w-4" />
                                 Download PDF
-                            </PdfDownloader>
+                            </PaperPdfButton>
                             <button
                                 type="button"
                                 onClick={() => setShowPreview(false)}
@@ -619,13 +651,9 @@ export default function SetterPage() {
                     <div className="flex-1 scroll-panel bg-muted/40 p-6">
                         <div className="mx-auto w-fit">
                             {previewMode === 'paper' ? (
-                                <div id="setter-paper-print">
-                                    <ExamPreview paper={examPaper} />
-                                </div>
+                                <ExamPreview paper={paperSource} questions={selected} />
                             ) : (
-                                <div id="setter-scheme-print">
-                                    <MarkingSchemePreview paper={examPaper} />
-                                </div>
+                                <MarkingSchemePreview paper={paperSource} questions={selected} />
                             )}
                         </div>
                     </div>
