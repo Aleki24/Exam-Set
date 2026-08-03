@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ClipboardCheck, Download, FileText, Loader2, PenSquare, Receipt } from 'lucide-react';
+import { ClipboardCheck, Download, FileText, Loader2, PenSquare, Receipt, Trash2 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { examTypeName, formatPrice } from '@/lib/catalog';
 import type { SubscriptionStatus } from '@/lib/plans';
@@ -56,6 +56,42 @@ export default function LibraryPage() {
             .catch(() => toast.error('Could not load your library'))
             .finally(() => setLoading(false));
     }, [router]);
+
+    /**
+     * Deletes a paper this account set.
+     *
+     * The refusals — sold, or already sat by somebody — are decided on the
+     * server and come back as sentences worth reading, so they are shown as
+     * they arrive rather than replaced with a generic failure.
+     */
+    const remove = async (paper: PaperListing) => {
+        const confirmed = window.confirm(
+            `Delete “${paper.title}”?\n\nThis removes the paper and its generated files. The questions stay in the bank.`
+        );
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch(`/api/papers/${paper.id}`, { method: 'DELETE' });
+            const payload = await res.json();
+
+            if (!res.ok) {
+                toast.error(payload.error || 'Could not delete this paper');
+                return;
+            }
+
+            // Taken out of the list here rather than by refetching: the row is
+            // gone, and asking the server to confirm what it just told us is a
+            // round trip for nothing.
+            setData((current) =>
+                current ? { ...current, sets: current.sets.filter((p) => p.id !== paper.id) } : current
+            );
+
+            toast.success(payload.message || 'Paper deleted');
+            if (payload.warning) toast.warning(payload.warning);
+        } catch {
+            toast.error('Could not delete this paper');
+        }
+    };
 
     const download = async (paper: PaperListing, asset: 'paper' | 'scheme') => {
         try {
@@ -152,7 +188,13 @@ export default function LibraryPage() {
                             (data?.sets.length ? (
                                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                                     {data.sets.map((paper) => (
-                                        <OwnedCard key={paper.id} paper={paper} onDownload={download} isOwnSet />
+                                        <OwnedCard
+                                            key={paper.id}
+                                            paper={paper}
+                                            onDownload={download}
+                                            onDelete={remove}
+                                            isOwnSet
+                                        />
                                     ))}
                                 </div>
                             ) : (
@@ -213,10 +255,12 @@ export default function LibraryPage() {
 function OwnedCard({
     paper,
     onDownload,
+    onDelete,
     isOwnSet,
 }: {
     paper: PaperListing;
     onDownload: (paper: PaperListing, asset: 'paper' | 'scheme') => void;
+    onDelete?: (paper: PaperListing) => void;
     isOwnSet?: boolean;
 }) {
     const [busy, setBusy] = useState(false);
@@ -260,6 +304,16 @@ function OwnedCard({
                     <Link href={`/set?load=${paper.id}`} className="btn-outline px-3" aria-label="Edit this paper">
                         <PenSquare className="h-4 w-4" />
                     </Link>
+                )}
+                {isOwnSet && onDelete && (
+                    <button
+                        type="button"
+                        onClick={() => onDelete(paper)}
+                        className="btn-outline px-3 text-destructive hover:bg-destructive/10"
+                        aria-label={`Delete ${paper.title}`}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </button>
                 )}
             </div>
         </article>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
+import { deletePaper } from '@/services/paperDeletion';
 import { toListing } from '@/lib/paperMapper';
 
 /**
@@ -47,37 +48,32 @@ export async function GET(req: NextRequest) {
 /**
  * DELETE /api/admin/papers?id=… — remove a paper from the catalog.
  *
- * Refused once the paper has been bought: buyers keep what they paid for, so an
- * admin unpublishes instead of deleting.
+ * The rules live in services/paperDeletion, shared with the author's own delete
+ * at /api/papers/:id. This route used to carry its own copy, which had drifted
+ * in two ways worth naming: it left the generated PDF and marking scheme behind
+ * in storage with nothing pointing at them, and it did not notice that
+ * `exam_sessions` cascades — so deleting a paper somebody had sat erased their
+ * answers and marks without a word.
  */
 export async function DELETE(req: NextRequest) {
     try {
         const supabase = await createClient();
-        const { failure } = await requireAdmin(supabase);
+        const { actor, failure } = await requireAdmin(supabase);
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         const id = new URL(req.url).searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-        const { data: sold } = await supabase
-            .from('order_items')
-            .select('id')
-            .eq('exam_id', id)
-            .limit(1);
-
-        if (sold && sold.length > 0) {
-            return NextResponse.json(
-                {
-                    error: 'This paper has been sold, so it cannot be deleted. Unpublish it instead — buyers keep their downloads.',
-                },
-                { status: 409 }
-            );
+        const result = await deletePaper(supabase, id, { id: actor.id, isAdmin: true });
+        if (!result.ok) {
+            return NextResponse.json({ error: result.error }, { status: result.status });
         }
 
-        const { error } = await supabase.from('exams').delete().eq('id', id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-        return NextResponse.json({ message: 'Paper deleted' });
+        return NextResponse.json({
+            message: `“${result.title}” was deleted`,
+            filesRemoved: result.filesRemoved,
+            warning: result.storageWarning,
+        });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
         return NextResponse.json({ error: message }, { status: 500 });
