@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getActor } from '@/utils/auth/guards';
+import { deletePaper } from '@/services/paperDeletion';
 import { toListing } from '@/lib/paperMapper';
 
 /** GET /api/papers/:id — a single paper, by id or slug. */
@@ -93,6 +95,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!data) return NextResponse.json({ error: 'Paper not found or not yours' }, { status: 404 });
 
         return NextResponse.json({ paper: toListing(data) });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unexpected error';
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
+}
+
+/**
+ * DELETE /api/papers/:id — remove a paper.
+ *
+ * The author's own door into deletion; the admin catalog has its own and both
+ * go through the same rules in services/paperDeletion. Until this existed a
+ * paper set in the setter and saved to a library could be created and edited
+ * but never removed.
+ *
+ * The id must be a uuid here. GET accepts a slug because a slug is what a link
+ * carries, but nothing should be deleted by a name that could be reassigned.
+ */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    try {
+        const { id } = await params;
+        const supabase = await createClient();
+
+        const actor = await getActor(supabase);
+        if (!actor) return NextResponse.json({ error: 'Sign in to continue' }, { status: 401 });
+
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        if (!isUuid) {
+            return NextResponse.json({ error: 'Delete a paper by its id, not its slug' }, { status: 400 });
+        }
+
+        const result = await deletePaper(supabase, id, { id: actor.id, isAdmin: actor.isAdmin });
+        if (!result.ok) {
+            return NextResponse.json({ error: result.error }, { status: result.status });
+        }
+
+        return NextResponse.json({
+            message: `“${result.title}” was deleted`,
+            filesRemoved: result.filesRemoved,
+            warning: result.storageWarning,
+        });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
         return NextResponse.json({ error: message }, { status: 500 });
