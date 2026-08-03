@@ -339,16 +339,34 @@ export const SUBJECTS_BY_LEVEL: Record<LevelSlug, SubjectDef[]> = {
         S('Psychomotor and Creative Activities'),
         S('Religious Education Activities'),
     ],
+    /*
+     * The seven official lower primary learning areas, named as the KICD design
+     * names them — see `lib/curriculum`, which is where their strands and topics
+     * live and which every generated document reads from.
+     *
+     * The old names are kept as aliases rather than dropped. `exams.subject` is
+     * free text on rows going back to the start, so a paper filed under
+     * "Mathematics" or "Creative Activities" is the same shelf to a browsing
+     * teacher and has to keep matching.
+     *
+     * "Hygiene and Nutrition" is gone as a learning area. It is not one at this
+     * level — hygiene is taught inside Environmental Activities and the language
+     * areas — so it stays only as an alias, which keeps existing papers findable
+     * without offering a subject the curriculum does not have.
+     */
     'lower-primary': [
-        S('English'),
-        S('Kiswahili'),
-        S('Mathematics', ['Mathematical Activities']),
-        S('Environmental Activities'),
-        S('Hygiene and Nutrition'),
-        S('Religious Education', ['CRE', 'IRE', 'HRE']),
-        S('Creative Activities'),
-        S('Indigenous Language'),
-        S('Kenyan Sign Language'),
+        S('Mathematics Activities', ['Mathematics', 'Mathematical Activities', 'Maths']),
+        S('English Language Activities', ['English', 'English Activities']),
+        S('Shughuli za Kiswahili', ['Kiswahili', 'Kiswahili Language Activities', 'Shughuli za Kiswahili']),
+        S('Indigenous Language Activities', ['Indigenous Language', 'Mother Tongue']),
+        S('Environmental Activities', ['Environmental', 'Hygiene and Nutrition']),
+        S('Christian Religious Education (CRE) Activities', [
+            'Religious Education',
+            'CRE',
+            'Christian Religious Education',
+        ]),
+        S('Creative Arts Activities', ['Creative Activities', 'Creative Arts', 'Art and Craft', 'Music']),
+        S('Kenyan Sign Language', ['KSL']),
     ],
     'upper-primary': [
         S('English'),
