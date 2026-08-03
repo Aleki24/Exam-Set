@@ -3,7 +3,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, CloudOff, Download, Loader2, Plus, RefreshCw } from 'lucide-react';
+import {
+    AlertTriangle,
+    CheckCircle2,
+    CloudOff,
+    Download,
+    Loader2,
+    Plus,
+    RefreshCw,
+    Send,
+    Trash2,
+    Undo2,
+} from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import {
     PERFORMANCE_LEVELS,
@@ -44,6 +55,12 @@ interface Assessment {
     title: string;
     outcomes: LearningOutcome[];
     dueOn?: string | null;
+    /**
+     * Set once the scores have gone to KNEC. It is what closes an assessment,
+     * and what stops it — and its class — being deleted afterwards, because the
+     * evidence behind a submitted score has to be retained.
+     */
+    submittedAt?: string | null;
 }
 
 /**
@@ -71,6 +88,98 @@ export default function AssessPage() {
     const [online, setOnline] = useState(true);
     const [pending, setPending] = useState(0);
     const [syncing, setSyncing] = useState(false);
+
+    // ---------------------------------------------------------------- editing
+
+    /**
+     * Removing a class takes its register, its assessments and every score
+     * filed under them — all of it this teacher's own work, which is why it is
+     * allowed at all. The count comes back from the server so the confirmation
+     * afterwards can say what actually went rather than guess.
+     */
+    const removeClass = async (id: string, name: string) => {
+        if (!window.confirm(`Delete “${name}”?\n\nThe register, its assessments and every score in them go with it.`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/cba/classes?id=${id}`, { method: 'DELETE' });
+            const payload = await res.json();
+            if (!res.ok) {
+                toast.error(payload.error || 'Could not delete the class');
+                return;
+            }
+
+            setClasses((current) => current.filter((c) => c.id !== id));
+            setAssessments((current) => current.filter((a) => a.classId !== id));
+            if (activeClass === id) {
+                setActiveClass(null);
+                setActiveAssessment(null);
+                setSheet({});
+            }
+
+            const gone = payload.removed;
+            toast.success(
+                gone
+                    ? `${payload.message} — ${gone.learners} learners, ${gone.assessments} assessments, ${gone.scores} scores`
+                    : payload.message
+            );
+        } catch {
+            toast.error('Could not delete the class');
+        }
+    };
+
+    const removeAssessment = async (id: string, title: string) => {
+        if (!window.confirm(`Delete “${title}”?\n\nEvery score against it goes too.`)) return;
+
+        try {
+            const res = await fetch(`/api/cba/assessments?id=${id}`, { method: 'DELETE' });
+            const payload = await res.json();
+            if (!res.ok) {
+                toast.error(payload.error || 'Could not delete the assessment');
+                return;
+            }
+
+            setAssessments((current) => current.filter((a) => a.id !== id));
+            if (activeAssessment === id) {
+                setActiveAssessment(null);
+                setSheet({});
+            }
+            toast.success(`${payload.message} — ${payload.removed?.scores ?? 0} scores`);
+        } catch {
+            toast.error('Could not delete the assessment');
+        }
+    };
+
+    /**
+     * Marking an assessment submitted is what closes it: it is the flag that
+     * stops it and its class being deleted, because the evidence behind a
+     * submitted score has to be kept. Reversible, because a teacher who ticked
+     * it early should not have to live with that.
+     */
+    const setSubmitted = async (id: string, submitted: boolean) => {
+        try {
+            const res = await fetch('/api/cba/assessments', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, submitted }),
+            });
+            const payload = await res.json();
+            if (!res.ok) {
+                toast.error(payload.error || 'Could not update the assessment');
+                return;
+            }
+
+            setAssessments((current) =>
+                current.map((a) =>
+                    a.id === id ? { ...a, submittedAt: payload.assessment?.submitted_at ?? null } : a
+                )
+            );
+            toast.success(submitted ? 'Marked as submitted' : 'Reopened');
+        } catch {
+            toast.error('Could not update the assessment');
+        }
+    };
 
     // ---------------------------------------------------------------- loading
 
@@ -282,9 +391,21 @@ export default function AssessPage() {
                 ) : (
                     <>
                         <section aria-labelledby="class-heading" className="mt-10">
-                            <h2 id="class-heading" className="overline">
-                                Class
-                            </h2>
+                            <div className="flex items-baseline justify-between gap-3">
+                                <h2 id="class-heading" className="overline">
+                                    Class
+                                </h2>
+                                {currentClass && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeClass(currentClass.id, currentClass.name)}
+                                        className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-destructive"
+                                    >
+                                        <Trash2 className="mr-1 inline h-3 w-3" aria-hidden />
+                                        Delete {currentClass.name}
+                                    </button>
+                                )}
+                            </div>
                             <ul className="mt-3 flex flex-wrap gap-2">
                                 {classes.map((c) => (
                                     <li key={c.id}>
@@ -361,6 +482,42 @@ export default function AssessPage() {
                                         <span className="figure text-[11px] text-muted-foreground">
                                             {done.scored} of {done.expected} scored
                                         </span>
+                                    </div>
+
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                                        {assessment.submittedAt ? (
+                                            <>
+                                                <span className="text-[11px] font-semibold text-success">
+                                                    <CheckCircle2 className="mr-1 inline h-3 w-3" aria-hidden />
+                                                    Submitted
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSubmitted(assessment.id, false)}
+                                                    className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                                                >
+                                                    <Undo2 className="mr-1 inline h-3 w-3" aria-hidden />
+                                                    Reopen
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSubmitted(assessment.id, true)}
+                                                className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                                            >
+                                                <Send className="mr-1 inline h-3 w-3" aria-hidden />
+                                                Mark as submitted
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeAssessment(assessment.id, assessment.title)}
+                                            className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-destructive"
+                                        >
+                                            <Trash2 className="mr-1 inline h-3 w-3" aria-hidden />
+                                            Delete this assessment
+                                        </button>
                                     </div>
 
                                     <Legend />
