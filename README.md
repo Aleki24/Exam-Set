@@ -87,6 +87,54 @@ the refresh token out from under each other until the server treated the replay
 as theft, three `getUser()` calls racing in one middleware pass. One holder, one
 subscription, one answer.
 
+**Reading the token instead of asking about it.** `getUser()` is a round trip to
+the auth server on every call, and the middleware runs on every request that is
+not a static file. Everything now goes through `readVerifiedClaims`
+(`utils/supabase/claims.ts`), which verifies the token's signature against the
+project's public keys — fetched once per process and cached — and reads the
+answer out of the token.
+
+Two things follow from that, and both are handled rather than hoped about:
+
+- A locally verified token is trusted until it expires, so a session revoked
+  server-side stays usable for the rest of the access token's life. Survivable
+  here because the database is the wall: `is_admin()` and `is_owner()` read
+  `profiles` inside Postgres on every statement.
+- `getClaims()` *throws* where `getUser()` returned an error — an expired or
+  undecodable token is an ordinary exception, not an auth error from a server.
+  `readVerifiedClaims` turns that back into a value, and `isSessionRejected`
+  learned the wording local verification uses, which is not the wording the auth
+  server uses.
+
+### Enabling the role claim
+
+`033_role_in_the_access_token.sql` adds a custom access token hook that writes
+`profiles.role` into the JWT as `user_role`, so `requireAdmin` can read it from a
+token it has already verified instead of querying for it. **Creating the function
+is not enough** — the hook has to be switched on:
+
+- **Hosted:** Dashboard → Authentication → Hooks → *Customize Access Token (JWT)
+  Claims* → select `public.custom_access_token_hook`.
+- **Local:** in `supabase/config.toml`
+
+  ```toml
+  [auth.hook.custom_access_token]
+  enabled = true
+  uri = "pg-functions://postgres/public/custom_access_token_hook"
+  ```
+
+Until it is on, the claim is absent and the guards fall back to reading
+`profiles` exactly as before. Existing sessions do the same until their next
+refresh. There is no point at which anybody is locked out — a missing claim
+means "ask the database", never "not an admin".
+
+The claim is a photograph of the role when the token was minted, so it can be up
+to one token lifetime out of date. Routes that hold a service-role client bypass
+row level security and have no database wall behind them, so they pass
+`{ fresh: true }` and `requireOwner` always reads the table. Everything else can
+afford to be briefly wrong on screen, because the write behind it is refused by
+Postgres.
+
 **RLS policies are OR'd together**, so a single permissive policy anywhere
 defeats every strict one on the same table. Migration `016_tighten_rls.sql`
 removes the `FOR ALL USING (true)` policies the early migrations shipped; without
@@ -134,8 +182,10 @@ the shop are:
   `anon`/`authenticated` on top, which left `confirm_order_payment` callable by
   any visitor — a complete bypass of the paywall
 
-**Deploying to an existing database?** `supabase/production-setup.sql` is all of
-them concatenated in order, ready to paste into the Supabase SQL editor in one go.
+**Deploying to an existing database?** `supabase/production-setup.sql` is a
+concatenation of the migrations, ready to paste into the Supabase SQL editor in
+one go — but it currently stops at `021_schema_drift.sql` and has not been
+regenerated since. Apply `022` onwards from `supabase/migrations/` yourself.
 It is safe to re-run. Two things it does that you should know about: every exam
 currently marked `is_public` becomes a published free catalog paper (reprice them
 from `/admin` → Catalog), and the first account to sign up becomes the owner.

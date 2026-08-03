@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createMiddlewareClient } from '@/utils/supabase/middleware'
-import { isSessionRejected } from '@/utils/supabase/authFailure'
+import { authErrorMessage, isSessionRejected } from '@/utils/supabase/authFailure'
+import { claimedUserId, readVerifiedClaims } from '@/utils/supabase/claims'
 import { missingSupabaseEnv, supabaseConfigured } from '@/lib/supabaseEnv'
 
 export async function middleware(request: NextRequest) {
@@ -16,7 +17,7 @@ export async function middleware(request: NextRequest) {
             return NextResponse.next();
         }
 
-        // One client, one `getUser()`, for the whole request.
+        // One client, one ask, for the whole request.
         //
         // This used to be three: `updateSession` built a client and asked, then
         // each branch below built another and asked again. Every ask can renew the
@@ -27,13 +28,25 @@ export async function middleware(request: NextRequest) {
         // and which nothing reports as an error. Asking once removes the race
         // outright, and saves two round trips on every request besides.
         //
+        // `getClaims` rather than `getUser`, because this runs on every request
+        // that is not a static file and `getUser` is a round trip to the auth
+        // server every single time. `getClaims` verifies the token's signature
+        // against the project's public keys, cached for the life of the process,
+        // and only reaches the network when the token needs renewing.
+        //
+        // Renewal still happens: `getClaims` reads the session first, and reading
+        // an expired session is what refreshes it. That matters more here than
+        // anywhere else in the app — refreshing the cookie is most of what this
+        // middleware is for, and dropping it would sign everybody out an hour
+        // after they arrived.
+        //
         // `session` is kept whole rather than destructured: renewing the token
         // replaces the response object, so `session.response` has to be read
         // after the call below, never before it. Pulling it out here would pin
         // the response from before the renewal and send the old cookies.
         const session = createMiddlewareClient(request)
-        const { data, error } = await session.supabase.auth.getUser()
-        const user = data?.user ?? null
+        const { claims, error } = await readVerifiedClaims(session.supabase)
+        const user = claimedUserId(claims)
 
         const pathname = request.nextUrl.pathname
 
@@ -76,7 +89,7 @@ export async function middleware(request: NextRequest) {
             if (unreachable) {
                 console.warn(
                     `Could not verify the session for ${pathname}; letting it through. ` +
-                        `Row level security still applies. (${error!.message})`
+                        `Row level security still applies. (${authErrorMessage(error)})`
                 )
             }
         }
@@ -111,14 +124,14 @@ export async function middleware(request: NextRequest) {
             // deleted for it — the expiries went out with the response, and by the
             // time they noticed, the sign-out they never asked for was done.
             if (error && !unreachable) {
-                console.warn('Stale session on an auth page, clearing it:', error.message)
+                console.warn('Stale session on an auth page, clearing it:', authErrorMessage(error))
                 for (const cookie of request.cookies.getAll()) {
                     if (cookie.name.startsWith('sb-')) session.response.cookies.delete(cookie.name)
                 }
             } else if (error) {
                 console.warn(
                     'Could not verify the session on an auth page, leaving it alone:',
-                    error.message
+                    authErrorMessage(error)
                 )
             }
         }

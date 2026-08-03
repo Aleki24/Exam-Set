@@ -160,21 +160,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        const { data: auth, error: authError } = await supabase.auth.getUser();
+        // `getClaims` verifies the token against the project's public keys —
+        // fetched once and cached — rather than asking the auth server who this
+        // is on every page. Same guarantee of authenticity, one fewer round trip
+        // on the first paint of every page. On a project still signing with the
+        // legacy shared secret the SDK falls back to `getUser()` by itself, so
+        // this is safe to ship before that switch and simply does not get faster
+        // until it happens.
+        const { data: verified, error: authError } = await supabase.auth.getClaims();
         if (cancelled.current) return;
 
-        if (authError || !auth?.user) {
+        const userId = typeof verified?.claims?.sub === 'string' ? verified.claims.sub : null;
+        const userEmail = typeof verified?.claims?.email === 'string' ? verified.claims.email : null;
+
+        if (authError || !userId) {
             describes.current = null;
             setState(SIGNED_OUT);
             return;
         }
 
-        describes.current = auth.user.id;
+        describes.current = userId;
 
         const { data: profile, error } = await supabase
             .from('profiles')
             .select(PROFILE_COLUMNS)
-            .eq('id', auth.user.id)
+            .eq('id', userId)
             .maybeSingle();
 
         if (cancelled.current) return;
@@ -193,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 signedIn: true,
                 isAdmin: false,
                 isOwner: false,
-                email: auth.user.email ?? null,
+                email: userEmail,
                 staleSession: true,
                 account: EMPTY_ACCOUNT_PROFILE,
                 needsOnboarding: false,
@@ -209,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             signedIn: true,
             isAdmin: role === 'admin' || role === 'owner',
             isOwner: role === 'owner',
-            email: auth.user.email ?? null,
+            email: userEmail,
             staleSession: false,
             account,
             // Never asked, rather than asked and declined. `onboarded_at` is

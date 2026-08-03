@@ -28,9 +28,9 @@ const jiti = createJiti(import.meta.url, {
 
 const { safeNext, friendlyAuthError } = await jiti.import('../src/lib/authErrors.ts');
 const { isSessionRejected } = await jiti.import('../src/utils/supabase/authFailure.ts');
-const { getActor, getSignedInUser, requireAdmin, requireOwner, requireUser } = await jiti.import(
-    '../src/utils/auth/guards.ts'
-);
+const { getActor, getFreshActor, getSignedInUser, requireAdmin, requireOwner, requireUser } =
+    await jiti.import('../src/utils/auth/guards.ts');
+const { readVerifiedClaims } = await jiti.import('../src/utils/supabase/claims.ts');
 const { authEventNeedsReload } = await jiti.import('../src/lib/roles.tsx');
 
 let failures = 0;
@@ -139,6 +139,18 @@ assert('undefined', !isSessionRejected(undefined), 'ok');
 section('isSessionRejected is not fooled by a retryable error carrying a rejection message');
 assert('retryable wins over wording', !isSessionRejected({ name: 'AuthRetryableFetchError', status: 0, message: 'invalid refresh token' }), 'ok');
 
+section('isSessionRejected reads a locally reached verdict as a verdict');
+// Verifying a token here rather than asking about it produces plain exceptions
+// with no status and no code. The status rule reads a missing status as "the
+// request never landed", so without a rule of their own every one of these
+// would be called a network fault and a dead session would be kept alive.
+assert('expired, as local verification words it', isSessionRejected(new Error('JWT has expired')), 'ok');
+assert('a token with no expiry', isSessionRejected(new Error('Missing exp claim')), 'ok');
+assert('a token signed by nobody', isSessionRejected(new Error('Invalid JWT signature')), 'ok');
+assert('the SDK error for the same', isSessionRejected({ name: 'AuthInvalidJwtError', code: 'invalid_jwt', status: 400, message: 'Invalid JWT signature' }), 'ok');
+// And still not for anything that never got an answer.
+assert('a genuine network fault is not', !isSessionRejected(new Error('fetch failed')), 'ok');
+
 // ---------------------------------------------------------------------------
 // THE GUARDS
 //
@@ -147,17 +159,31 @@ assert('retryable wins over wording', !isSessionRejected({ name: 'AuthRetryableF
 // many calls happen and on whose behalf, so the fake client below counts them.
 // ---------------------------------------------------------------------------
 
-/** A Supabase client that records what was asked of it. */
-function fakeClient({ user = { id: 'u1', email: 'a@example.com' }, role = 'user', authThrows = false } = {}) {
+/**
+ * A Supabase client that records what was asked of it.
+ *
+ * `claimedRole` is what the access token hook put in the token; `role` is what
+ * `profiles` says. Passing different values for the two is how the staleness
+ * cases below are set up — a token minted before somebody was demoted.
+ */
+function fakeClient({
+    user = { id: 'u1', email: 'a@example.com' },
+    role = 'user',
+    claimedRole = undefined,
+    authThrows = false,
+} = {}) {
     const calls = { getUser: 0, profiles: 0 };
 
     return {
         calls,
         auth: {
-            async getUser() {
+            async getClaims() {
                 calls.getUser++;
                 if (authThrows) throw new Error('network down');
-                return { data: { user }, error: null };
+                if (!user) return { data: null, error: null };
+                const claims = { sub: user.id, email: user.email };
+                if (claimedRole !== undefined) claims.user_role = claimedRole;
+                return { data: { claims }, error: null };
             },
         },
         from(table) {
@@ -231,23 +257,24 @@ section('One request never answers for another');
     check('each asked its own auth server', second.calls.getUser, 1);
 }
 
-section('A dropped request is not remembered as an answer');
+section('A failed verification is an answer, not a crash');
 {
-    // Caching a rejection would turn one network blip into a failed request for
-    // everything that asks afterwards.
+    // `getClaims` throws where `getUser` returned an error: a token it cannot
+    // decode or that has already expired is an ordinary exception, not an auth
+    // error from a server. Unhandled, that throws out of the middleware on every
+    // request carrying an hour-old cookie.
     const client = fakeClient({ authThrows: true });
-    await getSignedInUser(client).then(
-        () => assert('the first attempt fails', false, 'it resolved'),
-        () => assert('the first attempt fails', true, 'threw')
-    );
 
-    client.auth.getUser = async () => {
-        client.calls.getUser++;
-        return { data: { user: { id: 'u9', email: 'late@example.com' } }, error: null };
-    };
+    const result = await readVerifiedClaims(client);
+    check('the throw becomes a result', result.claims, null);
+    assert('carrying the error', Boolean(result.error), 'reported');
 
-    const recovered = await getSignedInUser(client);
-    check('a later attempt is allowed through', recovered?.id, 'u9');
+    check('so the guard reports signed out', await getSignedInUser(client), null);
+    check('and the route gets a clean 401', (await requireUser(client)).failure?.status, 401);
+
+    // Confined to the request that saw it: the next one asks again.
+    const later = fakeClient();
+    check('a later request is unaffected', (await getSignedInUser(later))?.id, 'u1');
 }
 
 section('Signed out is a clean refusal, not a crash');
@@ -258,6 +285,74 @@ section('Signed out is a clean refusal, not a crash');
     check('requireOwner refuses', (await requireOwner(nobody)).failure?.status, 401);
     check('getActor returns null', await getActor(nobody), null);
     check('and never reads a profile', nobody.calls.profiles, 0);
+}
+
+section('The role comes out of the token when the token carries one');
+{
+    const client = fakeClient({ role: 'admin', claimedRole: 'admin' });
+    const actor = await getActor(client);
+    check('the role is resolved', actor?.role, 'admin');
+    check('from the token', actor?.roleSource, 'token');
+    // The entire point of migration 033: a fifth of the routes stop asking the
+    // database for a column the token already carries.
+    check('with no profiles query', client.calls.profiles, 0);
+}
+
+section('And out of the database when it does not');
+{
+    // Two cases arrive here: a project that has not enabled the hook yet, and a
+    // token minted before it was. Both must fall back rather than be read as
+    // "no role", or shipping this would strip every signed-in admin at once.
+    const client = fakeClient({ role: 'owner' });
+    const actor = await getActor(client);
+    check('the role is still resolved', actor?.role, 'owner');
+    check('from the database', actor?.roleSource, 'database');
+    check('at the cost of one query', client.calls.profiles, 1);
+}
+
+section('A claim of a role nobody recognises is not a role');
+{
+    const client = fakeClient({ role: 'user', claimedRole: 'superuser' });
+    const actor = await getActor(client);
+    check('falls back rather than trusting it', actor?.roleSource, 'database');
+    check('and lands on the real role', actor?.role, 'user');
+}
+
+section('A stale claim cannot reach past the database');
+{
+    // The token says admin because it was minted before the owner demoted them.
+    // `profiles` says otherwise, and `profiles` is what every row level security
+    // policy and every privileged function reads.
+    const stale = () => fakeClient({ role: 'user', claimedRole: 'admin' });
+
+    // The ordinary admin gate lets them as far as the screen. That is deliberate
+    // and it is safe: `admin_confirm_order` and friends call `is_admin()` inside
+    // Postgres, so the write they came for is refused there.
+    const quick = stale();
+    assert('the fast gate is fooled, as designed', !(await requireAdmin(quick)).failure, 'passes');
+    check('having asked the database nothing', quick.calls.profiles, 0);
+
+    // A route holding a service-role client has no database wall behind it, so
+    // it asks for the truth and gets it.
+    const guarded = stale();
+    check('the fresh gate is not', (await requireAdmin(guarded, { fresh: true })).failure?.status, 403);
+    check('having asked', guarded.calls.profiles, 1);
+
+    // Owner is the gate on appointing admins. It is never taken from a token.
+    const pretender = fakeClient({ role: 'user', claimedRole: 'owner' });
+    check('owner is always checked for real', (await requireOwner(pretender)).failure?.status, 403);
+    check('by asking the database', pretender.calls.profiles, 1);
+
+    const realOwner = fakeClient({ role: 'owner', claimedRole: 'user' });
+    assert('and a real owner is not locked out by a stale claim', !(await requireOwner(realOwner)).failure, 'passes');
+}
+
+section('getFreshActor never takes the token at its word');
+{
+    const client = fakeClient({ role: 'user', claimedRole: 'owner' });
+    const actor = await getFreshActor(client);
+    check('the database wins', actor?.role, 'user');
+    check('and says so', actor?.roleSource, 'database');
 }
 
 section('An auth event only reloads when the answer could have changed');

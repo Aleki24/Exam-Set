@@ -42,6 +42,10 @@ const REJECTED_CODES = new Set([
     'user_not_found',
     'user_banned',
     'no_authorization',
+    // Raised when a token fails signature verification against the project's
+    // public keys. Local verification is a verdict of the most certain kind:
+    // nothing was asked of anybody, and no retry will change the answer.
+    'invalid_jwt',
 ]);
 
 const REJECTED_PHRASES = [
@@ -52,6 +56,9 @@ const REJECTED_PHRASES = [
     'session from session id claim in jwt does not exist',
     'session not found',
     'jwt expired',
+    // The wording local verification uses, which is not the wording the auth
+    // server uses. Both mean the token is finished.
+    'jwt has expired',
     'invalid jwt',
     'bad_jwt',
     'user from sub claim in jwt does not exist',
@@ -59,9 +66,34 @@ const REJECTED_PHRASES = [
 ];
 
 /**
- * True only when the auth server has actually ruled on the session and rejected
- * it. Anything the server never got to answer — a dropped connection, a DNS
- * failure, a timeout, a 5xx, a rate limit — is false.
+ * What to write in a log line about an auth failure.
+ *
+ * Errors reach this code as `unknown`, because verifying a token locally can
+ * throw an ordinary exception where asking the server returned a typed one. A
+ * log line is not worth a cast at every call site.
+ */
+export function authErrorMessage(error: unknown): string {
+    if (!error) return 'no error';
+    if (error instanceof Error) return error.message;
+    const message = (error as AuthErrorLike).message;
+    return typeof message === 'string' ? message : String(error);
+}
+
+/**
+ * Verdicts reached without asking anybody: the token was verified here, against
+ * a cached public key, and found wanting.
+ *
+ * These arrive as ordinary exceptions with no `status` and no `code`, so the
+ * status rule below — which reads a missing status as "the request never landed"
+ * — would call every one of them a network fault and keep a dead session alive.
+ * They are checked first because there is nothing uncertain about them.
+ */
+const LOCAL_VERDICT_PHRASES = ['jwt has expired', 'missing exp claim', 'invalid jwt signature'];
+
+/**
+ * True only when the session has actually been ruled against — by the auth
+ * server, or by verifying the token here. Anything nobody got to answer — a
+ * dropped connection, a DNS failure, a timeout, a 5xx, a rate limit — is false.
  */
 export function isSessionRejected(error: unknown): boolean {
     if (!error) return false;
@@ -74,6 +106,9 @@ export function isSessionRejected(error: unknown): boolean {
     // And its name for "there is no session", which is the opposite: settled
     // locally, with certainty, before any request was attempted.
     if (e.name === 'AuthSessionMissingError') return true;
+
+    const said = (e.message ?? '').toLowerCase();
+    if (LOCAL_VERDICT_PHRASES.some((phrase) => said.includes(phrase))) return true;
 
     if (e.code && REJECTED_CODES.has(e.code)) return true;
 
