@@ -176,17 +176,56 @@ paper ever after. That keeps a single delivery path: every route downstream sign
 a storage key and knows nothing about where the file came from.
 
 `services/paperPdf.ts` lays the page out with jsPDF text primitives rather than
-rasterising HTML. Real text is a tenth of the size of a screenshot, prints sharp
-on a staffroom photocopier, stays searchable, and needs no browser on the
-server — which matters inside a serverless request. The layout follows the
-conventions of a Kenyan paper because it gets photocopied for a class: centred
-school name and title, a details line, numbered instructions, questions with
-marks in the right margin, lettered options, labelled sub-parts, and ruled answer
-space scaled to the marks rather than a fixed two lines under a ten-mark essay.
+rasterising HTML. Real text is a fiftieth of the size of a screenshot, prints
+sharp on a staffroom photocopier, stays searchable, and needs no browser on the
+server — which matters inside a serverless request. A sixty-question paper is
+about 24 KB; the same paper as page images ran to several megabytes.
+
+`services/paperLayout.ts` decides the *shape* of the paper — sections, numbering,
+cleaned text, how much room each answer needs, the examiner's mark table, the
+rubric — and both the PDF and the on-screen preview are drawn from it. That is
+the point of it existing: the paper a teacher approves in the setter and the file
+that downloads are the same document, rather than two descriptions of it that
+drift apart.
+
+The layout follows the conventions of a Kenyan end-of-term paper, because it gets
+photocopied for a class:
+
+- centred school name and title, a details line, a candidate box for name, admission
+  number, class and date;
+- numbered instructions, ending with the printed-page count every KNEC paper
+  carries — which is why the document is rendered twice, the first pass only to
+  find out how many pages there are;
+- a filled *For Examiner's Use Only* table, banded ten questions at a time once a
+  paper is long enough that a column per question stops being a table;
+- for CBC levels, the four performance bands with the marks each one means for
+  *this* paper. An empty four-box grid is a picture of a rubric, not one a
+  teacher can mark against;
+- objective questions set as Section A and structured ones as Section B — but only
+  when the paper is already ordered that way. Reordering somebody's paper to fit a
+  convention would be worse than not having the convention;
+- questions with marks in the right margin, lettered options set two to a line
+  when they are short, labelled sub-parts, and ruled answer space scaled to the
+  marks rather than a fixed two lines under a ten-mark essay.
+
+Three rules the renderer holds to, each of which was previously broken:
+
+- **Black on white, nothing grey.** A photocopy of grey text is an unreadable page.
+- **The same header on every page** — subject, level, paper, *Page X of Y* — so a
+  sheet that comes loose can be put back.
+- **No blank or nearly empty pages.** A question's stem never ends up stranded at
+  the foot of a page, long questions are allowed to run over the break rather than
+  restart overleaf, and when a paper spills a little way onto a last page it is set
+  again with slightly less writing space and kept only if that buys the page back.
+  A near-empty sheet is still a sheet per pupil in a class of forty.
 
 The marking scheme is a separate document, not an appendix — it is sold and
 delivered separately, and a teacher handing out the paper must not hand out the
 answers with it.
+
+`scripts/verify-paper-pdf.mjs` inflates the rendered file and reads the page
+content back, so those rules are checked against what the PDF actually draws
+rather than against the code that meant to draw it.
 
 ### The WhatsApp bot
 
