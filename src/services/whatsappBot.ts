@@ -672,7 +672,7 @@ async function presentPaper(
         phone,
         [
             paper.title,
-            paperFacts(paper),
+            paperFacts(paper, false),
             note,
             '',
             `Price: ${formatPrice(paper.price_cents, paper.currency)}`,
@@ -898,6 +898,15 @@ async function showMyPapers(config: WhatsAppConfig, admin: any, phone: string, s
         return;
     }
 
+    // Counted separately from the ten that are listed. Meta allows ten rows in a
+    // list, so `rows.length` is the size of the page, not of the library —
+    // telling somebody who owns thirty papers that they have ten is both wrong
+    // and alarming, since the obvious reading is that twenty went missing.
+    const { count: totalOwned } = await admin
+        .from('entitlements')
+        .select('exam_id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
     const { data: rows } = await admin
         .from('entitlements')
         .select('exam_id, granted_at, exams(id, title, subject, grade_label, year, exam_type, has_marking_scheme)')
@@ -906,6 +915,7 @@ async function showMyPapers(config: WhatsAppConfig, admin: any, phone: string, s
         .limit(10);
 
     const owned = (rows ?? []).filter((r: any) => r.exams);
+    const total = totalOwned ?? owned.length;
 
     if (owned.length === 0) {
         // A live subscription means everything is theirs even with no
@@ -933,12 +943,17 @@ async function showMyPapers(config: WhatsAppConfig, admin: any, phone: string, s
     await sendList(
         config,
         phone,
-        `You have ${owned.length} paper${owned.length === 1 ? '' : 's'}. Pick one to send again.`,
+        [
+            `You have ${total} paper${total === 1 ? '' : 's'}.`,
+            total > owned.length
+                ? `Here are the ${owned.length} most recent — type a subject to find an older one, or MY ORDERS for a whole receipt.`
+                : 'Pick one to send again.',
+        ].join(' '),
         'Send again',
         owned.map((row: any) => ({
             id: `resend:${row.exams.id}`,
             title: shortTitle(row.exams),
-            description: paperFacts(row.exams),
+            description: paperFacts(row.exams, false),
         })),
         'Your papers'
     );
@@ -1484,11 +1499,29 @@ function shortTitle(paper: any): string {
     return parts || paper.title;
 }
 
-function paperFacts(paper: any): string {
+/**
+ * The one line under a paper in a list. Meta allows 72 characters.
+ *
+ * The price leads, and free says so in a word. Somebody scanning ten rows is
+ * deciding what to tap, and finding out a paper costs money only after tapping
+ * it is the small dishonesty that makes a shop feel like a trap — while a free
+ * sample that does not announce itself is a sale not made.
+ *
+ * `withPrice` is off for papers already owned and on the full card, where the
+ * price is stated on its own line. A price beside something already bought
+ * reads like a second charge.
+ */
+function paperFacts(paper: any, withPrice = true): string {
+    const price = !withPrice
+        ? null
+        : Number(paper.price_cents) === 0
+          ? 'Free'
+          : formatPrice(paper.price_cents, paper.currency || 'KES');
+
     return [
+        price,
         paper.exam_type ? examTypeName(paper.exam_type) : null,
         paper.year ? String(paper.year) : null,
-        paper.total_marks ? `${paper.total_marks} marks` : null,
         paper.has_marking_scheme ? '+ scheme' : null,
     ]
         .filter(Boolean)
