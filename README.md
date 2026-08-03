@@ -89,8 +89,10 @@ drafts, or delete the question bank. If you add a policy, check
 | `/cart` | Cart and M-Pesa checkout in one page |
 | `/plans` | All-access subscriptions. Deliberately not in the navigation — reached from the cart and the library, where a pass is the better buy |
 | `/library` | Papers you own, papers you set, your receipts |
+| `/account` | Who you are, what you teach or study, and linking your WhatsApp number |
 | `/admin` | Payments queue, catalog and pricing, team |
 | `/admin/questions`, `/admin/topics`, `/admin/templates` | Question-bank tooling |
+| `/admin/whatsapp` | Conversations waiting for a person, longest wait first |
 | `/api/health` | Public, unauthenticated: says in one line whether this deployment can reach its database |
 | `/api/whatsapp/webhook` | The WhatsApp bot. Signature-verified; rejects anything Meta did not sign |
 
@@ -112,16 +114,28 @@ the shop are:
 - `020_whatsapp.sql` — bot session state, message dedupe, and the fix that makes
   `handle_new_user` copy the phone number onto the profile (without it, an
   account created from a phone can never be found again)
+- `033_whatsapp_commerce.sql` — the in-chat cart, conversation state, the outbox
+  that survives the 24-hour window, and account link codes
+- `034_account_merge.sql` — joining a phone account to a website account without
+  losing the papers that overlap
+- `035_delivery_claims.sql` — one delivery per order, enforced by a primary key
+  rather than by a hopeful read
 - `018_lock_down_settlement_functions.sql` — closes EXECUTE on the functions that
   settle payments. Postgres grants EXECUTE to PUBLIC by default and Supabase adds
   `anon`/`authenticated` on top, which left `confirm_order_payment` callable by
   any visitor — a complete bypass of the paywall
 
-**Deploying to an existing database?** `supabase/production-setup.sql` is all of
-them concatenated in order, ready to paste into the Supabase SQL editor in one go.
-It is safe to re-run. Two things it does that you should know about: every exam
-currently marked `is_public` becomes a published free catalog paper (reprice them
-from `/admin` → Catalog), and the first account to sign up becomes the owner.
+**Deploying to an existing database?** `supabase/production-setup.sql` concatenates
+migrations **012–022** — the shop, roles, storage, subscriptions and the original
+bot — ready to paste into the Supabase SQL editor in one go. It is safe to re-run.
+Two things it does that you should know about: every exam currently marked
+`is_public` becomes a published free catalog paper (reprice them from `/admin` →
+Catalog), and the first account to sign up becomes the owner.
+
+It stops at 022. Everything after it — the resource library, progress, marking,
+assignments, CBA capture and the WhatsApp shop — is applied from
+`supabase/migrations/` in numeric order. That directory is the source of truth;
+the concatenated file is a convenience for a first deployment, not a substitute.
 
 ### Payments
 
@@ -212,16 +226,58 @@ guess ends with the wrong PDF delivered to someone who paid for it. When nothing
 matches exactly it widens the search one filter at a time (year, then term, then
 exam type) and says what it ignored. Grade and subject are never dropped.
 
-**Paying.** The bot's paid path is the subscription, not single papers. Anything
-free, already owned, or covered by a live plan is sent immediately; anything else
-offers the cheapest plan and pushes an M-Pesa prompt to the same number. Payment
-settles through the existing callback, and the paper the buyer was waiting for is
-delivered on confirmation. Every request after that is instant.
+**Browsing without typing.** `MENU` opens an interactive list: browse by level,
+search, my papers, set your own exam, talk to a person. Levels lead to subjects
+lead to papers, each a tap. Typing still works everywhere, so somebody who knows
+what they want never sees the menu — the fastest path stays the fastest path.
 
-**Identity.** The first purchase silently creates an account for that phone
-number, so the papers are waiting in `/library` if they ever visit the website.
-`can_download_paper` governs chat and web alike, so a paper locked in one is
-locked in the other.
+**Paying for one paper.** The chat has a cart. Add papers, see the running total,
+confirm the exact figure, and an M-Pesa prompt goes to the same handset. The
+confirmation step is not optional: an unexpected STK prompt is how a customer
+learns to distrust the number.
+
+A chat purchase writes an ordinary `orders` row with `channel = 'whatsapp'` plus
+`order_items` — exactly what the website's cart produces. `confirm_order_payment`
+then mints entitlements, `can_download_paper` reads them, and `/library` lists
+them, all untouched. A chat purchase and a web purchase are the same purchase,
+which is the only way the two can show the same history.
+
+Anything free, already owned, or covered by a live plan skips payment entirely
+and is sent immediately. A free paper must never reach a checkout: charging
+nothing is still a payment prompt, and a payment prompt for a free paper is a
+broken shop.
+
+**Identity, and linking.** The first purchase silently creates an account for
+that phone number, so the papers are waiting in `/library` if they ever visit the
+website. Somebody who already has a website account can join the two: `/account`
+issues a six-character code, good for fifteen minutes and one use, and sending it
+to the bot merges the accounts. Matching on a typed email was the obvious
+alternative and is an account takeover with two words of typing — knowing
+somebody's address proves nothing about owning it.
+
+The merge is `merge_whatsapp_account` (migration 034), and it exists because the
+obvious one-liner was measurably wrong. `entitlements` carries
+`UNIQUE (user_id, exam_id)`, so a blanket `UPDATE … SET user_id` aborts entirely
+if the website account already owns even one of the papers — and a failed UPDATE
+in Postgres rolls back *all* the rows, not the colliding one. The customer saw
+"Linked ✅" while every chat purchase stayed on an account they could not sign
+into.
+
+**The 24-hour rule.** WhatsApp refuses a free-form message more than 24 hours
+after the customer last wrote. Almost every purchase completes in seconds, but an
+STK prompt answered the next morning confirms outside that window — and a
+rejected send inside a payment callback is somebody who has been charged and
+received nothing. So a delivery that cannot be sent goes to `whatsapp_outbox` and
+flushes the moment that number writes again. Set `WHATSAPP_TEMPLATE_DELIVERY` to
+an approved Meta template and they are nudged immediately instead; without one,
+nothing is lost, only delayed.
+
+**When the bot cannot help.** Asking for a person flags the conversation and the
+bot goes quiet — nothing is worse than a bot talking over a real conversation.
+`/admin/whatsapp` is the other half of that promise: who is waiting, for how
+long, what is in their cart, whether WhatsApp will still accept a reply, and a
+box to answer from. Longest wait first, because a queue sorted by newest is one
+where whoever has waited all morning is never reached.
 
 **Security.** The webhook is public and hands out paid PDFs, so it is treated as
 hostile until proven otherwise:
@@ -233,11 +289,29 @@ hostile until proven otherwise:
 - Every message id is claimed in `whatsapp_messages` before it is acted on. Meta
   retries until it gets a 200, and a retry on a delivery path means a second copy
   of a paid paper.
+- Every paid delivery is claimed in `whatsapp_deliveries`, whose primary key *is*
+  the lock (migration 035). The M-Pesa callback's `status === 'paid'` guard is a
+  read followed by a write with a network round trip in between, and two
+  Safaricom retries landing inside that gap both pass it. Checking harder does
+  not make a check atomic. An incomplete claim can be taken over after ten
+  minutes, so a process that dies mid-delivery delays a paid order rather than
+  stranding it for ever.
+- `merge_whatsapp_account`, `claim_order_delivery`, `complete_order_delivery` and
+  `release_order_delivery` are `SECURITY DEFINER` and have EXECUTE revoked from
+  `PUBLIC`, `anon` and `authenticated`. Postgres grants EXECUTE to PUBLIC by
+  default, so those REVOKEs are load-bearing: an exposed `merge_whatsapp_account`
+  is "move any account's papers onto mine" in a single RPC.
+- `account_link_codes` has RLS with a select-your-own policy and no insert policy
+  at all, so nobody can mint a code pointing at somebody else's account.
+  `whatsapp_outbox` and `whatsapp_deliveries` have RLS with no policies — service
+  role only.
 - `whatsapp_sessions` and `whatsapp_messages` have RLS enabled with no policies
   at all. Only the service role touches them, and it bypasses RLS — so nobody
   holding the publishable key can read another person's conversation. This is the
   opposite of the app tables, where RLS without policies would lock users out.
-- 25 messages per number per hour.
+- 40 messages per number per hour. Raised from 25 when the bot gained a menu:
+  browsing is several taps where searching was one message, and a limit that
+  cuts somebody off mid-purchase is worse than no limit at all.
 
 ### Paper files
 

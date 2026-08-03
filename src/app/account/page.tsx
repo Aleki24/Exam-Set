@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Check, Loader2 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import LinkWhatsApp from '@/components/account/LinkWhatsApp';
 import { ACCOUNT_TYPES, type AccountType } from '@/lib/accounts';
 import { LEVELS, LEVEL_BY_SLUG, type LevelSlug } from '@/lib/catalog';
 import { subjectsForLevel } from '@/lib/resources';
@@ -278,6 +279,12 @@ function AccountForm() {
                         />
                     </section>
                 )}
+
+                {/* Not during onboarding. The welcome pass exists to be finished
+                    in four taps, and a second, unrelated thing to do is how a
+                    form that was nearly done gets abandoned. It is waiting on
+                    /account the moment they want it. */}
+                {!onboarding && <LinkWhatsApp />}
 
                 <div className="mt-12 flex flex-wrap items-center gap-3 border-t border-border pt-8">
                     <button

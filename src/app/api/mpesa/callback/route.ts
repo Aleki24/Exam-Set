@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
-import { deliverAfterPayment } from '@/services/whatsappBot';
+import { deliverOrder } from '@/services/whatsappDelivery';
 
 /**
  * POST /api/mpesa/callback — Daraja STK push result.
@@ -94,13 +94,14 @@ export async function POST(req: NextRequest) {
         // library they have not seen — from their side they paid and expect the
         // paper to arrive. Awaited rather than fired and forgotten, because the
         // function returns as soon as this handler does.
+        //
+        // `deliverOrder` reads `order_items`, which is where the truth about what
+        // was bought lives. Its predecessor knew only about subscriptions and
+        // sent a single paper remembered in the chat session — so a two-paper
+        // order delivered one paper and the buyer was short-changed by a bug
+        // that looked like a successful sale.
         if (order.channel === 'whatsapp' && order.wa_phone) {
-            const planName = order.plan_slug
-                ? (await admin.from('subscription_plans').select('name').eq('slug', order.plan_slug).maybeSingle())
-                      .data?.name
-                : undefined;
-
-            await deliverAfterPayment(order.wa_phone, planName).catch((deliveryError) =>
+            await deliverOrder(order.id).catch((deliveryError) =>
                 // A delivery failure must not un-settle a payment that succeeded.
                 console.error(
                     'WhatsApp delivery after payment failed:',

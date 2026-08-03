@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractMessages, getWhatsAppConfig, verifySignature } from '@/lib/whatsapp';
+import { extractMessages, getWhatsAppConfig, markRead, verifySignature } from '@/lib/whatsapp';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { handleMessage } from '@/services/whatsappBot';
 
@@ -94,6 +94,13 @@ export async function POST(req: NextRequest) {
             }
             continue;
         }
+
+        // Blue ticks. The helper has existed since the bot shipped and nothing
+        // ever called it, so every customer has been writing into what looks
+        // like a dead number until the reply lands. Fired before handling and
+        // never awaited for its result: a failed read receipt must not stop a
+        // paper being sent.
+        markRead(config, message.id).catch(() => {});
 
         await handleMessage(message);
     }

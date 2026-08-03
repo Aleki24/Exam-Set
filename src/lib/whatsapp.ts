@@ -134,21 +134,64 @@ export interface ListRow {
     description?: string;
 }
 
+export interface ListSection {
+    title: string;
+    rows: ListRow[];
+}
+
 /**
  * An interactive list. Used when a query matches several papers, because asking
  * beats guessing when the wrong guess ends in the wrong PDF.
  *
- * Meta's limits are hard: ten rows, 24-character titles, 72-character
- * descriptions. Exceeding any of them rejects the whole message, so they are
- * enforced here rather than trusted to the caller.
+ * Meta's limits are hard and exceeding any of them rejects the whole message —
+ * not the offending row, the message — so they are enforced here rather than
+ * trusted to the caller. Ten rows in total across all sections, 24-character
+ * titles, 72-character descriptions, 20-character button.
+ *
+ * The ten-row ceiling counts the whole list, not each section, which is the
+ * limit people trip over: two sections of eight is not sixteen rows, it is a
+ * rejected message and a customer staring at nothing.
  */
 export async function sendList(
     config: WhatsAppConfig,
     to: string,
     body: string,
     buttonText: string,
-    rows: ListRow[]
+    rows: ListRow[],
+    sectionTitle = 'Papers'
 ): Promise<void> {
+    await sendSectionedList(config, to, body, buttonText, [{ title: sectionTitle, rows }]);
+}
+
+/** The same, grouped — a level list with its grades under headings, say. */
+export async function sendSectionedList(
+    config: WhatsAppConfig,
+    to: string,
+    body: string,
+    buttonText: string,
+    sections: ListSection[]
+): Promise<void> {
+    // Budget spent in order, so the first section keeps its rows and a trailing
+    // one is what gets trimmed. Truncating the top of a list would drop exactly
+    // the options a customer is most likely to want.
+    let budget = 10;
+    const trimmed: { title: string; rows: ListRow[] }[] = [];
+
+    for (const section of sections) {
+        if (budget <= 0) break;
+        const take = section.rows.slice(0, budget);
+        if (take.length === 0) continue;
+        budget -= take.length;
+        trimmed.push({ title: truncate(section.title, 24), rows: take });
+    }
+
+    if (trimmed.length === 0) {
+        // Nothing to choose from. Sending an empty list is rejected by Meta, and
+        // a caller that got here wanted to say something — so say it plainly.
+        await sendText(config, to, body);
+        return;
+    }
+
     await send(config, {
         to,
         type: 'interactive',
@@ -157,16 +200,14 @@ export async function sendList(
             body: { text: truncate(body, 1024) },
             action: {
                 button: truncate(buttonText, 20),
-                sections: [
-                    {
-                        title: 'Papers',
-                        rows: rows.slice(0, 10).map((row) => ({
-                            id: row.id.slice(0, 200),
-                            title: truncate(row.title, 24),
-                            ...(row.description ? { description: truncate(row.description, 72) } : {}),
-                        })),
-                    },
-                ],
+                sections: trimmed.map((section) => ({
+                    title: section.title,
+                    rows: section.rows.map((row) => ({
+                        id: row.id.slice(0, 200),
+                        title: truncate(row.title, 24),
+                        ...(row.description ? { description: truncate(row.description, 72) } : {}),
+                    })),
+                })),
             },
         },
     });
@@ -198,6 +239,97 @@ export async function sendButtons(
 /** Marks the incoming message as read, so the sender sees the blue ticks. */
 export async function markRead(config: WhatsAppConfig, messageId: string): Promise<void> {
     await send(config, { status: 'read', message_id: messageId });
+}
+
+// ============================================================================
+// THE 24-HOUR WINDOW
+// ============================================================================
+
+/**
+ * WhatsApp permits a free-form message only within 24 hours of the customer's
+ * last one. Outside that, Meta accepts nothing but a pre-approved template.
+ *
+ * This is not a nicety that can be ignored and retried. A send outside the
+ * window is rejected by the API, and if that send was a paid paper firing from
+ * a payment callback, the customer has been charged and receives nothing — with
+ * the failure buried in a log nobody reads.
+ *
+ * So every proactive send asks this first, and anything it refuses goes to
+ * `whatsapp_outbox` instead of being attempted and lost.
+ */
+export const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a free-form reply is allowed right now.
+ *
+ * A margin is subtracted rather than comparing exactly. A send that begins at
+ * 23 hours 59 minutes may well arrive at Meta after the window shuts — the
+ * request takes time, the callback that triggered it took time — and a delivery
+ * that fails at the boundary is indistinguishable to the customer from one that
+ * was never sent. Five minutes of caution costs a queued message; the absence of
+ * it costs a paid paper.
+ */
+export function windowIsOpen(lastInboundAt?: string | Date | null, now = Date.now()): boolean {
+    if (!lastInboundAt) return false;
+
+    const last = lastInboundAt instanceof Date ? lastInboundAt.getTime() : Date.parse(lastInboundAt);
+    if (!Number.isFinite(last)) return false;
+
+    const MARGIN_MS = 5 * 60 * 1000;
+    return now - last < SERVICE_WINDOW_MS - MARGIN_MS;
+}
+
+/**
+ * Sends a pre-approved template.
+ *
+ * The only thing Meta accepts outside the service window. Templates are created
+ * and approved by the business in Meta Business Manager — they cannot be
+ * declared from code — so this takes a name and positional body parameters and
+ * fails loudly if the name has not been configured.
+ *
+ * Until templates exist, `templateName` is undefined everywhere and the outbox
+ * carries the message instead. That is deliberate: a queued delivery that
+ * arrives when the customer next writes is honest, while a silently dropped one
+ * is a customer who paid for nothing.
+ */
+export async function sendTemplate(
+    config: WhatsAppConfig,
+    to: string,
+    templateName: string,
+    bodyParams: string[] = [],
+    languageCode = 'en'
+): Promise<void> {
+    await send(config, {
+        to,
+        type: 'template',
+        template: {
+            name: templateName,
+            language: { code: languageCode },
+            ...(bodyParams.length > 0
+                ? {
+                      components: [
+                          {
+                              type: 'body',
+                              parameters: bodyParams.map((text) => ({
+                                  type: 'text',
+                                  text: truncate(text, 1024),
+                              })),
+                          },
+                      ],
+                  }
+                : {}),
+        },
+    });
+}
+
+/**
+ * The template that tells somebody their papers are ready, if one is configured.
+ *
+ * Returns null when it is not, which is the state on day one and the reason the
+ * outbox exists.
+ */
+export function deliveryTemplateName(): string | null {
+    return process.env.WHATSAPP_TEMPLATE_DELIVERY || null;
 }
 
 // ============================================================================

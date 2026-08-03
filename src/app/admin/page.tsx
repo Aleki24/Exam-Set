@@ -13,6 +13,7 @@ import {
     FileUp,
     Loader2,
     Lock,
+    MessageCircle,
     Plus,
     Receipt,
     Tags,
@@ -69,6 +70,7 @@ export default function AdminPage() {
     const [papers, setPapers] = useState<PaperListing[]>([]);
     const [team, setTeam] = useState<TeamMember[]>([]);
     const [diagnostics, setDiagnostics] = useState<DiagnosticCheck[] | null>(null);
+    const [waitingForHuman, setWaitingForHuman] = useState(0);
     const [loading, setLoading] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -109,13 +111,32 @@ export default function AdminPage() {
         setTeam(data.team || []);
     }, []);
 
+    /**
+     * Only the count. A failure here is silent on purpose — the bot queue is not
+     * why somebody opened this page, and a toast about it would sit on top of
+     * the payments they came to confirm.
+     */
+    const loadHandoffs = useCallback(async () => {
+        try {
+            const res = await fetch('/api/admin/whatsapp');
+            const data = await res.json();
+            if (!data.error) setWaitingForHuman((data.conversations || []).length);
+        } catch {
+            /* not worth interrupting the console for */
+        }
+    }, []);
+
     useEffect(() => {
         if (!ready || !isAdmin) return;
         setLoading(true);
-        Promise.all([loadPayments(), loadCatalog(), loadTeam(), loadDiagnostics()]).finally(() =>
-            setLoading(false)
-        );
-    }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam, loadDiagnostics]);
+        Promise.all([
+            loadPayments(),
+            loadCatalog(),
+            loadTeam(),
+            loadDiagnostics(),
+            loadHandoffs(),
+        ]).finally(() => setLoading(false));
+    }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam, loadDiagnostics, loadHandoffs]);
 
     // ------------------------------------------------------------------ actions
 
@@ -316,6 +337,19 @@ export default function AdminPage() {
                     <Link href="/admin/templates" className="chip">
                         <Receipt className="h-3.5 w-3.5" />
                         Paper templates
+                    </Link>
+                    {/* The count is the whole reason this link is on the console
+                        rather than buried in a menu: a queue nobody knows has
+                        anything in it is a queue nobody opens, and the people
+                        in it are being ignored by a bot that promised them a
+                        person. */}
+                    <Link
+                        href="/admin/whatsapp"
+                        className={waitingForHuman > 0 ? 'chip chip-active' : 'chip'}
+                    >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        WhatsApp
+                        {waitingForHuman > 0 && ` · ${waitingForHuman} waiting`}
                     </Link>
                 </div>
 
