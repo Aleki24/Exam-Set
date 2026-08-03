@@ -70,6 +70,23 @@ paper for sale is an admin action.
 Every rule above is enforced by Postgres row level security, not just by hidden
 buttons — see `supabase/migrations/013_roles_and_sellers.sql`.
 
+**Where the session lives.** One place on each side, deliberately:
+
+- In the browser, `AuthProvider` in `lib/roles.tsx` is mounted once in the root
+  layout and holds the answer for the whole tab. `useRole()` reads it and throws
+  outside the provider rather than falling back to a lookup of its own.
+- On the server, `utils/auth/guards.ts` resolves the caller once per request,
+  memoised against that request's Supabase client so the memo cannot outlive the
+  request that owns it. `requireUser` asks the auth server and stops there;
+  `requireAdmin` and `requireOwner` also read the role, and only they return it.
+
+This is the same rule that `utils/supabase/client` and `middleware.ts` document
+at length: every serious session bug this app has had came from several things
+each independently deciding who is signed in — several browser clients rotating
+the refresh token out from under each other until the server treated the replay
+as theft, three `getUser()` calls racing in one middleware pass. One holder, one
+subscription, one answer.
+
 **RLS policies are OR'd together**, so a single permissive policy anywhere
 defeats every strict one on the same table. Migration `016_tighten_rls.sql`
 removes the `FOR ALL USING (true)` policies the early migrations shipped; without

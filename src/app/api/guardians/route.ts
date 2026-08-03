@@ -20,7 +20,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET() {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     // RLS returns both directions in one query — the policy admits a row when
@@ -41,7 +41,7 @@ export async function GET() {
     // Joining `profiles` in the query above would return whatever the profiles
     // policy allows rather than only these two people.
     const others = [
-        ...new Set(rows.map((r) => (r.guardian_id === actor.id ? r.learner_id : r.guardian_id))),
+        ...new Set(rows.map((r) => (r.guardian_id === user.id ? r.learner_id : r.guardian_id))),
     ];
 
     const emails = new Map<string, string>();
@@ -56,18 +56,18 @@ export async function GET() {
     return NextResponse.json({
         /** Learners this account is following, or has asked to follow. */
         following: rows
-            .filter((r) => r.guardian_id === actor.id)
+            .filter((r) => r.guardian_id === user.id)
             .map((r) => shape(r, emails.get(r.learner_id))),
         /** Guardians who have asked to follow this account. */
         followers: rows
-            .filter((r) => r.learner_id === actor.id)
+            .filter((r) => r.learner_id === user.id)
             .map((r) => shape(r, emails.get(r.guardian_id))),
     });
 }
 
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase
         .from('guardian_links')
         .upsert(
-            { guardian_id: actor.id, learner_id: learnerId, status: 'pending', invited_at: new Date().toISOString() },
+            { guardian_id: user.id, learner_id: learnerId, status: 'pending', invited_at: new Date().toISOString() },
             { onConflict: 'guardian_id,learner_id' }
         );
 

@@ -51,7 +51,7 @@ interface PackRefusal {
 
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -113,11 +113,11 @@ export async function POST(req: NextRequest) {
 
         // The same gate as the single-file route, asked once per resource.
         // Never fail open: a gate that cannot be evaluated is a closed gate.
-        let entitled = paper.price_cents === 0 || paper.created_by === actor.id;
+        let entitled = paper.price_cents === 0 || paper.created_by === user.id;
         if (!entitled) {
             const { data: allowed, error: gateError } = await supabase.rpc('can_download_paper', {
                 p_exam_id: id,
-                p_user_id: actor.id,
+                p_user_id: user.id,
             });
             if (gateError) {
                 console.error('can_download_paper failed in pack:', gateError.message);

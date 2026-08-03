@@ -34,7 +34,7 @@ const MAX_SIZE = 20;
 
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
             question_ids: chosen.map((q: any) => q.id),
             question_count: chosen.length,
             total_marks: totalMarks,
-            created_by: actor.id,
+            created_by: user.id,
         })
         .select('id, title, question_count, total_marks')
         .single();

@@ -57,7 +57,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     const { data: group, error } = await supabase
         .from('class_groups')
         .insert({
-            created_by: actor.id,
+            created_by: user.id,
             name,
             grade_label: typeof body.grade_label === 'string' ? body.grade_label.slice(0, 40) : null,
             learning_area: typeof body.learning_area === 'string' ? body.learning_area.slice(0, 120) : null,

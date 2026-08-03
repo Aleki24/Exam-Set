@@ -20,13 +20,13 @@ import { LEVEL_BY_SLUG } from '@/lib/catalog';
  */
 export async function GET() {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     const { data, error } = await supabase
         .from('profiles')
         .select('account_type, level_slug, grade_label, subject_interests, school_name, onboarded_at')
-        .eq('id', actor.id)
+        .eq('id', user.id)
         .maybeSingle();
 
     if (error) {
@@ -39,7 +39,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -101,7 +101,7 @@ export async function PATCH(req: NextRequest) {
     const { data, error } = await supabase
         .from('profiles')
         .update(update)
-        .eq('id', actor.id)
+        .eq('id', user.id)
         .select('account_type, level_slug, grade_label, subject_interests, school_name, onboarded_at')
         .maybeSingle();
 

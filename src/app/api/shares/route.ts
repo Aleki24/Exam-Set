@@ -45,7 +45,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         .from('class_shares')
         .insert({
             token,
-            created_by: actor.id,
+            created_by: user.id,
             title,
             note: typeof body.note === 'string' ? body.note.slice(0, 2000) : null,
             exam_ids: examIds,

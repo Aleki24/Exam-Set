@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
 
     // Guarded: this route had no authentication at all.
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     try {
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
             // fail the row level security check — and a row nobody owns is one
             // the author cannot read back, cannot download and cannot delete,
             // with its uploaded PDF stranded in the bucket.
-            created_by: actor.id,
+            created_by: user.id,
         };
 
         const { data, error } = await supabase
