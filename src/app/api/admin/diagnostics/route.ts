@@ -18,7 +18,11 @@ import { createAdminClient } from '@/utils/supabase/admin';
 export async function GET() {
     try {
         const supabase = await createClient();
-        const { failure } = await requireAdmin(supabase);
+        // `fresh` because what follows holds a service-role client, which is not
+        // subject to row level security. Everywhere else the database re-checks
+        // the role on every statement and a stale token claim cannot get past
+        // it; here this guard is the only wall.
+        const { failure } = await requireAdmin(supabase, { fresh: true });
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         // Accounts that can never sign in. On this project the built-in mailer
