@@ -90,7 +90,7 @@ export interface Actor extends SignedInUser {
     roleSource: 'token' | 'database';
 }
 
-/** The claim the access token hook writes. See migration 033. */
+/** The claim the access token hook writes. See migration 037. */
 const ROLE_CLAIM = 'user_role';
 
 function isRole(value: unknown): value is Role {

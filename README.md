@@ -108,7 +108,7 @@ Two things follow from that, and both are handled rather than hoped about:
 
 ### Enabling the role claim
 
-`033_role_in_the_access_token.sql` adds a custom access token hook that writes
+`037_role_in_the_access_token.sql` adds a custom access token hook that writes
 `profiles.role` into the JWT as `user_role`, so `requireAdmin` can read it from a
 token it has already verified instead of querying for it. **Creating the function
 is not enough** — the hook has to be switched on:

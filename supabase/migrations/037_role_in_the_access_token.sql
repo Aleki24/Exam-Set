@@ -1,6 +1,6 @@
 -- ============================================================================
 -- THE ROLE, IN THE ACCESS TOKEN
--- Migration: 033_role_in_the_access_token.sql
+-- Migration: 037_role_in_the_access_token.sql
 --
 -- Every guarded API route asked the database who the caller was, purely to read
 -- one column. `requireAdmin` runs on a fifth of the routes and each call was a
