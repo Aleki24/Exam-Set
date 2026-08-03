@@ -3,6 +3,7 @@ import Script from 'next/script';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
+import { AuthProvider } from '@/lib/roles';
 
 export const metadata: Metadata = {
     title: 'Skulbase Exams — CBE exam papers & marking schemes',
@@ -42,7 +43,13 @@ export default function RootLayout({
                     enableSystem
                     disableTransitionOnChange
                 >
-                    {children}
+                    {/*
+                     * Above everything, because the navigation asks who is
+                     * signed in on every page. One lookup and one auth
+                     * subscription for the tab, rather than one per component
+                     * that wants to know.
+                     */}
+                    <AuthProvider>{children}</AuthProvider>
                 </ThemeProvider>
                 <Toaster />
                 <Script

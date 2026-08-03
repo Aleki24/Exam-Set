@@ -13,7 +13,7 @@ import { putObject, signedDownloadUrl } from '@/utils/storage';
  */
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     try {
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         // by choosing the same name, and stripped of path characters so it
         // cannot escape its prefix.
         const safeName = file.name.replace(/[^\w.-]/g, '-').slice(-80);
-        const fileName = `uploads/${actor.id}/${Date.now()}-${safeName}`;
+        const fileName = `uploads/${user.id}/${Date.now()}-${safeName}`;
         const contentType = file.type;
 
         const result = await putObject(fileName, buffer, contentType);

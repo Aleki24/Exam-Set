@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Check, Loader2 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { ACCOUNT_TYPES, type AccountType } from '@/lib/accounts';
+import { useAuth } from '@/lib/roles';
 import { LEVELS, LEVEL_BY_SLUG, type LevelSlug } from '@/lib/catalog';
 import { subjectsForLevel } from '@/lib/resources';
 
@@ -49,6 +50,7 @@ function AccountFallback() {
 
 function AccountForm() {
     const router = useRouter();
+    const { refresh } = useAuth();
     const params = useSearchParams();
     const onboarding = params.get('welcome') === '1';
 
@@ -129,6 +131,11 @@ function AccountForm() {
             if (!res.ok) throw new Error(data.error || 'Could not save');
 
             toast.success(onboarding ? 'All set' : 'Saved');
+            // `router.refresh()` re-renders the server components. It says
+            // nothing to the client-side session, which is what the navigation
+            // reads — so without this the app goes on offering to onboard
+            // somebody who has just finished onboarding.
+            refresh();
             router.push(onboarding ? '/home' : '/account');
             router.refresh();
         } catch (err) {

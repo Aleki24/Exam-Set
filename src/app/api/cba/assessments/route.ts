@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    const { actor, failure } = await requireUser(supabase);
+    const { user, failure } = await requireUser(supabase);
     if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
     let body: Record<string, unknown>;
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
         .from('cba_assessments')
         .insert({
             class_id: classId,
-            created_by: actor.id,
+            created_by: user.id,
             title,
             outcomes,
             due_on: dueOn,
