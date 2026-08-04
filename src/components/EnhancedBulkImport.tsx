@@ -306,7 +306,15 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
             const payload = await res.json();
 
             if (!res.ok) {
-                setAiError(payload.error || 'Could not read this document');
+                // The suggestion tells you what to do instead; the detail says
+                // what actually broke. Both were being dropped on the floor,
+                // which is how the same eight words stood in for two unrelated
+                // faults across three attempts at fixing them.
+                setAiError(
+                    [payload.error || 'Could not read this document', payload.suggestion, payload.detail]
+                        .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+                        .join('\n')
+                );
                 return;
             }
 
@@ -585,7 +593,7 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
                                     {aiError && (
                                         <div className="flex items-start gap-2 p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg">
                                             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                                            {aiError}
+                                            <span className="whitespace-pre-line break-words">{aiError}</span>
                                         </div>
                                     )}
 
