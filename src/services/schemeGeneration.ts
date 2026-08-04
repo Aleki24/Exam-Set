@@ -34,9 +34,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { cleanText } from './paperLayout';
-
-const API_URL = 'https://api.perplexity.ai/chat/completions';
-const MODEL = 'sonar';
+import { aiAvailable, aiJson } from './claude';
 
 const CALL_TIMEOUT_MS = 20_000;
 
@@ -46,12 +44,8 @@ export const GENERATION_BUDGET_MS = 60_000;
 
 const CONCURRENCY = 4;
 
-function apiKey(): string {
-    return process.env.PERPLEXITY_API_KEY || process.env.NEXT_PUBLIC_PERPLEXITY_API_KEY || '';
-}
-
 export function schemeGenerationAvailable(): boolean {
-    return apiKey().length > 0;
+    return aiAvailable();
 }
 
 const SYSTEM_PROMPT = `You are an experienced Kenyan examiner writing a marking scheme for a question that does not have one yet.
@@ -66,8 +60,21 @@ Rules:
 - If the question refers to something you cannot see — a diagram, a table, an image, "the passage above" — and the marking scheme depends on that content, you cannot write it responsibly. Set "can_generate" to false rather than inventing what the figure might have shown.
 - If the question is genuinely ambiguous or you are not confident of the syllabus answer, set "can_generate" to false. Saying nothing is better than being wrong on a scheme that will mark real learners.
 
-Reply with JSON only, no prose and no code fence:
-{"marking_scheme": "<the scheme, or empty if can_generate is false>", "confidence": <0 to 1>, "can_generate": <true|false>, "reason": "<one short sentence, only if can_generate is false>"}`;
+Set "can_generate" to false rather than writing a scheme you are unsure of, and say why in one short sentence.`;
+
+/** The proposal, constrained at the API. Exported so the verify script can
+ * check it still names the fields the code below reads. */
+export const SCHEME_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['marking_scheme', 'confidence', 'can_generate', 'reason'],
+    properties: {
+        marking_scheme: { type: 'string', description: 'The scheme. Empty when can_generate is false.' },
+        confidence: { type: 'number', description: 'Between 0 and 1.' },
+        can_generate: { type: 'boolean' },
+        reason: { type: 'string', description: 'One short sentence, only when can_generate is false. Empty otherwise.' },
+    },
+} as const;
 
 export interface SchemeCandidateQuestion {
     id: string;
@@ -112,20 +119,6 @@ interface AiVerdict {
     reason?: unknown;
 }
 
-export function parseVerdict(raw: string): AiVerdict | null {
-    try {
-        let cleaned = raw.trim();
-        const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
-        if (fence) cleaned = fence[1].trim();
-        const start = cleaned.indexOf('{');
-        const end = cleaned.lastIndexOf('}');
-        if (start === -1 || end === -1 || end < start) return null;
-        return JSON.parse(cleaned.slice(start, end + 1));
-    } catch {
-        return null;
-    }
-}
-
 /**
  * A confidence value the model claimed, read defensively.
  *
@@ -149,8 +142,7 @@ export function clampConfidence(value: unknown): number {
  * or the model itself declining.
  */
 export async function generateScheme(question: SchemeCandidateQuestion): Promise<SchemeProposal> {
-    const key = apiKey();
-    if (!key) return { ...DECLINED, reason: 'AI scheme generation is not configured on this deployment.' };
+    if (!aiAvailable()) return { ...DECLINED, reason: 'AI scheme generation is not configured on this deployment.' };
 
     const text = cleanText(question.text ?? '');
     if (!text) return { ...DECLINED, reason: 'This question has no text to write a scheme for.' };
@@ -169,41 +161,19 @@ export async function generateScheme(question: SchemeCandidateQuestion): Promise
         .filter(Boolean)
         .join('\n');
 
-    let raw: string;
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${key}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: MODEL,
-                messages: [
-                    { role: 'system', content: SYSTEM_PROMPT },
-                    { role: 'user', content: prompt },
-                ],
-                // The same scheme every time a question is regenerated, rather
-                // than a slightly different one each admin sees.
-                temperature: 0,
-            }),
-            signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-        });
+    const result = await aiJson<AiVerdict>({
+        system: SYSTEM_PROMPT,
+        content: prompt,
+        schema: SCHEME_SCHEMA as unknown as Record<string, unknown>,
+        maxTokens: 2_000,
+        timeoutMs: CALL_TIMEOUT_MS,
+    });
 
-        if (!response.ok) {
-            console.error('Scheme generation HTTP error:', response.status);
-            return { ...DECLINED, reason: 'The AI service could not be reached.' };
-        }
+    // The admin sees why, because the fix is theirs to make: a rejected key and
+    // a rate limit need different actions, and this screen is where they look.
+    if (!result.ok) return { ...DECLINED, reason: result.failure.message };
 
-        const data = await response.json();
-        raw = data?.choices?.[0]?.message?.content ?? '';
-    } catch (err) {
-        console.error('Scheme generation call failed:', err instanceof Error ? err.message : err);
-        return { ...DECLINED, reason: 'The AI service could not be reached.' };
-    }
-
-    const verdict = parseVerdict(raw);
-    if (!verdict) return { ...DECLINED, reason: 'The AI reply could not be read.' };
+    const verdict = result.value;
 
     if (verdict.can_generate === false) {
         return {

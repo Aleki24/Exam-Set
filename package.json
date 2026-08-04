@@ -9,7 +9,7 @@
     "lint": "next lint",
     "verify:builder": "node scripts/verify-paper-builder.mjs",
     "verify:storage": "node scripts/verify-storage.mjs",
-    "verify": "npm run verify:builder && npm run verify:storage && npm run verify:query && npm run verify:whatsapp && npm run verify:extract && npm run verify:documenttext && npm run verify:pdf && npm run verify:delete && npm run verify:auth && npm run verify:progress && npm run verify:discovery && npm run verify:calendar && npm run verify:marking && npm run verify:schemes && npm run verify:cba && npm run verify:curriculum",
+    "verify": "npm run verify:builder && npm run verify:storage && npm run verify:query && npm run verify:whatsapp && npm run verify:extract && npm run verify:claude && npm run verify:documenttext && npm run verify:pdf && npm run verify:delete && npm run verify:auth && npm run verify:progress && npm run verify:discovery && npm run verify:calendar && npm run verify:marking && npm run verify:schemes && npm run verify:cba && npm run verify:curriculum",
     "verify:query": "node scripts/verify-paper-query.mjs",
     "verify:whatsapp": "node scripts/verify-whatsapp.mjs",
     "verify:pdf": "node scripts/verify-paper-pdf.mjs",
@@ -24,16 +24,17 @@
     "verify:extract": "node scripts/verify-question-extraction.mjs",
     "verify:schemes": "node scripts/verify-scheme-generation.mjs",
     "verify:documenttext": "node scripts/verify-document-text.mjs",
-    "verify:tracing": "node scripts/verify-deployment-tracing.mjs"
+    "verify:tracing": "node scripts/verify-deployment-tracing.mjs",
+    "verify:claude": "node scripts/verify-claude.mjs"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@aws-sdk/client-s3": "^3.958.0",
     "@aws-sdk/s3-request-presigner": "^3.958.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@google/genai": "^1.34.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@sparticuz/chromium": "^143.0.0",
     "@supabase/ssr": "^0.8.0",
