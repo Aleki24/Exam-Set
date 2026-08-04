@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { requireUser } from '@/utils/auth/guards';
 import { sanitiseExtractedBatch } from '@/services/questionExtraction';
+import { extractPdfText, extractWordText } from '@/services/documentText';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -65,11 +66,10 @@ function apiKey(): string {
     return process.env.PERPLEXITY_API_KEY || process.env.NEXT_PUBLIC_PERPLEXITY_API_KEY || '';
 }
 
+/** See services/documentText for why the actual reading is not done here. */
 async function parsePDF(buffer: Buffer): Promise<string> {
     try {
-        const pdfParse = require('pdf-parse');
-        const data = await pdfParse(buffer);
-        return data.text || '';
+        return await extractPdfText(buffer);
     } catch (error) {
         console.error('PDF parse error:', error);
         throw new Error('Failed to parse PDF');
@@ -78,9 +78,7 @@ async function parsePDF(buffer: Buffer): Promise<string> {
 
 async function parseWord(buffer: Buffer): Promise<string> {
     try {
-        const mammoth = await import('mammoth');
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
+        return await extractWordText(buffer);
     } catch (error) {
         console.error('Word parse error:', error);
         throw new Error('Failed to parse Word document');
