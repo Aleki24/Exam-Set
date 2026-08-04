@@ -682,14 +682,20 @@ export default function SetterPage() {
             <EnhancedBulkImport
                 isOpen={showBulkImport}
                 onClose={() => setShowBulkImport(false)}
-                onImport={async (questions) => {
+                onImport={async (questions, isAiGenerated) => {
                     const created = await bulkCreateQuestions(
                         questions as unknown as Question[],
                         {
                             grade_id: filters.gradeId || undefined,
                             subject_id: filters.subjectId || undefined,
                         },
-                        false
+                        // Every row reaching here has already been reviewed and
+                        // selected in the preview table — that is true whether
+                        // it was typed, pasted or read off a document by AI.
+                        // What differs is only the flag this stamps on the row,
+                        // so the bank keeps an honest record of where each
+                        // question actually came from.
+                        isAiGenerated
                     );
                     if (created.length === 0) {
                         toast.error('Nothing was imported');

@@ -1,7 +1,21 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { X, Upload, FileText, Trash2, CheckSquare, Square, Loader2, AlertTriangle, Sparkles, Download } from 'lucide-react';
+import {
+    X,
+    Upload,
+    FileText,
+    Trash2,
+    CheckSquare,
+    Square,
+    Loader2,
+    AlertTriangle,
+    Sparkles,
+    Download,
+    FileUp,
+    ClipboardList,
+    NotebookPen,
+} from 'lucide-react';
 
 // ============================================================================
 // TYPES
@@ -15,12 +29,23 @@ interface ParsedQuestion {
     topic: string;
     difficulty: 'Easy' | 'Medium' | 'Difficult';
     selected: boolean;
+    /** Only ever set when the source document actually stated one — never invented. */
+    markingScheme?: string;
 }
 
 interface EnhancedBulkImportProps {
     isOpen: boolean;
     onClose: () => void;
-    onImport: (questions: Omit<ParsedQuestion, 'id' | 'selected'>[]) => Promise<void>;
+    /**
+     * `isAiGenerated` says where the batch came from — typed/pasted by a human,
+     * or read off a document by AI — so the caller can stamp `questions.is_ai_generated`
+     * correctly. Every row reaching here has already been through the preview
+     * table: selected, and editable, whichever door it came in by.
+     */
+    onImport: (
+        questions: Omit<ParsedQuestion, 'id' | 'selected'>[],
+        isAiGenerated: boolean
+    ) => Promise<void>;
     defaultTopic?: string;
 }
 
@@ -210,6 +235,7 @@ function parseNumberedList(lines: string[]): ParsedQuestion[] {
 // ============================================================================
 
 export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultTopic = '' }: EnhancedBulkImportProps) {
+    const [mode, setMode] = useState<'paste' | 'ai'>('paste');
     const [rawText, setRawText] = useState('');
     const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
     const [step, setStep] = useState<'input' | 'preview'>('input');
@@ -217,27 +243,110 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
     const [importResult, setImportResult] = useState<{ success: number; failed: number } | null>(null);
     const [batchTopic, setBatchTopic] = useState(defaultTopic);
 
+    // Whether the batch on screen was read off a document by AI rather than
+    // typed or pasted by the person using this. Threaded through to `onImport`
+    // so the row is stamped `is_ai_generated` correctly, and shown as a banner
+    // in the preview table as a standing reminder that this batch specifically
+    // needs reading, not just skimming past the checkboxes.
+    const [isAiOrigin, setIsAiOrigin] = useState(false);
+
+    // The AI upload path
+    const [aiFile, setAiFile] = useState<File | null>(null);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+
     // Reset on open
     useEffect(() => {
         if (isOpen) {
+            setMode('paste');
             setRawText('');
             setQuestions([]);
             setStep('input');
             setImportResult(null);
             setBatchTopic(defaultTopic);
+            setIsAiOrigin(false);
+            setAiFile(null);
+            setAiLoading(false);
+            setAiError(null);
+            setExpandedIds(new Set());
         }
     }, [isOpen, defaultTopic]);
 
-    // Parse questions from raw text
+    // Parse questions from raw text — typed or pasted, so never AI-origin.
     const handleParse = useCallback(() => {
         const parsed = parseQuestions(rawText);
         // Apply default topic if set
         if (batchTopic) {
             parsed.forEach(q => { if (!q.topic) q.topic = batchTopic; });
         }
+        setIsAiOrigin(false);
         setQuestions(parsed);
         setStep('preview');
     }, [rawText, batchTopic]);
+
+    /**
+     * Reads a paper (PDF, Word document or image) with AI and lands the result
+     * in the same preview table pasted text does. That reuse is deliberate: the
+     * table is already the review step, and AI output goes through nothing
+     * else on its way into the bank. A wrong row here costs a click to edit or
+     * discard; a wrong row that skipped review costs a wrong answer in front of
+     * a class.
+     */
+    const handleAiExtract = useCallback(async () => {
+        if (!aiFile) return;
+
+        setAiLoading(true);
+        setAiError(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', aiFile);
+
+            const res = await fetch('/api/questions/extract', { method: 'POST', body: formData });
+            const payload = await res.json();
+
+            if (!res.ok) {
+                setAiError(payload.error || 'Could not read this document');
+                return;
+            }
+
+            const extracted: Array<{
+                text: string;
+                marks: number;
+                type: string;
+                difficulty: 'Easy' | 'Medium' | 'Difficult';
+                topic?: string;
+                markingScheme?: string;
+            }> = Array.isArray(payload.questions) ? payload.questions : [];
+
+            if (extracted.length === 0) {
+                setAiError('No questions were found in this document. Try pasting the text instead.');
+                return;
+            }
+
+            const parsed: ParsedQuestion[] = extracted.map((q, i) => ({
+                id: `ai-${Date.now()}-${i}`,
+                text: q.text,
+                marks: q.marks,
+                type: q.type,
+                difficulty: q.difficulty,
+                topic: q.topic || batchTopic || '',
+                markingScheme: q.markingScheme,
+                selected: true,
+            }));
+
+            setIsAiOrigin(true);
+            setQuestions(parsed);
+            // Open the scheme row for anything the document actually gave one
+            // for, so it is seen rather than found by chance.
+            setExpandedIds(new Set(parsed.filter(q => q.markingScheme).map(q => q.id)));
+            setStep('preview');
+        } catch {
+            setAiError('Could not reach the server. Please try again.');
+        } finally {
+            setAiLoading(false);
+        }
+    }, [aiFile, batchTopic]);
 
     // Selection helpers
     const selectedCount = useMemo(() => questions.filter(q => q.selected).length, [questions]);
@@ -266,6 +375,17 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
         setQuestions(qs => qs.map(q => q.id === id ? { ...q, [field]: value } : q));
     };
 
+    // Which rows have their marking scheme expanded
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const toggleExpanded = (id: string) => {
+        setExpandedIds(current => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
     // File upload handler
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -286,7 +406,10 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
 
         setIsImporting(true);
         try {
-            await onImport(toImport.map(({ id, selected, ...rest }) => rest));
+            await onImport(
+                toImport.map(({ id, selected, ...rest }) => rest),
+                isAiOrigin
+            );
             setImportResult({ success: toImport.length, failed: 0 });
         } catch {
             setImportResult({ success: 0, failed: toImport.length });
@@ -308,7 +431,9 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
                         </h2>
                         <p className="text-xs text-muted-foreground mt-1">
                             {step === 'input'
-                                ? 'Paste questions or upload a file. Supports numbered lists, CSV, and plain text.'
+                                ? mode === 'paste'
+                                    ? 'Paste questions or upload a file. Supports numbered lists, CSV, and plain text.'
+                                    : 'Upload a paper and AI reads the questions off it — review every one before saving.'
                                 : `${questions.length} questions parsed — ${selectedCount} selected for import`
                             }
                         </p>
@@ -347,6 +472,30 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
                     ) : step === 'input' ? (
                         /* Input Step */
                         <div className="space-y-4">
+                            {/* Mode toggle */}
+                            <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
+                                <button
+                                    type="button"
+                                    onClick={() => setMode('paste')}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                                        mode === 'paste' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                                    }`}
+                                >
+                                    <ClipboardList className="w-3.5 h-3.5" />
+                                    Paste or type
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setMode('ai')}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                                        mode === 'ai' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                                    }`}
+                                >
+                                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                                    Upload a paper (AI)
+                                </button>
+                            </div>
+
                             {/* Default topic for batch */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -361,46 +510,105 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
                                 />
                             </div>
 
-                            {/* Textarea */}
-                            <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                        Paste Questions
-                                    </label>
-                                    <label className="text-xs text-primary font-bold cursor-pointer hover:underline flex items-center gap-1">
-                                        <Download className="w-3 h-3" />
-                                        Upload File
-                                        <input type="file" accept=".csv,.txt,.md" onChange={handleFileUpload} className="hidden" />
-                                    </label>
-                                </div>
-                                <textarea
-                                    value={rawText}
-                                    onChange={e => setRawText(e.target.value)}
-                                    rows={14}
-                                    placeholder={`Paste questions in any format:\n\n1. Define photosynthesis. (2 marks)\n2. Explain the role of chlorophyll. (3 marks)\n3. State two factors affecting the rate of photosynthesis. (2 marks)\n\nOr CSV format:\n"Question text", marks, topic\n"Define osmosis", 2, "Cell Biology"`}
-                                    className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg font-mono focus:ring-2 focus:ring-primary/20 outline-none resize-none bg-gray-50"
-                                />
-                            </div>
+                            {mode === 'paste' ? (
+                                <>
+                                    {/* Textarea */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                                Paste Questions
+                                            </label>
+                                            <label className="text-xs text-primary font-bold cursor-pointer hover:underline flex items-center gap-1">
+                                                <Download className="w-3 h-3" />
+                                                Upload File
+                                                <input type="file" accept=".csv,.txt,.md" onChange={handleFileUpload} className="hidden" />
+                                            </label>
+                                        </div>
+                                        <textarea
+                                            value={rawText}
+                                            onChange={e => setRawText(e.target.value)}
+                                            rows={14}
+                                            placeholder={`Paste questions in any format:\n\n1. Define photosynthesis. (2 marks)\n2. Explain the role of chlorophyll. (3 marks)\n3. State two factors affecting the rate of photosynthesis. (2 marks)\n\nOr CSV format:\n"Question text", marks, topic\n"Define osmosis", 2, "Cell Biology"`}
+                                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg font-mono focus:ring-2 focus:ring-primary/20 outline-none resize-none bg-gray-50"
+                                        />
+                                    </div>
 
-                            {/* Format hints */}
-                            <div className="grid grid-cols-3 gap-3 text-[10px] text-gray-500">
-                                <div className="bg-gray-50 p-2 rounded-lg border">
-                                    <span className="font-bold text-gray-700 block mb-1">Numbered Lists</span>
-                                    1. Question text (2mks)
-                                </div>
-                                <div className="bg-gray-50 p-2 rounded-lg border">
-                                    <span className="font-bold text-gray-700 block mb-1">CSV</span>
-                                    &quot;Text&quot;, marks, topic
-                                </div>
-                                <div className="bg-gray-50 p-2 rounded-lg border">
-                                    <span className="font-bold text-gray-700 block mb-1">Auto-Extract Marks</span>
-                                    (2 marks), [3pts], (2mks)
-                                </div>
-                            </div>
+                                    {/* Format hints */}
+                                    <div className="grid grid-cols-3 gap-3 text-[10px] text-gray-500">
+                                        <div className="bg-gray-50 p-2 rounded-lg border">
+                                            <span className="font-bold text-gray-700 block mb-1">Numbered Lists</span>
+                                            1. Question text (2mks)
+                                        </div>
+                                        <div className="bg-gray-50 p-2 rounded-lg border">
+                                            <span className="font-bold text-gray-700 block mb-1">CSV</span>
+                                            &quot;Text&quot;, marks, topic
+                                        </div>
+                                        <div className="bg-gray-50 p-2 rounded-lg border">
+                                            <span className="font-bold text-gray-700 block mb-1">Auto-Extract Marks</span>
+                                            (2 marks), [3pts], (2mks)
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* AI upload */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                                            Upload a paper
+                                        </label>
+                                        <label
+                                            className={`flex flex-col items-center justify-center gap-2 w-full py-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                                                aiFile ? 'border-primary/40 bg-primary/5' : 'border-gray-300 hover:border-primary/40 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <FileUp className={`w-7 h-7 ${aiFile ? 'text-primary' : 'text-gray-400'}`} />
+                                            <span className="text-sm font-semibold text-gray-700">
+                                                {aiFile ? aiFile.name : 'Click to choose a PDF, Word doc, or photo of a paper'}
+                                            </span>
+                                            <span className="text-xs text-gray-400">
+                                                {aiFile
+                                                    ? `${(aiFile.size / 1024).toFixed(0)} KB — click to choose a different file`
+                                                    : 'PDF, DOC, DOCX, PNG or JPG'}
+                                            </span>
+                                            <input
+                                                type="file"
+                                                accept=".pdf,.doc,.docx,image/png,image/jpeg,image/webp"
+                                                onChange={e => {
+                                                    setAiError(null);
+                                                    setAiFile(e.target.files?.[0] ?? null);
+                                                }}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    </div>
+
+                                    {aiError && (
+                                        <div className="flex items-start gap-2 p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg">
+                                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                            {aiError}
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-start gap-2 p-3 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+                                        <NotebookPen className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
+                                        AI reads the questions off the page. It does not save anything by
+                                        itself — every question lands in the editor next, where you check it
+                                        against the source before anything is added to the bank.
+                                    </div>
+                                </>
+                            )}
                         </div>
                     ) : (
                         /* Preview Step - Editable Table */
                         <div className="space-y-3">
+                            {isAiOrigin && (
+                                <div className="flex items-center gap-2 p-3 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
+                                    AI-extracted — check every question against the source before importing.
+                                    Nothing is saved to the bank until you press Import below.
+                                </div>
+                            )}
+
                             {/* Batch toolbar */}
                             <div className="flex items-center gap-2 flex-wrap">
                                 <button
@@ -447,59 +655,91 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
                                             <th className="p-3 font-bold text-xs text-gray-500 uppercase w-16">Marks</th>
                                             <th className="p-3 font-bold text-xs text-gray-500 uppercase w-32">Type</th>
                                             <th className="p-3 font-bold text-xs text-gray-500 uppercase w-32">Topic</th>
+                                            <th className="p-3 font-bold text-xs text-gray-500 uppercase w-20">Scheme</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {questions.map((q, idx) => (
-                                            <tr
-                                                key={q.id}
-                                                className={`border-b last:border-b-0 hover:bg-gray-50/50 transition-colors ${q.selected ? 'bg-white' : 'bg-gray-100/50 opacity-60'
-                                                    }`}
-                                            >
-                                                <td className="p-3">
-                                                    <button onClick={() => toggleOne(q.id)} className="text-gray-400 hover:text-primary">
-                                                        {q.selected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
-                                                    </button>
-                                                </td>
-                                                <td className="p-3 text-xs text-gray-400 font-mono">{idx + 1}</td>
-                                                <td className="p-3">
-                                                    <input
-                                                        type="text"
-                                                        value={q.text}
-                                                        onChange={e => updateQuestion(q.id, 'text', e.target.value)}
-                                                        className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary outline-none text-sm py-0.5 transition-colors"
-                                                    />
-                                                </td>
-                                                <td className="p-3">
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        value={q.marks}
-                                                        onChange={e => updateQuestion(q.id, 'marks', parseInt(e.target.value) || 1)}
-                                                        className="w-14 text-center bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary outline-none text-sm py-0.5"
-                                                    />
-                                                </td>
-                                                <td className="p-3">
-                                                    <select
-                                                        value={q.type}
-                                                        onChange={e => updateQuestion(q.id, 'type', e.target.value)}
-                                                        className="bg-transparent text-xs border rounded px-1.5 py-0.5"
-                                                    >
-                                                        {['Structured', 'Short Answer', 'Multiple Choice', 'True/False', 'Matching', 'Fill-in-the-blank', 'Numeric', 'Essay', 'Practical', 'Oral'].map(t => (
-                                                            <option key={t} value={t}>{t}</option>
-                                                        ))}
-                                                    </select>
-                                                </td>
-                                                <td className="p-3">
-                                                    <input
-                                                        type="text"
-                                                        value={q.topic}
-                                                        onChange={e => updateQuestion(q.id, 'topic', e.target.value)}
-                                                        placeholder="Topic"
-                                                        className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary outline-none text-xs py-0.5"
-                                                    />
-                                                </td>
-                                            </tr>
+                                            <React.Fragment key={q.id}>
+                                                <tr
+                                                    className={`border-b last:border-b-0 hover:bg-gray-50/50 transition-colors ${q.selected ? 'bg-white' : 'bg-gray-100/50 opacity-60'
+                                                        } ${expandedIds.has(q.id) ? '!border-b-0' : ''}`}
+                                                >
+                                                    <td className="p-3">
+                                                        <button onClick={() => toggleOne(q.id)} className="text-gray-400 hover:text-primary">
+                                                            {q.selected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
+                                                        </button>
+                                                    </td>
+                                                    <td className="p-3 text-xs text-gray-400 font-mono">{idx + 1}</td>
+                                                    <td className="p-3">
+                                                        <input
+                                                            type="text"
+                                                            value={q.text}
+                                                            onChange={e => updateQuestion(q.id, 'text', e.target.value)}
+                                                            className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary outline-none text-sm py-0.5 transition-colors"
+                                                        />
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={q.marks}
+                                                            onChange={e => updateQuestion(q.id, 'marks', parseInt(e.target.value) || 1)}
+                                                            className="w-14 text-center bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary outline-none text-sm py-0.5"
+                                                        />
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <select
+                                                            value={q.type}
+                                                            onChange={e => updateQuestion(q.id, 'type', e.target.value)}
+                                                            className="bg-transparent text-xs border rounded px-1.5 py-0.5"
+                                                        >
+                                                            {['Structured', 'Short Answer', 'Multiple Choice', 'True/False', 'Matching', 'Fill-in-the-blank', 'Numeric', 'Essay', 'Practical', 'Oral'].map(t => (
+                                                                <option key={t} value={t}>{t}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <input
+                                                            type="text"
+                                                            value={q.topic}
+                                                            onChange={e => updateQuestion(q.id, 'topic', e.target.value)}
+                                                            placeholder="Topic"
+                                                            className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary outline-none text-xs py-0.5"
+                                                        />
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <button
+                                                            onClick={() => toggleExpanded(q.id)}
+                                                            className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded ${
+                                                                q.markingScheme ? 'text-primary' : 'text-gray-400'
+                                                            }`}
+                                                            title={q.markingScheme ? 'Has a marking scheme — click to view or edit' : 'No marking scheme yet — click to add one'}
+                                                        >
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${q.markingScheme ? 'bg-primary' : 'bg-gray-300'}`} />
+                                                            {expandedIds.has(q.id) ? 'Hide' : q.markingScheme ? 'View' : 'Add'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                {expandedIds.has(q.id) && (
+                                                    <tr className={`border-b last:border-b-0 ${q.selected ? 'bg-white' : 'bg-gray-100/50'}`}>
+                                                        <td />
+                                                        <td />
+                                                        <td colSpan={5} className="px-3 pb-3">
+                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                                                Marking scheme
+                                                            </label>
+                                                            <textarea
+                                                                value={q.markingScheme || ''}
+                                                                onChange={e => updateQuestion(q.id, 'markingScheme', e.target.value)}
+                                                                rows={2}
+                                                                placeholder="What earns the marks — left blank if the source did not have one"
+                                                                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 outline-none resize-none bg-gray-50"
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>
@@ -525,14 +765,34 @@ export default function EnhancedBulkImport({ isOpen, onClose, onImport, defaultT
                         </button>
 
                         {step === 'input' ? (
-                            <button
-                                onClick={handleParse}
-                                disabled={!rawText.trim()}
-                                className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
-                            >
-                                <FileText className="w-4 h-4" />
-                                Parse Questions
-                            </button>
+                            mode === 'paste' ? (
+                                <button
+                                    onClick={handleParse}
+                                    disabled={!rawText.trim()}
+                                    className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
+                                >
+                                    <FileText className="w-4 h-4" />
+                                    Parse Questions
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleAiExtract}
+                                    disabled={!aiFile || aiLoading}
+                                    className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
+                                >
+                                    {aiLoading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Reading your document…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4" />
+                                            Extract Questions
+                                        </>
+                                    )}
+                                </button>
+                            )
                         ) : (
                             <button
                                 onClick={handleImport}
