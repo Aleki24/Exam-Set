@@ -72,7 +72,8 @@ async function parsePDF(buffer: Buffer): Promise<string> {
         return await extractPdfText(buffer);
     } catch (error) {
         console.error('PDF parse error:', error);
-        throw new Error('Failed to parse PDF');
+        // Keep the original. See `errorDetail` on why it travels to the client.
+        throw new Error('Failed to parse PDF', { cause: error });
     }
 }
 
@@ -81,8 +82,30 @@ async function parseWord(buffer: Buffer): Promise<string> {
         return await extractWordText(buffer);
     } catch (error) {
         console.error('Word parse error:', error);
-        throw new Error('Failed to parse Word document');
+        throw new Error('Failed to parse Word document', { cause: error });
     }
+}
+
+/**
+ * A short, honest description of what actually went wrong, for the response.
+ *
+ * "Failed to parse PDF. Please copy and paste the text instead." was returned
+ * for two completely different faults in a row — a package whose API had been
+ * rewritten, then a native module missing from the deployment — and being
+ * identical in both cases, it could not distinguish "this file is unusual"
+ * from "this feature has never once worked". Both times the real error existed
+ * and only ever reached a server log nobody was watching.
+ *
+ * So the cause comes back with the response now. It is one truncated line,
+ * behind a sign-in, on a tool whose users are the people who run the shop. The
+ * alternative is not privacy — a stack trace is not being offered — it is
+ * another round of guessing while uploads keep failing.
+ */
+function errorDetail(error: unknown): string | undefined {
+    const cause = error instanceof Error && error.cause !== undefined ? error.cause : error;
+    if (cause instanceof Error) return `${cause.name}: ${cause.message}`.slice(0, 300);
+    if (typeof cause === 'string' && cause.trim()) return cause.slice(0, 300);
+    return undefined;
 }
 
 const SYSTEM_PROMPT = `You are an expert at extracting exam questions from educational content.
@@ -162,11 +185,12 @@ export async function POST(request: NextRequest) {
             } else if (mimeType === 'application/pdf') {
                 try {
                     contentToProcess = await parsePDF(buffer);
-                } catch {
+                } catch (err) {
                     return NextResponse.json(
                         {
                             error: 'Failed to parse PDF. Please copy and paste the text instead.',
                             suggestion: 'Open your PDF, select all text (Ctrl+A), copy (Ctrl+C), and paste it in the text box.',
+                            detail: errorDetail(err),
                         },
                         { status: 400 }
                     );
@@ -177,11 +201,12 @@ export async function POST(request: NextRequest) {
             ) {
                 try {
                     contentToProcess = await parseWord(buffer);
-                } catch {
+                } catch (err) {
                     return NextResponse.json(
                         {
                             error: 'Failed to parse Word document. Please copy and paste the text instead.',
                             suggestion: 'Open your document, select all text (Ctrl+A), copy (Ctrl+C), and paste it in the text box.',
+                            detail: errorDetail(err),
                         },
                         { status: 400 }
                     );

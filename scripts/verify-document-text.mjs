@@ -22,6 +22,7 @@
  * why.
  */
 
+import { execFileSync } from 'node:child_process';
 import { createJiti } from 'jiti';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
@@ -31,7 +32,8 @@ const jiti = createJiti(import.meta.url, {
     interopDefault: true,
 });
 
-const { extractPdfText, extractWordText } = await jiti.import('../src/services/documentText.ts');
+const { extractPdfText, extractWordText, __DOMMatrixImplementation: DOMMatrixImpl } =
+    await jiti.import('../src/services/documentText.ts');
 
 let failures = 0;
 let checks = 0;
@@ -143,6 +145,93 @@ section('A real .docx, one paragraph per question');
 section('A .docx that is not readable is rejected, not hung or crashed');
 await assertRejects('a buffer that is not a docx at all', extractWordText(Buffer.from('not a docx, just some bytes')));
 await assertRejects('an empty buffer', extractWordText(Buffer.alloc(0)));
+
+// ---------------------------------------------------------------------------
+// THE SECOND WAY THIS SHIPPED BROKEN
+//
+// Everything above passed while production still failed on every PDF. The
+// checks ran where `@napi-rs/canvas` is installed; the deployed function does
+// not have it, pdfjs borrows `DOMMatrix` from it, and without one the first
+// call threw `ReferenceError: DOMMatrix is not defined`. A local check that
+// cannot see the difference between here and there was never going to catch
+// that, so this one goes and creates the difference.
+// ---------------------------------------------------------------------------
+
+section('A PDF still reads when the native canvas package is missing');
+{
+    // A child process, because the block has to be in place before pdfjs
+    // loads and this one has already loaded it.
+    const output = execFileSync(process.execPath, [new URL('_extract-without-canvas.mjs', import.meta.url).pathname], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    assert('extraction does not throw without the package', output.startsWith('TEXT:'), output.slice(0, 80));
+    if (output.startsWith('TEXT:')) {
+        const text = JSON.parse(output.slice('TEXT:'.length));
+        assert('the text is the same as with it', text.includes('1. Define photosynthesis. (2 marks)'), 'identical');
+        assert('every question is there, not just the first', text.includes('2. State two factors affecting osmosis. (3 marks)'), 'identical');
+    }
+}
+
+section('The DOMMatrix supplied in its place is real arithmetic, not a stub');
+{
+    const identity = new DOMMatrixImpl();
+    assert('a new matrix is the identity', identity.isIdentity === true, 'identity');
+    assert('and reports itself as 2D', identity.is2D === true, 'true');
+
+    const fromSix = new DOMMatrixImpl([2, 0, 0, 3, 10, 20]);
+    assert('six values are read in order', `${fromSix.a},${fromSix.d},${fromSix.e},${fromSix.f}` === '2,3,10,20', '2,3,10,20');
+    assert('the 4x4 names are the same numbers', fromSix.m11 === 2 && fromSix.m22 === 3 && fromSix.m41 === 10, 'aliased');
+
+    // Scaling by 2 then translating by (5,5) must move a point to (10,10) —
+    // the translation happening in the already-scaled space.
+    const scaledThenTranslated = new DOMMatrixImpl().scale(2).translate(5, 5);
+    const moved = scaledThenTranslated.transformPoint({ x: 0, y: 0 });
+    assert('scale then translate composes in the right order', moved.x === 10 && moved.y === 10, `(${moved.x}, ${moved.y})`);
+
+    const point = new DOMMatrixImpl([2, 0, 0, 3, 10, 20]).transformPoint({ x: 1, y: 1 });
+    assert('a point is transformed correctly', point.x === 12 && point.y === 23, `(${point.x}, ${point.y})`);
+
+    // The real test of the inverse: it must undo the original exactly.
+    const original = new DOMMatrixImpl([2, 1, 1, 3, 10, 20]);
+    const roundTripped = original.multiply(original.inverse());
+    const isIdentityish = ['a', 'b', 'c', 'd', 'e', 'f'].every((k) => Math.abs(roundTripped[k] - (k === 'a' || k === 'd' ? 1 : 0)) < 1e-9);
+    assert('a matrix times its inverse is the identity', isIdentityish, 'within 1e-9');
+
+    const singular = new DOMMatrixImpl([1, 2, 2, 4, 0, 0]).inverse();
+    assert('a matrix with no inverse yields NaN, not a wrong answer', Number.isNaN(singular.a), 'NaN');
+
+    // Refusing beats half-reading: a wrong transform would mean wrong text.
+    let refusedString = false;
+    try {
+        new DOMMatrixImpl('translate(10px, 10px)');
+    } catch {
+        refusedString = true;
+    }
+    assert('a CSS transform string is refused, not guessed at', refusedString, 'throws');
+
+    let refusedLength = false;
+    try {
+        new DOMMatrixImpl([1, 2, 3]);
+    } catch {
+        refusedLength = true;
+    }
+    assert('a wrong number of values is refused', refusedLength, 'throws');
+}
+
+section('A DOMMatrix that already exists is never replaced');
+{
+    const { ensureDomMatrix } = await jiti.import('../src/services/documentText.ts');
+    const sentinel = class RealDOMMatrix {};
+    const had = Object.hasOwn(globalThis, 'DOMMatrix');
+    const previous = globalThis.DOMMatrix;
+    globalThis.DOMMatrix = sentinel;
+    ensureDomMatrix();
+    assert('the platform’s own implementation wins', globalThis.DOMMatrix === sentinel, 'untouched');
+    if (had) globalThis.DOMMatrix = previous;
+    else delete globalThis.DOMMatrix;
+}
 
 // ---------------------------------------------------------------------------
 
