@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { requireUser } from '@/utils/auth/guards';
-import { sanitiseExtractedBatch } from '@/services/questionExtraction';
+import { errorDetail, sanitiseExtractedBatch, upstreamDetail, upstreamMessage } from '@/services/questionExtraction';
 import { extractPdfText, extractWordText } from '@/services/documentText';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -84,28 +84,6 @@ async function parseWord(buffer: Buffer): Promise<string> {
         console.error('Word parse error:', error);
         throw new Error('Failed to parse Word document', { cause: error });
     }
-}
-
-/**
- * A short, honest description of what actually went wrong, for the response.
- *
- * "Failed to parse PDF. Please copy and paste the text instead." was returned
- * for two completely different faults in a row — a package whose API had been
- * rewritten, then a native module missing from the deployment — and being
- * identical in both cases, it could not distinguish "this file is unusual"
- * from "this feature has never once worked". Both times the real error existed
- * and only ever reached a server log nobody was watching.
- *
- * So the cause comes back with the response now. It is one truncated line,
- * behind a sign-in, on a tool whose users are the people who run the shop. The
- * alternative is not privacy — a stack trace is not being offered — it is
- * another round of guessing while uploads keep failing.
- */
-function errorDetail(error: unknown): string | undefined {
-    const cause = error instanceof Error && error.cause !== undefined ? error.cause : error;
-    if (cause instanceof Error) return `${cause.name}: ${cause.message}`.slice(0, 300);
-    if (typeof cause === 'string' && cause.trim()) return cause.slice(0, 300);
-    return undefined;
 }
 
 const SYSTEM_PROMPT = `You are an expert at extracting exam questions from educational content.
@@ -262,8 +240,14 @@ export async function POST(request: NextRequest) {
             });
         } catch (err) {
             console.error('AI extraction call failed:', err instanceof Error ? err.message : err);
+            const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
             return NextResponse.json(
-                { error: 'Could not reach the AI service. Please try again, or paste the text instead.' },
+                {
+                    error: timedOut
+                        ? `The AI service did not answer within ${CALL_TIMEOUT_MS / 1000} seconds. Try a shorter document, or paste the text instead.`
+                        : 'Could not reach the AI service. Please try again, or paste the text instead.',
+                    detail: errorDetail(err),
+                },
                 { status: 502 }
             );
         }
@@ -280,12 +264,22 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json(
                     {
                         error: 'The configured AI model could not read this image. Try a text-based PDF, a Word document, or paste the text instead.',
+                        detail: upstreamDetail(response.status, errText),
                     },
                     { status: 400 }
                 );
             }
 
-            return NextResponse.json({ error: 'AI extraction failed' }, { status: 502 });
+            // Reading the document worked; the provider refused the request.
+            // Which of those two it was matters enormously to whoever has to
+            // fix it, and "AI extraction failed" said neither.
+            return NextResponse.json(
+                {
+                    error: upstreamMessage(response.status),
+                    detail: upstreamDetail(response.status, errText),
+                },
+                { status: 502 }
+            );
         }
 
         const aiResult = await response.json();
