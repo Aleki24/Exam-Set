@@ -4,13 +4,14 @@
  * Marks the answers arithmetic cannot: short answers and structured responses,
  * against the marking scheme the examiner already wrote.
  *
- * WHY THIS DOES NOT GO THROUGH /api/perplexity
+ * WHY THIS IS SERVER-ONLY, AND WHY THERE IS NO BROWSER PROXY
  *
- * That route is a proxy for the browser: it takes `messages` straight from the
- * request body and forwards them. Marking must not be reachable that way, or a
- * learner could send their own prompt and have the model award them full marks.
- * Marking is decided on the server, from rows the server read, and never from
- * anything a browser said.
+ * There used to be one — `/api/perplexity` took `messages` straight from the
+ * request body and forwarded them to the provider. Marking must never be
+ * reachable that way: a learner could send their own prompt and have the model
+ * award them full marks. That route has been deleted (nothing called it), and
+ * marking is decided here, on the server, from rows the server read — never
+ * from anything a browser said.
  *
  * WHAT THE MODEL IS AND IS NOT ALLOWED TO DO
  *
@@ -30,9 +31,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { UNMARKED, type Mark, type MarkableQuestion } from './markingService';
-
-const API_URL = 'https://api.perplexity.ai/chat/completions';
-const MODEL = 'sonar';
+import { aiAvailable, aiJson } from './claude';
 
 /** One question should never hold up a submission for long. */
 const CALL_TIMEOUT_MS = 20_000;
@@ -50,12 +49,8 @@ export const MARKING_BUDGET_MS = 45_000;
 /** How many questions to mark at once. Enough to be quick, not enough to throttle. */
 const CONCURRENCY = 4;
 
-function apiKey(): string {
-    return process.env.PERPLEXITY_API_KEY || process.env.NEXT_PUBLIC_PERPLEXITY_API_KEY || '';
-}
-
 export function aiMarkingAvailable(): boolean {
-    return apiKey().length > 0;
+    return aiAvailable();
 }
 
 const SYSTEM_PROMPT = `You are an experienced Kenyan examiner marking a single answer.
@@ -71,11 +66,27 @@ Rules:
 - If the answer is off-topic or blank, award 0.
 - If you cannot mark it fairly from the scheme provided, set "can_mark" to false. Do not guess.
 
-Reply with JSON only, no prose and no code fence:
-{"marks_awarded": <number>, "confidence": <0 to 1>, "note": "<one short sentence for the learner>", "can_mark": <true|false>}
-
 "confidence" is how sure you are the mark matches what a human examiner would give.
 "note" explains what was missing, or what earned the marks. Address the learner as "you". Keep it under 20 words.`;
+
+/**
+ * The verdict, constrained at the API.
+ *
+ * A schema cannot say "no more than the marks available" — that check stays
+ * below, and it is the one that matters most: a mark outside the range means
+ * the model misread the question, and the whole verdict goes with it.
+ */
+const VERDICT_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['marks_awarded', 'confidence', 'note', 'can_mark'],
+    properties: {
+        marks_awarded: { type: 'number', description: 'Marks earned. 0 if the answer earns none.' },
+        confidence: { type: 'number', description: 'Between 0 and 1.' },
+        note: { type: 'string', description: 'One short sentence for the learner, under 20 words.' },
+        can_mark: { type: 'boolean', description: 'False when the scheme is not clear enough to mark fairly.' },
+    },
+} as const;
 
 interface AiVerdict {
     marks_awarded?: unknown;
@@ -88,8 +99,7 @@ interface AiVerdict {
  * Marks one answer. Returns UNMARKED on any doubt whatsoever.
  */
 export async function aiMark(question: MarkableQuestion, answer: string): Promise<Mark> {
-    const key = apiKey();
-    if (!key) return { ...UNMARKED, note: 'Marking is not configured on this deployment.' };
+    if (!aiAvailable()) return { ...UNMARKED, note: 'Marking is not configured on this deployment.' };
 
     const available = Number(question.marks) || 0;
     if (available <= 0) return { ...UNMARKED, note: 'This question carries no marks.' };
@@ -105,42 +115,21 @@ export async function aiMark(question: MarkableQuestion, answer: string): Promis
         answer,
     ].join('\n');
 
-    let raw: string;
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${key}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: MODEL,
-                messages: [
-                    { role: 'system', content: SYSTEM_PROMPT },
-                    { role: 'user', content: prompt },
-                ],
-                // Marking the same answer twice should give the same mark.
-                temperature: 0,
-            }),
-            signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-        });
+    const result = await aiJson<AiVerdict>({
+        system: SYSTEM_PROMPT,
+        content: prompt,
+        schema: VERDICT_SCHEMA as unknown as Record<string, unknown>,
+        maxTokens: 2_000,
+        timeoutMs: CALL_TIMEOUT_MS,
+    });
 
-        if (!response.ok) {
-            console.error('AI marking HTTP error:', response.status);
-            return { ...UNMARKED, note: 'This answer could not be marked automatically.' };
-        }
-
-        const data = await response.json();
-        raw = data?.choices?.[0]?.message?.content ?? '';
-    } catch (err) {
-        console.error('AI marking call failed:', err instanceof Error ? err.message : err);
+    if (!result.ok) {
+        // The learner sees "not marked", never a provider error and never a
+        // zero. Why it failed is the operator's problem, and it is in the log.
         return { ...UNMARKED, note: 'This answer could not be marked automatically.' };
     }
 
-    const verdict = parseVerdict(raw);
-    if (!verdict) {
-        return { ...UNMARKED, note: 'This answer could not be marked automatically.' };
-    }
+    const verdict = result.value;
 
     if (verdict.can_mark === false) {
         return {
@@ -216,7 +205,14 @@ export async function aiMarkMany(
 
 // ============================================================================
 
+/**
+ * `null` and `undefined` mean "no claim was made" and default to a neutral 0.5
+ * — not `Number(null)`, which JavaScript coerces to `0`. The review UI flags
+ * anything under 0.6, so reading an absent field as zero would flag it as the
+ * worst case on screen rather than a neutral one.
+ */
 function clampConfidence(value: unknown): number {
+    if (value === null || value === undefined) return 0.5;
     const n = Number(value);
     if (!Number.isFinite(n)) return 0.5;
     return Math.max(0, Math.min(1, n));
@@ -234,24 +230,3 @@ function stripHtml(html: string): string {
         .trim();
 }
 
-/**
- * Pulls the JSON object out of a reply that may be wrapped in prose or a fence.
- *
- * Deliberately not reusing `cleanJson` from aiService: that one repairs LaTeX
- * backslashes for generated question text, and its repairs are the wrong shape
- * for a three-field verdict. A mark is small enough to parse strictly, and
- * strictness here means a malformed reply becomes UNMARKED rather than a
- * salvaged number nobody can vouch for.
- */
-function parseVerdict(raw: string): AiVerdict | null {
-    if (!raw) return null;
-    const first = raw.indexOf('{');
-    const last = raw.lastIndexOf('}');
-    if (first === -1 || last === -1 || last <= first) return null;
-
-    try {
-        return JSON.parse(raw.slice(first, last + 1)) as AiVerdict;
-    } catch {
-        return null;
-    }
-}

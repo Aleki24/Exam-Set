@@ -30,8 +30,6 @@ const {
     QUESTION_TYPES,
     DIFFICULTIES,
     errorDetail,
-    upstreamMessage,
-    upstreamDetail,
 } = await jiti.import(
     '../src/services/questionExtraction.ts'
 );
@@ -188,45 +186,6 @@ check('an object instead of an array', sanitiseExtractedBatch({ questions: [] },
 // different thing the reader has to go and do, so each has to read
 // differently.
 // ---------------------------------------------------------------------------
-
-section('A refusal from the AI service names the thing to go and fix');
-{
-    const namesTheKey = (s) => /API key/i.test(s);
-    check('401 points at the key', namesTheKey(upstreamMessage(401)), true);
-    check('403 points at the key too', namesTheKey(upstreamMessage(403)), true);
-    check('402 points at credit', /credit/i.test(upstreamMessage(402)), true);
-    check('429 points at rate limiting', /rate limit/i.test(upstreamMessage(429)), true);
-    check('404 points at the model', /model/i.test(upstreamMessage(404)), true);
-    check('500 points at their end, not ours', /their end/i.test(upstreamMessage(500)), true);
-    check('503 is also their end', /their end/i.test(upstreamMessage(503)), true);
-
-    // The failure this whole exercise was about: four faults, one sentence.
-    const distinct = new Set([401, 402, 429, 404, 400, 500].map(upstreamMessage));
-    check('no two of them read the same', distinct.size, 6);
-    check('none of them is the old non-answer', [...distinct].some((m) => m === 'AI extraction failed'), false);
-}
-
-section('The provider’s own words survive the trip');
-{
-    check(
-        'a JSON error message is lifted out',
-        upstreamDetail(401, JSON.stringify({ error: { message: 'Invalid API key provided' } })),
-        'HTTP 401 — Invalid API key provided'
-    );
-    check('a bare error string is lifted out', upstreamDetail(400, JSON.stringify({ error: 'bad model' })), 'HTTP 400 — bad model');
-    check('a detail field is lifted out', upstreamDetail(422, JSON.stringify({ detail: 'unprocessable' })), 'HTTP 422 — unprocessable');
-    check('plain text comes through as-is', upstreamDetail(502, 'upstream exploded'), 'HTTP 502 — upstream exploded');
-    check('an empty body still names the status', upstreamDetail(500, ''), 'HTTP 500');
-    check('a non-string body does not crash', upstreamDetail(500, undefined), 'HTTP 500');
-    check(
-        'a structured error is stringified rather than dropped',
-        upstreamDetail(400, JSON.stringify({ error: { code: 7 } })).startsWith('HTTP 400 — {"code":7}'),
-        true
-    );
-
-    const long = 'x'.repeat(1000);
-    check('a huge body is truncated', upstreamDetail(500, long).length < 340, true);
-}
 
 section('A thrown error gives up its cause');
 {

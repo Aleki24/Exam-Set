@@ -11,12 +11,15 @@
  * options it is shown a multiple-choice question with, and the confidence it
  * claims.
  *
- * `parseVerdict` matters most. A marking scheme this produces can sit on a
- * live question for a long time before anyone reads it again — unlike a wrong
- * extracted question, which a teacher rejects on sight in the preview table —
- * so the read of what the model said has to survive the same messiness real
- * models produce: a code fence around the JSON, stray prose before or after
- * it, a field of the wrong type.
+ * Reading the model's reply used to be the riskiest part and is now the
+ * safest: the reply is constrained to a schema at the API, so the fence-
+ * stripping and brace-hunting that used to stand between a model's prose and a
+ * marking scheme are gone. What is left to check is that the schema still
+ * describes what the code reads, and that the values it cannot constrain — a
+ * confidence outside 0..1, an options list of the wrong shape — are still
+ * handled here. A scheme this produces can sit on a live question for a long
+ * time before anyone reads it again, unlike a wrong extracted question that a
+ * teacher rejects on sight in the preview table.
  */
 
 import { createJiti } from 'jiti';
@@ -26,7 +29,7 @@ const jiti = createJiti(import.meta.url, {
     interopDefault: true,
 });
 
-const { parseVerdict, clampConfidence, optionsToLines } = await jiti.import(
+const { clampConfidence, optionsToLines, SCHEME_SCHEMA } = await jiti.import(
     '../src/services/schemeGeneration.ts'
 );
 const { cleanText } = await jiti.import('../src/services/paperLayout.ts');
@@ -55,48 +58,28 @@ const section = (t) => console.log(`\n${t}`);
 
 // ---------------------------------------------------------------------------
 
-section('parseVerdict reads a clean reply');
-check(
-    'a well-formed object',
-    parseVerdict('{"marking_scheme": "Paris", "confidence": 0.9, "can_generate": true}'),
-    { marking_scheme: 'Paris', confidence: 0.9, can_generate: true }
-);
-
-section('parseVerdict survives the ways a model actually replies');
-check(
-    'wrapped in a ```json code fence',
-    parseVerdict('```json\n{"marking_scheme": "Paris", "can_generate": true}\n```'),
-    { marking_scheme: 'Paris', can_generate: true }
-);
-check(
-    'a bare code fence with no language tag',
-    parseVerdict('```\n{"marking_scheme": "Paris", "can_generate": true}\n```'),
-    { marking_scheme: 'Paris', can_generate: true }
-);
-check(
-    'prose before the JSON',
-    parseVerdict('Here is the marking scheme:\n{"marking_scheme": "Paris", "can_generate": true}'),
-    { marking_scheme: 'Paris', can_generate: true }
-);
-check(
-    'prose after the JSON too',
-    parseVerdict('{"marking_scheme": "Paris", "can_generate": true}\nLet me know if you need anything else.'),
-    { marking_scheme: 'Paris', can_generate: true }
-);
-check(
-    'surrounding whitespace',
-    parseVerdict('   \n  {"marking_scheme": "Paris", "can_generate": true}  \n  '),
-    { marking_scheme: 'Paris', can_generate: true }
-);
-
-section('parseVerdict refuses rather than half-reads something broken');
-check('empty string', parseVerdict(''), null);
-check('no JSON object anywhere', parseVerdict('Sorry, I cannot help with that.'), null);
-check('truncated mid-object', parseVerdict('{"marking_scheme": "Paris", "can_gen'), null);
-check('not actually JSON inside the braces', parseVerdict('{not: valid, json: here}'), null);
-// A closing brace that comes before the opening one is not a valid object,
-// even though both characters are present in the string.
-check('braces in the wrong order', parseVerdict('} some text {'), null);
+section('The reply shape is guaranteed by the schema, not by parsing prose');
+{
+    // parseVerdict used to live here: it stripped ```json fences, hunted for
+    // the first `{` and the last `}`, and returned null when a model wrapped
+    // its answer in a sentence. `output_config.format` constrains the reply at
+    // the API instead, so there is no prose to dig a JSON object out of and
+    // nothing left to test on that path. What still has to hold is that the
+    // schema and the code agree about the field names — a rename on one side
+    // and not the other would fail only in production.
+    const fields = Object.keys(SCHEME_SCHEMA.properties);
+    check('the schema names exactly the fields the code reads', fields.sort(), [
+        'can_generate',
+        'confidence',
+        'marking_scheme',
+        'reason',
+    ]);
+    check('every one of them is required', [...SCHEME_SCHEMA.required].sort(), fields.sort());
+    assert('and nothing else may be returned', SCHEME_SCHEMA.additionalProperties === false, 'false');
+    assert('marking_scheme is a string', SCHEME_SCHEMA.properties.marking_scheme.type === 'string', 'string');
+    assert('can_generate is a boolean', SCHEME_SCHEMA.properties.can_generate.type === 'boolean', 'boolean');
+    assert('confidence is a number', SCHEME_SCHEMA.properties.confidence.type === 'number', 'number');
+}
 
 section('clampConfidence is always a real number between 0 and 1');
 check('a normal value passes through', clampConfidence(0.75), 0.75);
