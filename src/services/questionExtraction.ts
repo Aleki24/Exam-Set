@@ -121,3 +121,77 @@ export function sanitiseExtractedBatch(
         truncated: cleaned.length > max,
     };
 }
+
+/**
+ * SAYING WHAT WENT WRONG
+ * ----------------------------------------------------------------------------
+ * Everything below turns a failure into something a person can act on, and
+ * exists because the absence of it cost four rounds of guessing on one bug.
+ *
+ * Uploading a PDF answered "Failed to parse PDF. Please copy and paste the
+ * text instead." for three unrelated faults in a row — a package whose API had
+ * been rewritten, a native module missing from the deployment, then a worker
+ * file missing from the deployment. Identical wording every time, so it could
+ * not distinguish "this file is unusual" from "this has never once worked",
+ * and each real error existed but only ever reached a server log nobody was
+ * watching. Then extraction got past all three and answered "AI extraction
+ * failed", which is the same mistake again one step further along.
+ *
+ * So causes travel with the response now. One truncated line, behind a
+ * sign-in, on a tool whose users are the people who run the shop. The
+ * alternative is not privacy — no stack trace is being offered — it is another
+ * round of somebody guessing while uploads keep failing.
+ */
+
+/** The underlying cause of a thrown error, unwrapped one level and trimmed. */
+export function errorDetail(error: unknown): string | undefined {
+    const cause = error instanceof Error && error.cause !== undefined ? error.cause : error;
+    if (cause instanceof Error) return `${cause.name}: ${cause.message}`.slice(0, 300);
+    if (typeof cause === 'string' && cause.trim()) return cause.slice(0, 300);
+    return undefined;
+}
+
+/**
+ * What to tell somebody when the AI provider refuses the request.
+ *
+ * The document has been read successfully by this point, so the failure is
+ * entirely on the provider's side — and the things that actually go wrong
+ * there have completely different fixes: a key that is wrong, a key with no
+ * credit, too many requests at once, a model the account cannot use. "AI
+ * extraction failed" pointed at none of them.
+ */
+export function upstreamMessage(status: number): string {
+    if (status === 401 || status === 403) {
+        return 'The AI service rejected the API key. Check PERPLEXITY_API_KEY on the deployment — it is set, but not accepted.';
+    }
+    if (status === 402) {
+        return 'The AI account has no credit left. Top it up, or paste the questions in instead.';
+    }
+    if (status === 429) {
+        return 'The AI service is rate limiting this account. Wait a moment and try again.';
+    }
+    if (status === 404) {
+        return 'The AI service does not recognise the configured model. The detail below names it.';
+    }
+    if (status === 400) {
+        return 'The AI service refused the request. The detail below says why — often the configured model name.';
+    }
+    if (status >= 500) {
+        return 'The AI service is having trouble at their end. Try again shortly, or paste the text instead.';
+    }
+    return 'The AI service refused the request.';
+}
+
+/** The provider's own words about a refusal, trimmed to one readable line. */
+export function upstreamDetail(status: number, body: string): string {
+    let message = typeof body === 'string' ? body.trim() : '';
+    try {
+        const parsed = JSON.parse(body);
+        const found = parsed?.error?.message ?? parsed?.error ?? parsed?.detail ?? parsed?.message;
+        if (typeof found === 'string' && found.trim()) message = found.trim();
+        else if (found !== undefined && found !== null) message = JSON.stringify(found);
+    } catch {
+        // Not JSON. The raw body is still better than nothing.
+    }
+    return `HTTP ${status}${message ? ` — ${message.slice(0, 300)}` : ''}`;
+}
