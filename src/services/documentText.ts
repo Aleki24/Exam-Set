@@ -186,15 +186,56 @@ export function ensureDomMatrix(): void {
 export const __DOMMatrixImplementation = Affine2D;
 
 /**
+ * AND WHY IT ALSO LOADS THE WORKER BY HAND
+ *
+ * With the matrix supplied, the deployed function got one step further and
+ * stopped somewhere new:
+ *
+ *   Setting up fake worker failed: "Cannot find module
+ *   '/var/task/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'"
+ *
+ * Same shape of fault as the canvas one, different file. pdfjs does its
+ * parsing in a worker, and in Node it loads that worker by evaluating
+ * `await import(this.workerSrc)` — a specifier computed at runtime, marked
+ * `webpackIgnore` and `@vite-ignore` precisely because it is not meant to be
+ * followed. A bundler tracing this route sees `pdf.mjs` and cannot see the two
+ * megabytes of `pdf.worker.mjs` hanging off it, so the worker was left behind
+ * and the first upload to need it failed. Confirmed by reading the build's own
+ * trace manifest, which listed `pdf.mjs` and nothing else from the package.
+ *
+ * pdfjs offers a documented way out: if `globalThis.pdfjsWorker` already holds
+ * the worker's module, it uses that and never reaches for the computed import.
+ * Importing it here by its literal path is the whole fix — a literal specifier
+ * is exactly what file tracing *can* follow, so the dependency stops being
+ * invisible and travels with the deployment. `next.config.ts` also names the
+ * file outright, so it ships whether or not tracing follows the import.
+ *
+ * This does not move work onto the main thread that was not already there:
+ * "fake worker" is what pdfjs calls running in-process, which is what it was
+ * doing in Node all along. The only thing that changes is how the module
+ * arrives — declared, rather than conjured from a string at runtime.
+ */
+async function ensurePdfWorker(): Promise<void> {
+    const scope = globalThis as any;
+    if (scope.pdfjsWorker?.WorkerMessageHandler) return;
+    scope.pdfjsWorker = await import(
+        /* webpackMode: "eager" */ 'pdfjs-dist/legacy/build/pdf.worker.mjs' as string
+    );
+}
+
+/**
  * Reads the text out of a PDF.
  *
  * `pdf-parse` 2.x exports a `PDFParse` class: `new PDFParse({ data: buffer })`,
  * then `await parser.getText()`. Not the callable function 1.x was.
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
-    // Before pdfjs loads: it looks for a DOMMatrix as it initialises, and warns
-    // that rendering "may be broken" when it finds none.
+    // Both of these have to happen before pdfjs loads: it looks for a
+    // DOMMatrix as it initialises, and for `globalThis.pdfjsWorker` the first
+    // time it needs the worker. See the two notes above — each stands for a
+    // separate production failure that this machine could not reproduce.
     ensureDomMatrix();
+    await ensurePdfWorker();
 
     const { PDFParse } = await import('pdf-parse');
     let parser: InstanceType<typeof PDFParse> | undefined;
