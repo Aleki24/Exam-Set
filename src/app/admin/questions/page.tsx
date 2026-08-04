@@ -19,6 +19,7 @@ import {
     Upload,
     CheckSquare,
     Square,
+    Sparkles,
 } from 'lucide-react';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import { findBestTopic, Topic as MatcherTopic } from '@/utils/topicMatcher';
@@ -934,6 +935,14 @@ export default function AdminQuestionsPage() {
                                     </select>
                                 </div>
                             )}
+                            <a
+                                href="/admin/questions/schemes"
+                                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                title="Most questions in the bank have no marking scheme — fill them in a batch at a time, with AI proposing and you reviewing"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                Fill Marking Schemes
+                            </a>
                             <button
                                 onClick={() => setShowBulkImport(true)}
                                 className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
