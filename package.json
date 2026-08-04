@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/verify-deployment-tracing.mjs --soft-missing",
     "start": "next start",
     "lint": "next lint",
     "verify:builder": "node scripts/verify-paper-builder.mjs",
@@ -23,7 +23,8 @@
     "verify:curriculum": "node scripts/verify-curriculum.mjs",
     "verify:extract": "node scripts/verify-question-extraction.mjs",
     "verify:schemes": "node scripts/verify-scheme-generation.mjs",
-    "verify:documenttext": "node scripts/verify-document-text.mjs"
+    "verify:documenttext": "node scripts/verify-document-text.mjs",
+    "verify:tracing": "node scripts/verify-deployment-tracing.mjs"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",

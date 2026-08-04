@@ -147,29 +147,35 @@ await assertRejects('a buffer that is not a docx at all', extractWordText(Buffer
 await assertRejects('an empty buffer', extractWordText(Buffer.alloc(0)));
 
 // ---------------------------------------------------------------------------
-// THE SECOND WAY THIS SHIPPED BROKEN
+// THE WAYS THIS SHIPPED BROKEN TWICE MORE
 //
-// Everything above passed while production still failed on every PDF. The
-// checks ran where `@napi-rs/canvas` is installed; the deployed function does
-// not have it, pdfjs borrows `DOMMatrix` from it, and without one the first
-// call threw `ReferenceError: DOMMatrix is not defined`. A local check that
-// cannot see the difference between here and there was never going to catch
-// that, so this one goes and creates the difference.
+// Everything above passed while production failed on every PDF, twice running.
+// Both faults were the same shape: a file pdfjs reaches for by a route no
+// bundler can follow, present on this machine and absent from the deployment.
+// First `@napi-rs/canvas`, which it borrows `DOMMatrix` from — without it,
+// `ReferenceError: DOMMatrix is not defined`. Then its own worker, loaded by a
+// specifier assembled at runtime — without it, "Setting up fake worker
+// failed". Checks that run where both resolve were never going to see either,
+// so this one goes and makes them not resolve.
+//
+// `verify-deployment-tracing.mjs` covers the other half of it: that the worker
+// is actually in what gets uploaded. Between them — the code does not need the
+// unfollowable path, and the file ships anyway.
 // ---------------------------------------------------------------------------
 
-section('A PDF still reads when the native canvas package is missing');
+section('A PDF still reads under the deployment’s conditions');
 {
-    // A child process, because the block has to be in place before pdfjs
+    // A child process, because the blocks have to be in place before pdfjs
     // loads and this one has already loaded it.
-    const output = execFileSync(process.execPath, [new URL('_extract-without-canvas.mjs', import.meta.url).pathname], {
+    const output = execFileSync(process.execPath, [new URL('_extract-as-deployed.mjs', import.meta.url).pathname], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    assert('extraction does not throw without the package', output.startsWith('TEXT:'), output.slice(0, 80));
+    assert('no native canvas, no fake-worker path, still reads', output.startsWith('TEXT:'), output.slice(0, 80));
     if (output.startsWith('TEXT:')) {
         const text = JSON.parse(output.slice('TEXT:'.length));
-        assert('the text is the same as with it', text.includes('1. Define photosynthesis. (2 marks)'), 'identical');
+        assert('the text is the same as with them', text.includes('1. Define photosynthesis. (2 marks)'), 'identical');
         assert('every question is there, not just the first', text.includes('2. State two factors affecting osmosis. (3 marks)'), 'identical');
     }
 }
