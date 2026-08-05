@@ -36,6 +36,18 @@ export interface PaperListing {
     time_limit?: string;
     institution?: string;
 
+    /**
+     * The sitting this paper belongs to — see lib/examSets.ts.
+     *
+     * `set_name` and `set_slug` are present only when the row was read with the
+     * `exam_sets` embed, so their absence means "not loaded", not "no set".
+     * `set_id` is the one to test when you need to know whether a paper is
+     * grouped at all.
+     */
+    set_id?: string;
+    set_name?: string;
+    set_slug?: string;
+
     price_cents: number;
     currency: string;
     is_published: boolean;
@@ -72,6 +84,8 @@ export interface PaperFilters {
     exam_type?: string;
     term?: string;
     year?: number;
+    /** A set slug — restricts to one sitting. See lib/examSets.ts. */
+    set?: string;
     /** 'free' | 'paid' | undefined for both */
     price?: 'free' | 'paid';
     search?: string;
@@ -89,6 +103,8 @@ export interface PaperListResponse {
         levels: Record<string, number>;
         examTypes: Record<string, number>;
         subjects: Record<string, number>;
+        /** Keyed by set slug, valued `{ name, count }` — see lib/examSets.ts. */
+        sets?: Record<string, { name: string; count: number }>;
     };
 }
 

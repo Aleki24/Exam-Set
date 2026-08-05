@@ -32,6 +32,16 @@ export interface CatalogFilters {
     subjectAliases?: string[];
     term?: string;
     year?: number | string;
+    /**
+     * The sittings to restrict to — see lib/examSets.ts.
+     *
+     * A list rather than one id because the two ways of naming a sitting are
+     * not equally precise. A full set name ("Kabras Mock End Term 2 2025")
+     * identifies one; a school name on its own ("Kabras") legitimately means
+     * every sitting that school has published, and answering it with only the
+     * most recent would be a guess dressed up as a filter.
+     */
+    setIds?: string[];
     /** 'free' | 'paid' */
     price?: string;
     /** Free-text fallback across title, subject, description and institution. */
@@ -59,6 +69,7 @@ export function applyPaperFilters(query: any, filters: CatalogFilters): any {
     if (filters.kind) query = query.eq('resource_kind', filters.kind);
     if (filters.term) query = query.eq('term_slug', filters.term);
     if (filters.year) query = query.eq('year', Number(filters.year));
+    if (filters.setIds?.length) query = query.in('set_id', filters.setIds);
     if (filters.price === 'free') query = query.eq('price_cents', 0);
     if (filters.price === 'paid') query = query.gt('price_cents', 0);
 
@@ -91,7 +102,7 @@ export async function findPapers(
 ): Promise<any[]> {
     let query = supabase
         .from('exams')
-        .select('id, slug, title, subject, grade_label, level_slug, exam_type, term_slug, year, total_marks, question_count, price_cents, currency, has_marking_scheme, time_limit, institution, question_ids, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url')
+        .select('id, slug, title, subject, grade_label, level_slug, exam_type, term_slug, year, paper_number, total_marks, question_count, price_cents, currency, has_marking_scheme, time_limit, institution, set_id, exam_sets (id, name, slug), question_ids, pdf_storage_key, pdf_url, marking_scheme_storage_key, marking_scheme_url')
         .eq('source', 'catalog')
         .eq('is_published', true);
 
@@ -114,6 +125,11 @@ export async function findPapers(
  * because last year's paper is still useful, then term, then the exam type;
  * grade and subject are never dropped, because a Form 4 Maths request answered
  * with a Grade 3 English paper is worse than no answer at all.
+ *
+ * `setIds` is never dropped either, for the same reason and more sharply.
+ * Somebody who asked for the Kabras mock named a school out loud; relaxing that
+ * hands them a different school's paper while the reply still says it found
+ * what they asked for.
  */
 export async function findPapersRelaxing(
     supabase: any,

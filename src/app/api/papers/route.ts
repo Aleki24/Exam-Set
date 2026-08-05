@@ -27,23 +27,39 @@ export async function GET(req: NextRequest) {
         const subjectAliases = searchParams.getAll('subject_alias').filter(Boolean);
         const term = searchParams.get('term') || '';
         const year = searchParams.get('year') || '';
+        // A sitting, named by slug in the URL because that is what the set page
+        // and the filter chip both carry. Resolved to an id here so the shared
+        // filter builder stays keyed on `exams.set_id`.
+        const setSlug = searchParams.get('set') || '';
         const price = searchParams.get('price') || '';
         const search = searchParams.get('search') || '';
         const sort = searchParams.get('sort') || 'newest';
         const limit = Math.min(parseInt(searchParams.get('limit') || '24'), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
 
+        let setIds: string[] | undefined;
+        if (setSlug) {
+            const { data: setRow } = await supabase
+                .from('exam_sets')
+                .select('id')
+                .eq('slug', setSlug)
+                .maybeSingle();
+            // An unknown slug filters to nothing rather than being ignored. A
+            // typo that quietly returns the whole catalog is a filter that lies.
+            setIds = [setRow?.id ?? '00000000-0000-0000-0000-000000000000'];
+        }
+
         /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         let query: any = supabase
             .from('exams')
-            .select('*', { count: 'exact' })
+            .select('*, exam_sets (id, name, slug)', { count: 'exact' })
             .eq('source', 'catalog')
             .eq('is_published', true);
 
         // Shared with the WhatsApp bot, so the shop and the chat cannot end up
         // disagreeing about which papers match a request.
         query = applyPaperFilters(query, {
-            level, grade, subject, subjectAliases, examType, kind, term, year, price, search,
+            level, grade, subject, subjectAliases, examType, kind, term, year, setIds, price, search,
         });
 
         switch (sort) {
@@ -91,7 +107,7 @@ export async function GET(req: NextRequest) {
         // at catalog scale and keeps the rail honest about empty options.
         const { data: facetRows } = await supabase
             .from('exams')
-            .select('level_slug, exam_type, subject')
+            .select('level_slug, exam_type, subject, exam_sets (name, slug)')
             .eq('source', 'catalog')
             .eq('is_published', true)
             .limit(5000);
@@ -100,11 +116,21 @@ export async function GET(req: NextRequest) {
             levels: {} as Record<string, number>,
             examTypes: {} as Record<string, number>,
             subjects: {} as Record<string, number>,
+            // Keyed by slug and carrying the name, because the rail shows the
+            // set's own wording and filters by its slug.
+            sets: {} as Record<string, { name: string; count: number }>,
         };
         for (const row of facetRows || []) {
             if (row.level_slug) facets.levels[row.level_slug] = (facets.levels[row.level_slug] ?? 0) + 1;
             if (row.exam_type) facets.examTypes[row.exam_type] = (facets.examTypes[row.exam_type] ?? 0) + 1;
             if (row.subject) facets.subjects[row.subject] = (facets.subjects[row.subject] ?? 0) + 1;
+
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const set = (row as any).exam_sets;
+            if (set?.slug) {
+                const seen = facets.sets[set.slug];
+                facets.sets[set.slug] = { name: set.name, count: (seen?.count ?? 0) + 1 };
+            }
         }
 
         return NextResponse.json({
@@ -161,6 +187,7 @@ export async function POST(req: NextRequest) {
             total_marks: Number(body.total_marks) || 0,
             time_limit: body.time_limit ?? null,
             institution: body.institution ?? null,
+            set_id: body.set_id ?? null,
             question_ids: body.question_ids ?? [],
             question_count: (body.question_ids ?? []).length,
             price_cents: priceCents,

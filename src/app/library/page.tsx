@@ -171,11 +171,7 @@ export default function LibraryPage() {
                     <div className="mt-6">
                         {tab === 'purchased' &&
                             (data?.purchased.length ? (
-                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                                    {data.purchased.map((paper) => (
-                                        <OwnedCard key={paper.id} paper={paper} onDownload={download} />
-                                    ))}
-                                </div>
+                                <PurchasedPapers papers={data.purchased} onDownload={download} />
                             ) : (
                                 <Empty
                                     title="No papers yet"
@@ -248,6 +244,130 @@ export default function LibraryPage() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+/**
+ * Bought papers, grouped back into the sittings they were bought as.
+ *
+ * A teacher who buys a school's twelve-subject mock got one thing, and a flat
+ * grid of twelve cards is the product forgetting that between the checkout and
+ * the library. Sets come first with their own heading and a single download;
+ * anything ungrouped follows underneath, which is most of the library for most
+ * people and stays exactly as it was.
+ *
+ * "Download all" is the existing /api/packs route — the same one /teach uses. It
+ * checks `can_download_paper` for every id it is given, so grouping the buttons
+ * grants nothing that clicking each card in turn would not.
+ */
+function PurchasedPapers({
+    papers,
+    onDownload,
+}: {
+    papers: (PaperListing & { entitlement_kind?: string })[];
+    onDownload: (paper: PaperListing, asset: 'paper' | 'scheme') => void;
+}) {
+    const [packing, setPacking] = useState<string | null>(null);
+
+    const grouped = new Map<string, { name: string; slug?: string; papers: PaperListing[] }>();
+    const loose: PaperListing[] = [];
+
+    for (const paper of papers) {
+        if (!paper.set_id || !paper.set_name) {
+            loose.push(paper);
+            continue;
+        }
+        const bucket = grouped.get(paper.set_id) ?? {
+            name: paper.set_name,
+            slug: paper.set_slug,
+            papers: [],
+        };
+        bucket.papers.push(paper);
+        grouped.set(paper.set_id, bucket);
+    }
+
+    const downloadAll = async (setId: string, group: { name: string; papers: PaperListing[] }) => {
+        setPacking(setId);
+        try {
+            const res = await fetch('/api/packs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ exam_ids: group.papers.map((p) => p.id), asset: 'both' }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Could not build the download');
+                return;
+            }
+            // Spaced out rather than fired at once: a browser silently drops a
+            // burst of simultaneous downloads, and the pack route's own comment
+            // says it hands back independent links precisely so the client can
+            // pace them.
+            for (const [i, item] of (data.items ?? []).entries()) {
+                setTimeout(() => window.open(item.url, '_blank'), i * 400);
+            }
+            if (data.refused?.length) {
+                toast.warning(`${data.refused.length} file(s) are not yours to download`);
+            }
+        } catch {
+            toast.error('Could not build the download');
+        } finally {
+            setPacking(null);
+        }
+    };
+
+    return (
+        <div className="space-y-8">
+            {[...grouped.entries()].map(([setId, group]) => (
+                <section key={setId} aria-labelledby={`set-${setId}`}>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <h2 id={`set-${setId}`} className="overline">
+                            {group.slug ? (
+                                <Link href={`/sets/${group.slug}`} className="hover:text-primary">
+                                    {group.name}
+                                </Link>
+                            ) : (
+                                group.name
+                            )}{' '}
+                            · {group.papers.length}
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={() => downloadAll(setId, group)}
+                            disabled={packing === setId}
+                            className="btn-outline btn-sm"
+                        >
+                            {packing === setId ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <Download className="h-3.5 w-3.5" />
+                            )}
+                            Download all
+                        </button>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                        {group.papers.map((paper) => (
+                            <OwnedCard key={paper.id} paper={paper} onDownload={onDownload} />
+                        ))}
+                    </div>
+                </section>
+            ))}
+
+            {loose.length > 0 && (
+                <section aria-labelledby="loose-papers">
+                    {grouped.size > 0 && (
+                        <h2 id="loose-papers" className="overline mb-3">
+                            Other papers · {loose.length}
+                        </h2>
+                    )}
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                        {loose.map((paper) => (
+                            <OwnedCard key={paper.id} paper={paper} onDownload={onDownload} />
+                        ))}
+                    </div>
+                </section>
+            )}
         </div>
     );
 }

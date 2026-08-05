@@ -29,6 +29,13 @@ export function toListing(row: any): PaperListing {
         question_count: row.question_count ?? 0,
         time_limit: row.time_limit ?? undefined,
         institution: row.institution ?? undefined,
+        // The sitting, when the row was read with the `exam_sets` embed. Rows
+        // selected without it keep `set_id` and simply have no name to show,
+        // which is why every consumer treats `set_name` as optional rather than
+        // inferring "no set" from its absence.
+        set_id: row.set_id ?? undefined,
+        set_name: row.exam_sets?.name ?? undefined,
+        set_slug: row.exam_sets?.slug ?? undefined,
         price_cents: row.price_cents ?? 0,
         currency: row.currency ?? 'KES',
         is_published: row.is_published ?? false,

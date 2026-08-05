@@ -22,6 +22,8 @@ export default function PaperDetailPage() {
     const [related, setRelated] = useState<PaperListing[]>([]);
     /** True when the strip really is the same subject, which the heading claims. */
     const [relatedBySubject, setRelatedBySubject] = useState(false);
+    /** The rest of the sitting this paper came from, if it came from one. */
+    const [siblings, setSiblings] = useState<PaperListing[]>([]);
     const [loading, setLoading] = useState(true);
     const [downloading, setDownloading] = useState<'paper' | 'scheme' | null>(null);
 
@@ -106,6 +108,55 @@ export default function PaperDetailPage() {
             cancelled = true;
         };
     }, [paper]);
+
+    /*
+     * The rest of the sitting.
+     *
+     * This is the question "More like this" was always standing in for and could
+     * never actually answer — it guessed at siblings from subject and level,
+     * which is how a Grade 9 maths paper suggested a different school's Grade 9
+     * maths paper and called it related. When a paper belongs to a set, the
+     * siblings are known rather than inferred, and the strip below says so.
+     */
+    useEffect(() => {
+        if (!paper?.set_slug) {
+            setSiblings([]);
+            return;
+        }
+        let cancelled = false;
+
+        fetch(`/api/sets/${paper.set_slug}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+                if (cancelled || !data) return;
+                setSiblings((data.papers ?? []).filter((p: PaperListing) => p.id !== paper.id));
+            })
+            .catch(() => {
+                /* the paper still sells without its siblings listed */
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [paper?.set_slug, paper?.id]);
+
+    const outstandingSiblings = siblings.filter((p) => !p.owned && !cart.has(p.id));
+
+    // The cross-sell asks the catalog for papers matching subject and level,
+    // which is exactly the query the rest of a sitting also satisfies — so
+    // without this the same three papers appear twice on one page, once as
+    // "also in this set" and once as "you might like".
+    const siblingIds = new Set(siblings.map((p) => p.id));
+    const crossSell = related.filter((p) => !siblingIds.has(p.id));
+
+    const addRestOfSet = () => {
+        const added = cart.addAll(siblings);
+        if (added === 0) {
+            toast('The rest of this set is already in your cart or your library');
+            return;
+        }
+        toast.success(`Added ${added} more paper${added === 1 ? '' : 's'} from this set`);
+    };
 
     const download = async (asset: 'paper' | 'scheme', target?: PaperListing) => {
         const subject = target ?? paper;
@@ -197,7 +248,16 @@ export default function PaperDetailPage() {
                 <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
                     {/* Main */}
                     <div>
-                        <p className="overline mb-3">{examTypeName(paper.exam_type)}</p>
+                        {paper.set_slug && paper.set_name ? (
+                            <Link
+                                href={`/sets/${paper.set_slug}`}
+                                className="overline mb-3 inline-block hover:text-primary"
+                            >
+                                {paper.set_name}
+                            </Link>
+                        ) : (
+                            <p className="overline mb-3">{examTypeName(paper.exam_type)}</p>
+                        )}
                         <h1 className="display-2">{paper.title}</h1>
                         <p className="meta mt-3">
                             {[paper.subject, paper.grade_label || level?.name, term?.name, paper.year, paper.paper_number]
@@ -340,8 +400,53 @@ export default function PaperDetailPage() {
                     </aside>
                 </div>
 
-                {/* More like this */}
-                {related.length > 0 && (
+                {/* The rest of the sitting. Known siblings, so it comes first
+                    and the cross-sell strip below it becomes the fallback it
+                    always should have been. */}
+                {siblings.length > 0 && (
+                    <section className="mt-16 border-t border-border pt-8" aria-labelledby="set-heading">
+                        <div className="rule-heading mb-5">
+                            <h2 id="set-heading" className="overline">
+                                Also in {paper.set_name}
+                            </h2>
+                        </div>
+
+                        <div className="mb-5 flex flex-wrap items-center gap-3">
+                            <Link href={`/sets/${paper.set_slug}`} className="btn-outline btn-sm">
+                                See the whole set ({siblings.length + 1})
+                            </Link>
+                            {outstandingSiblings.length > 0 && (
+                                <button type="button" onClick={addRestOfSet} className="btn-primary btn-sm">
+                                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                                    Add the other {outstandingSiblings.length} to cart
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {siblings.slice(0, 3).map((other, i) => (
+                                <PaperCard
+                                    key={other.id}
+                                    paper={other}
+                                    index={i}
+                                    inCart={cart.has(other.id)}
+                                    onToggleCart={(p) => {
+                                        const added = cart.toggle(p);
+                                        toast.success(added ? 'Added to your cart' : 'Removed from cart');
+                                    }}
+                                    onDownload={(other) => download('paper', other)}
+                                    hideSet
+                                />
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* More like this. Deliberately below the set, and with the set
+                    subtracted from it: a paper that has just been listed as
+                    part of this sitting must not appear again three inches
+                    lower under a heading that calls it a suggestion. */}
+                {crossSell.length > 0 && (
                     <section className="mt-16 border-t border-border pt-8" aria-labelledby="related-heading">
                         <div className="rule-heading mb-5">
                             <h2 id="related-heading" className="overline">
@@ -351,7 +456,7 @@ export default function PaperDetailPage() {
                             </h2>
                         </div>
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                            {related.map((other, i) => (
+                            {crossSell.map((other, i) => (
                                 <PaperCard
                                     key={other.id}
                                     paper={other}

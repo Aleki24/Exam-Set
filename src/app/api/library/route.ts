@@ -16,7 +16,10 @@ export async function GET() {
         const [{ data: entitlements }, { data: mySets }, { data: orders }] = await Promise.all([
             supabase
                 .from('entitlements')
-                .select('kind, granted_at, exams(*)')
+                // The set comes through the nested paper so the library can
+                // group a twelve-subject purchase back into the sitting it was
+                // bought as, instead of twelve cards in no particular order.
+                .select('kind, granted_at, exams(*, exam_sets (id, name, slug))')
                 .eq('user_id', userId)
                 .order('granted_at', { ascending: false }),
             supabase

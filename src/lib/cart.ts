@@ -99,6 +99,29 @@ export function useCart() {
         return true;
     }, []);
 
+    /**
+     * Add a whole sitting at once.
+     *
+     * One write rather than one per paper: twelve sequential `add` calls are
+     * twelve storage writes and twelve change events, and the last one wins on
+     * a slow phone — which is how "add all 12" quietly adds one.
+     *
+     * Papers already in the cart, and papers the caller already owns, are
+     * skipped rather than duplicated. Returns how many were actually added, so
+     * the caller can say "added 9" when three were already there instead of
+     * claiming twelve.
+     */
+    const addAll = useCallback((papers: PaperListing[]) => {
+        const current = read();
+        const present = new Set(current.map((i) => i.exam_id));
+        const fresh = papers
+            .filter((p) => !p.owned && !present.has(p.id))
+            .map(toCartItem);
+        if (fresh.length === 0) return 0;
+        write([...current, ...fresh]);
+        return fresh.length;
+    }, []);
+
     const remove = useCallback((examId: string) => {
         write(read().filter((i) => i.exam_id !== examId));
     }, []);
@@ -123,6 +146,7 @@ export function useCart() {
         count: items.length,
         totals: cartTotals(items),
         add,
+        addAll,
         remove,
         toggle,
         clear,

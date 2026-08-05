@@ -62,6 +62,7 @@ export default function ShopPage() {
             if (filters.exam_type) params.set('exam_type', filters.exam_type);
             if (filters.term) params.set('term', filters.term);
             if (filters.year) params.set('year', String(filters.year));
+            if (filters.set) params.set('set', filters.set);
             if (filters.price) params.set('price', filters.price);
             if (filters.search) params.set('search', filters.search);
             if (filters.sort) params.set('sort', filters.sort);
@@ -238,6 +239,7 @@ export default function ShopPage() {
 
                     <AppliedFilters
                         filters={filters}
+                        facets={response?.facets}
                         onChange={patchFilters}
                         onClearSearch={() => setSearchDraft('')}
                         onReset={resetFilters}
@@ -367,11 +369,13 @@ export default function ShopPage() {
  */
 function AppliedFilters({
     filters,
+    facets,
     onChange,
     onClearSearch,
     onReset,
 }: {
     filters: PaperFilters;
+    facets?: PaperListResponse['facets'];
     onChange: (patch: Partial<PaperFilters>) => void;
     onClearSearch: () => void;
     onReset: () => void;
@@ -385,6 +389,12 @@ function AppliedFilters({
     if (filters.grade) applied.push({ label: filters.grade, clear: { grade: undefined } });
     if (filters.exam_type) applied.push({ label: examTypeName(filters.exam_type), clear: { exam_type: undefined } });
     if (filters.subject) applied.push({ label: filters.subject, clear: { subject: undefined } });
+    if (filters.set) {
+        // Named from the facets rather than the slug: a chip reading
+        // "kabras-mock-end-term-2-2025" is a URL, not a filter somebody set.
+        const named = Object.entries(facets?.sets ?? {}).find(([slug]) => slug === filters.set);
+        applied.push({ label: named?.[1].name ?? filters.set, clear: { set: undefined } });
+    }
     if (filters.term) applied.push({ label: filters.term, clear: { term: undefined } });
     if (filters.year) applied.push({ label: String(filters.year), clear: { year: undefined } });
     if (filters.price) {

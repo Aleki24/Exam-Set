@@ -38,6 +38,12 @@ export default function FilterRail({ filters, facets, subjects, onChange }: Filt
 
     const activeType = filters.exam_type ? EXAM_TYPES.find((t) => t.slug === filters.exam_type) : undefined;
 
+    // Biggest sittings first, then alphabetical. A set of one is real stock and
+    // is listed, but it should not sit above a school's twelve-subject mock.
+    const setOptions = Object.entries(facets?.sets ?? {})
+        .map(([slug, s]) => ({ slug, name: s.name, count: s.count }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
     return (
         <div className="space-y-1">
             {/* Grade — only meaningful once a level is picked. */}
@@ -119,6 +125,35 @@ export default function FilterRail({ filters, facets, subjects, onChange }: Filt
                                 <option key={subject} value={subject}>
                                     {subject}
                                     {facets?.subjects?.[subject] ? ` (${facets.subjects[subject]})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </Disclosure>
+            )}
+
+            {/* Exam set — one school's sitting.
+                Folded, and absent entirely until sets exist, for the reason the
+                comment at the top of this file gives: every group added here is
+                one more thing between a teacher and the grid. It earns its place
+                only once there is stock organised this way. */}
+            {setOptions.length > 0 && (
+                <Disclosure
+                    label="Exam set"
+                    value={setOptions.find((s) => s.slug === filters.set)?.name}
+                    defaultOpen={Boolean(filters.set)}
+                >
+                    <div className="pb-2">
+                        <select
+                            className="field"
+                            value={filters.set || ''}
+                            onChange={(e) => onChange({ set: e.target.value || undefined })}
+                            aria-label="Exam set"
+                        >
+                            <option value="">Any set</option>
+                            {setOptions.map((s) => (
+                                <option key={s.slug} value={s.slug}>
+                                    {s.name} ({s.count})
                                 </option>
                             ))}
                         </select>

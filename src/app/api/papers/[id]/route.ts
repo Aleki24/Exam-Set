@@ -13,7 +13,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         const { data, error } = await supabase
             .from('exams')
-            .select('*')
+            // The set is embedded rather than fetched separately so the detail
+            // page can name the sitting in its first render, without a second
+            // round trip that would land after the heading is already on screen.
+            .select('*, exam_sets (id, name, slug)')
             .eq(isUuid ? 'id' : 'slug', id)
             .maybeSingle();
 
@@ -65,6 +68,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             'paper_number',
             'time_limit',
             'institution',
+            // Moving a paper between sittings, or out of one. Null is a valid
+            // value here — ungrouping has to be as easy as grouping, or a paper
+            // filed in the wrong set can never be got out again.
+            'set_id',
             'marking_scheme_url',
             'has_marking_scheme',
             'preview_pages',

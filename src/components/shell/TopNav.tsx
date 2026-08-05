@@ -26,9 +26,22 @@ import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
  * rail opening with twenty-six exam types is a wall to them.
  */
 const PRIMARY_LINKS = [
-    { href: '/', label: 'Exam papers', icon: FileText, match: (p: string) => p === '/' || p.startsWith('/papers') },
+    {
+        href: '/',
+        label: 'Exam papers',
+        icon: FileText,
+        // `/sets/...` is a sitting in the shop, not the setter. It belongs here.
+        match: (p: string) => p === '/' || p.startsWith('/papers') || p.startsWith('/sets'),
+    },
     { href: '/learn', label: 'Library', icon: BookOpen, match: (p: string) => p.startsWith('/learn') },
-    { href: '/set', label: 'Set an exam', icon: PenSquare, match: (p: string) => p.startsWith('/set') },
+    {
+        href: '/set',
+        label: 'Set an exam',
+        icon: PenSquare,
+        // Exactly `/set` and its children — not `/sets`, which is a prefix match
+        // away and would light up the setter while somebody browses the shop.
+        match: (p: string) => p === '/set' || p.startsWith('/set/'),
+    },
 ];
 
 export default function TopNav() {

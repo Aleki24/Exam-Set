@@ -37,10 +37,28 @@ export interface ParsedQuery {
     examType?: ExamTypeSlug;
     term?: TermSlug;
     year?: number;
+    /**
+     * The sittings named in the request — see lib/examSets.ts.
+     *
+     * A list because a school name on its own ("kabras") legitimately means
+     * every sitting that school has published, while a full set name identifies
+     * one. Populated only from sets that actually exist: this parser does not
+     * invent a school any more than it invents a subject.
+     */
+    setIds?: string[];
+    /** The set or school name as matched, for echoing back. */
+    setLabel?: string;
     /** Whatever was left after the known words were consumed. */
     leftover: string;
     /** True when nothing at all was recognised. */
     empty: boolean;
+}
+
+/** The subset of an exam set this parser needs. Mirrors lib/examSets.ts. */
+export interface KnownSet {
+    id: string;
+    name: string;
+    institution?: string | null;
 }
 
 // ----------------------------------------------------------------------------
@@ -164,15 +182,48 @@ const STOP_WORDS = new Set([
  * `knownSubjects` comes from the database so the subject list stays in step with
  * what is actually stocked. Passing nothing still works — the aliases above
  * cover the common cases.
+ *
+ * `knownSets` does the same job for school sittings. It has to come from the
+ * database for the same reason and one more: a school name is not a closed
+ * vocabulary the way grades and terms are, so the only safe way to recognise
+ * "Kabras" is to check whether a Kabras sitting exists. Without this list the
+ * word lands in `leftover` and is thrown away, which is what happened to every
+ * school name anybody typed before sets existed.
  */
-export function parsePaperQuery(input: string, knownSubjects: string[] = []): ParsedQuery {
-    const text = normalise(input);
+export function parsePaperQuery(
+    input: string,
+    knownSubjects: string[] = [],
+    knownSets: KnownSet[] = []
+): ParsedQuery {
+    let text = normalise(input);
     if (!text) return { leftover: '', empty: true };
 
     const result: ParsedQuery = { leftover: '', empty: true };
     // Tracks which words have been claimed, so the leftover is genuinely leftover.
     const consumed = new Set<number>();
     const words = text.split(' ');
+
+    // --- Exam set -----------------------------------------------------------
+    //
+    // Runs first, and what it matches is then removed from everything that
+    // follows.
+    //
+    // A set name contains the other dimensions: "Kabras Mock End Term 2 2025"
+    // has an exam type, a term and a year inside it. Leaving those words in
+    // place means the later passes read the *name* as filters and the query
+    // becomes `set = Kabras 2025 AND type = end-term AND term = 2 AND year =
+    // 2025` — filters nobody asked for, derived from a label. When the set's
+    // papers are typed `mock` rather than `end-term`, that combination matches
+    // nothing and the relaxation ladder has to unpick it.
+    //
+    // So the matched phrase is struck out and the rest of the sentence parses
+    // normally. "kabras form 4 maths term 3" still yields the school, the grade,
+    // the subject and the term, because only "kabras" was claimed.
+    matchSet(text, words, consumed, knownSets, result);
+    if (result.setIds?.length) {
+        for (const i of consumed) words[i] = '';
+        text = words.filter(Boolean).join(' ');
+    }
 
     // --- Grade / form -------------------------------------------------------
     // "form 4", "form four", "grade 9", "f4", "g9", "pp2"
@@ -313,9 +364,90 @@ export function parsePaperQuery(input: string, knownSubjects: string[] = []): Pa
         .join(' ')
         .trim();
 
-    result.empty = !result.grade && !result.level && !result.subject && !result.examType && !result.term && !result.year;
+    result.empty =
+        !result.grade &&
+        !result.level &&
+        !result.subject &&
+        !result.examType &&
+        !result.term &&
+        !result.year &&
+        !result.setIds?.length;
 
     return result;
+}
+
+/**
+ * Finds the sitting somebody named, and claims the words that named it.
+ *
+ * Two things can match, and the more specific one wins:
+ *
+ *   the set's own name   "kabras mock end term 2 2025" -> that one sitting
+ *   the school name      "kabras"                      -> all its sittings
+ *
+ * Full names are tried first and longest-first, the same precedence trick that
+ * makes "county mock" beat "mock" in the exam-type pass. Falling straight to the
+ * school name would answer a request for one specific sitting with every paper
+ * the school has ever published, which reads as the bot ignoring half the
+ * sentence.
+ *
+ * Only whole words match. Without the word boundary "cre" finds "Sacred Heart"
+ * and a subject request becomes a school request.
+ */
+function matchSet(
+    text: string,
+    words: string[],
+    consumed: Set<number>,
+    knownSets: KnownSet[],
+    result: ParsedQuery
+): void {
+    if (knownSets.length === 0) return;
+
+    const claim = (phrase: string) => {
+        for (const word of normalise(phrase).split(' ')) {
+            const i = words.indexOf(word);
+            if (i >= 0) consumed.add(i);
+        }
+    };
+
+    const contains = (haystack: string, needle: string) => {
+        const safe = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        return new RegExp(`\\b${safe}\\b`).test(haystack);
+    };
+
+    // Exact set names, longest first.
+    const byName = [...knownSets]
+        .filter((s) => s.name)
+        .sort((a, b) => b.name.length - a.name.length);
+
+    for (const set of byName) {
+        const name = normalise(set.name);
+        if (name && contains(text, name)) {
+            result.setIds = [set.id];
+            result.setLabel = set.name;
+            claim(set.name);
+            return;
+        }
+    }
+
+    // Then the school, which may own several sittings.
+    const institutions = new Map<string, { label: string; ids: string[] }>();
+    for (const set of knownSets) {
+        const key = normalise(set.institution ?? '');
+        if (!key) continue;
+        const seen = institutions.get(key) ?? { label: set.institution as string, ids: [] };
+        seen.ids.push(set.id);
+        institutions.set(key, seen);
+    }
+
+    const byInstitution = [...institutions.entries()].sort((a, b) => b[0].length - a[0].length);
+    for (const [key, { label, ids }] of byInstitution) {
+        if (contains(text, key)) {
+            result.setIds = ids;
+            result.setLabel = label;
+            claim(label);
+            return;
+        }
+    }
 }
 
 /**
@@ -324,6 +456,10 @@ export function parsePaperQuery(input: string, knownSubjects: string[] = []): Pa
  */
 export function describeQuery(q: ParsedQuery): string {
     const parts = [
+        // First, because it is the most specific thing anybody said and the one
+        // they will check hardest: somebody who asked for Kabras needs to see
+        // "Kabras" come back before they trust the rest of the line.
+        q.setLabel,
         q.grade,
         q.subject,
         q.examType ? EXAM_TYPES.find((t) => t.slug === q.examType)?.name : null,

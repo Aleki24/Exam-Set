@@ -70,6 +70,24 @@ set-book guide). A Grade 9 end-term exam is `kind=termly-exam` +
 `exam_type=end-term`. A Grade 9 scheme of work has a kind and no exam type at
 all, which is exactly why one field could never carry both.
 
+### The fourth axis: which sitting a paper came from
+
+Level, subject and kind say what a paper *is*. None of them says where it came
+from — and "the Kabras Form 4 mock" is how a teacher asks for one, naming a
+school and an occasion rather than a taxonomy.
+
+`institution` was the vestigial version of this: free text, searched but never
+filtered, so twelve subjects from one sitting shared a string and nothing else.
+`exam_sets` makes it a real thing — a named row, with `exams.set_id` pointing at
+it — and the reasoning is in `supabase/migrations/038_exam_sets.sql`.
+
+The axis is deliberately weaker than the other three. It is **optional**: most
+stock belongs to no sitting and browses exactly as it did. It is **not
+sellable**: a set has no price, no entitlement and no download route, so §1's
+one-paywall rule survives untouched — "buy the whole set" adds the members to
+the cart and the existing multi-item discount applies. And it is **one per
+paper**, because a paper was sat once.
+
 Kinds are grouped into four families, and the grouping is what the UI renders:
 
 | Family | Kinds | Who it is for |
@@ -96,6 +114,7 @@ either wading through the other's material.
 /learn/[level]                 One level: subjects, kinds, what is new
 /learn/[level]/[subject]       One subject: resources grouped by kind
 /papers/[id]                   Resource detail + download (exists, extended)
+/sets/[slug]                   One sitting: every subject, one "add all"
 
 /home                          Arranged around whoever is signed in
 /account                       Who you are: type, level, subjects
@@ -195,8 +214,9 @@ guardian_learner_subjects(). Raw sessions and the progress views stay shut.
 | **Practise-this-topic from weakest strands** | **Built** |
 | **Assignments with due dates** | **Built** |
 | **CBA/SBA offline score capture** | **Built** |
+| **Exam sets — one school's sitting, grouped** | **Built** |
 
-Migrations 023–032. Ten verification harnesses under `npm run verify`.
+Migrations 023–038. Eleven verification harnesses under `npm run verify`.
 
 ### The rules that recur
 
@@ -240,6 +260,8 @@ does differently. Migration 029 has the reasoning.
 | **Recommended study plan for parents** | Needs the topic breakdown turned into advice. Advice a parent acts on should not come from a rule of thumb invented in an afternoon. |
 | **Educator-verified badge** | Needs somebody to perform the review it claims. |
 | **"Most downloaded this week"** | Needs a downloads-by-day table. |
+| **Sets in the WhatsApp bot beyond search** | The bot recognises a set name and filters by it. It does not group its list into per-set sections (`sendList` sends one hardcoded section, `lib/whatsapp.ts`), offer a browse-the-set-then-pick-a-paper flow, or deliver a whole sitting after one payment. The last two need `rememberPending` to stop overwriting `pending.candidates` and `deliverAfterPayment` to loop rather than send one paper — both deliberate, both untouched. |
+| **A set price of its own** | Sets price as the sum of their members. A set-level price would be a second source of truth for money and a second thing entitlements must reason about — see §1. |
 | **Service worker / true offline pages** | The queues survive a dropped connection; cached page shells do not. |
 | **Institution seats, school-wide CBA** | The account type exists. Seats, shared billing and a staff directory are a commerce change — and any school-wide read over children's assessment records needs designing, not adding. |
 

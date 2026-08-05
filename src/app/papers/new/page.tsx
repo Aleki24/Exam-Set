@@ -8,6 +8,16 @@ import { ArrowLeft, FileUp, Loader2, Lock, Upload, X } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { useRole } from '@/lib/roles';
 import { EXAM_TYPES, EXAM_TYPE_GROUPS, LEVELS, TERMS, catalogYears, formatPrice } from '@/lib/catalog';
+import { canSuggestSet, describeSet, suggestSetName, type ExamSetSummary, type SetFields } from '@/lib/examSets';
+
+/**
+ * Which sitting the paper being uploaded belongs to.
+ *
+ *   ''            not part of a set — the default
+ *   '<uuid>'      an existing set the uploader picked
+ *   'new'         create one, named `newSetName`
+ */
+type SetChoice = { mode: '' | 'new' | 'existing'; setId?: string; newSetName: string };
 
 /**
  * Upload a paper for sale. Admin and owner only — this is how the shop gets
@@ -42,6 +52,8 @@ export default function UploadPaperPage() {
         is_published: true,
     });
 
+    const [setChoice, setSetChoice] = useState<SetChoice>({ mode: '', newSetName: '' });
+
     useEffect(() => {
         if (ready && !signedIn) router.push('/auth/login?next=/papers/new');
     }, [ready, signedIn, router]);
@@ -71,6 +83,13 @@ export default function UploadPaperPage() {
                     total_marks: form.total_marks ? Number(form.total_marks) : 0,
                     question_count: form.question_count ? Number(form.question_count) : 0,
                     price_cents: Math.round(form.price * 100),
+                    // Exactly one of these, so the server never has to guess
+                    // whether an id and a name disagree on purpose.
+                    set_id: setChoice.mode === 'existing' ? setChoice.setId : undefined,
+                    new_set:
+                        setChoice.mode === 'new'
+                            ? setChoice.newSetName.trim() || true
+                            : undefined,
                 })
             );
 
@@ -378,6 +397,17 @@ export default function UploadPaperPage() {
                                 />
                             </div>
 
+                            <SetPicker
+                                fields={{
+                                    institution: form.institution,
+                                    exam_type: form.exam_type,
+                                    term_slug: form.term_slug,
+                                    year: form.year,
+                                }}
+                                value={setChoice}
+                                onChange={setSetChoice}
+                            />
+
                             <div>
                                 <label className="label" htmlFor="u-description">
                                     Description (optional)
@@ -452,6 +482,127 @@ export default function UploadPaperPage() {
                     </div>
                 </form>
             </div>
+        </div>
+    );
+}
+
+/**
+ * PART OF A SET
+ *
+ * A school sits one exam across a dozen subjects, and this is the only moment
+ * anybody knows that: the uploader has just typed the school, the exam type, the
+ * term and the year — the four things that name a sitting. Asking here costs one
+ * click. Asking later means an admin reconciling twelve papers by hand.
+ *
+ * The control stays hidden until there is a school name, because without one
+ * there is nothing to group by and an empty dropdown is just another field to
+ * skip past.
+ *
+ * Existing sets are offered before a new one, and the suggested name is
+ * pre-filled rather than imposed — "Kabras Mock Term 2 2025" is a reasonable
+ * guess at what a school calls its sitting, and a poor substitute for what the
+ * school actually calls it.
+ */
+function SetPicker({
+    fields,
+    value,
+    onChange,
+}: {
+    fields: SetFields;
+    value: SetChoice;
+    onChange: (next: SetChoice) => void;
+}) {
+    const [matches, setMatches] = useState<ExamSetSummary[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const institution = (fields.institution ?? '').trim();
+    const suggestion = suggestSetName(fields);
+    const available = canSuggestSet(fields);
+
+    /*
+     * Debounced, because this runs while somebody is still typing a school name
+     * and the answer for "Kabra" is not worth a request. 400ms is long enough
+     * that a normal typing speed produces one query per word, not per letter.
+     */
+    useEffect(() => {
+        if (!available) {
+            setMatches([]);
+            return;
+        }
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setLoading(true);
+            try {
+                const res = await fetch(`/api/sets?institution=${encodeURIComponent(institution)}&limit=20`);
+                const data = await res.json();
+                if (!cancelled) setMatches(res.ok ? (data.sets ?? []) : []);
+            } catch {
+                // A set list that fails to load must not block an upload. The
+                // uploader can still create a new set, and the server will match
+                // it to the existing one by fingerprint anyway.
+                if (!cancelled) setMatches([]);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        }, 400);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [institution, available]);
+
+    if (!available) return null;
+
+    return (
+        <div>
+            <label className="label" htmlFor="u-set">
+                Part of a set
+            </label>
+            <select
+                id="u-set"
+                className="field"
+                value={value.mode === 'existing' ? (value.setId ?? '') : value.mode}
+                onChange={(e) => {
+                    const picked = e.target.value;
+                    if (picked === '') onChange({ mode: '', newSetName: '' });
+                    else if (picked === 'new')
+                        onChange({ mode: 'new', newSetName: value.newSetName || suggestion });
+                    else onChange({ mode: 'existing', setId: picked, newSetName: '' });
+                }}
+            >
+                <option value="">Not part of a set</option>
+                {matches.map((s) => (
+                    <option key={s.id} value={s.id}>
+                        {s.name}
+                        {s.paper_count ? ` (${s.paper_count})` : ''}
+                    </option>
+                ))}
+                <option value="new">+ Create a new set</option>
+            </select>
+
+            {value.mode === 'new' && (
+                <input
+                    className="field mt-2"
+                    value={value.newSetName}
+                    onChange={(e) => onChange({ ...value, newSetName: e.target.value })}
+                    placeholder={suggestion}
+                    aria-label="Name for the new set"
+                />
+            )}
+
+            <p className="meta mt-1.5">
+                {loading
+                    ? 'Looking for existing sets…'
+                    : value.mode === 'existing'
+                      ? describeSet(matches.find((s) => s.id === value.setId) ?? ({} as ExamSetSummary)) ||
+                        'This paper joins that sitting.'
+                      : value.mode === 'new'
+                        ? 'Later papers from the same school, exam type, term and year will join this set automatically.'
+                        : matches.length > 0
+                          ? `${matches.length} set${matches.length === 1 ? '' : 's'} from this school already.`
+                          : 'Group this paper with the rest of the same sitting.'}
+            </p>
         </div>
     );
 }

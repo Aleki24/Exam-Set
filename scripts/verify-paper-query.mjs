@@ -165,6 +165,105 @@ section('describeQuery reads back what was understood');
 }
 
 // ---------------------------------------------------------------------------
+// EXAM SETS
+//
+// Before sets existed, a school name was silently dropped: "kabras mock end
+// term 2" parsed to a mock in term 2 and the word Kabras went into `leftover`,
+// which nothing reads. These are the cases that used to fail.
+// ---------------------------------------------------------------------------
+
+const SETS = [
+    { id: 'set-kabras-t2', name: 'Kabras Mock End Term 2 2025', institution: 'Kabras High School' },
+    { id: 'set-kabras-t1', name: 'Kabras Mock End Term 1 2025', institution: 'Kabras High School' },
+    { id: 'set-bunyore', name: 'Bunyore Girls Joint Mock 2025', institution: 'Bunyore Girls' },
+];
+
+section('The school name is no longer thrown away');
+{
+    const q = parsePaperQuery('kabras mock end term 2 2025', SUBJECTS, SETS);
+    check('set matched', JSON.stringify(q.setIds), JSON.stringify(['set-kabras-t2']));
+    check('label echoed', q.setLabel, 'Kabras Mock End Term 2 2025');
+    check('not empty', q.empty, false);
+    check('nothing left over', q.leftover, '');
+}
+
+section('A school on its own means every sitting it published');
+{
+    const q = parsePaperQuery('kabras high school maths', SUBJECTS, SETS);
+    check(
+        'both Kabras sets',
+        JSON.stringify([...(q.setIds ?? [])].sort()),
+        JSON.stringify(['set-kabras-t1', 'set-kabras-t2'])
+    );
+    check('subject still parsed', q.subject, 'Mathematics');
+    check('school consumed', q.leftover, '');
+}
+
+section('The full set name beats the school name');
+{
+    // Both match the text; the specific one must win, or asking for one sitting
+    // returns every paper the school has ever published.
+    const q = parsePaperQuery('kabras mock end term 1 2025', SUBJECTS, SETS);
+    check('one set, not two', q.setIds?.length, 1);
+    check('the right one', q.setIds?.[0], 'set-kabras-t1');
+}
+
+section('A set is never invented');
+{
+    const q = parsePaperQuery('shimba hills mock', SUBJECTS, SETS);
+    check('no set', q.setIds, undefined);
+    check('exam type still read', q.examType, 'mock');
+}
+{
+    // Word boundaries: without them "cre" matches inside a school name and a
+    // subject request quietly becomes a school request.
+    const q = parsePaperQuery('cre form 4', SUBJECTS, [
+        { id: 'set-sacred', name: 'Sacred Heart Mock 2025', institution: 'Sacred Heart' },
+    ]);
+    check('no accidental school', q.setIds, undefined);
+}
+
+section('With no sets stocked, the sentence parses as it always did');
+{
+    // "end term" wins over "mock" here because it is the longer synonym — the
+    // pre-existing behaviour, unchanged. The point of the check is that the
+    // school name is the only thing lost when there are no sets to match.
+    const q = parsePaperQuery('kabras mock end term 2', SUBJECTS, []);
+    check('no set', q.setIds, undefined);
+    check('exam type', q.examType, 'end-term');
+    check('term', q.term, 'term-2');
+    // "mock" lingers because the exam-type pass matched "end term" and claimed
+    // only those words — pre-existing, and harmless since nothing reads
+    // leftover. The school name landing here is the loss this feature undoes.
+    check('school falls to leftover', q.leftover, 'kabras mock');
+}
+
+section('A matched set name is not also read as filters');
+{
+    // The set name contains "mock", "end term 2" and "2025". None of them
+    // should survive as filters: they describe the set, and the set is already
+    // the filter.
+    const q = parsePaperQuery('kabras mock end term 2 2025', SUBJECTS, SETS);
+    check('no exam type', q.examType, undefined);
+    check('no term', q.term, undefined);
+    check('no year', q.year, undefined);
+}
+{
+    // But a dimension the person added themselves must survive.
+    const q = parsePaperQuery('kabras high school form 4 maths term 3', SUBJECTS, SETS);
+    check('school matched', q.setIds?.length, 2);
+    check('grade kept', q.grade, 'Form 4');
+    check('subject kept', q.subject, 'Mathematics');
+    check('term kept', q.term, 'term-3');
+}
+
+section('describeQuery leads with the sitting');
+{
+    const q = parsePaperQuery('kabras mock end term 2 2025 mathematics', SUBJECTS, SETS);
+    check('summary', describeQuery(q), 'Kabras Mock End Term 2 2025 · Mathematics');
+}
+
+// ---------------------------------------------------------------------------
 
 console.log(`\n${failures === 0 ? 'All' : `${checks - failures}/${checks}`} query-parser checks passed.`);
 if (failures > 0) {

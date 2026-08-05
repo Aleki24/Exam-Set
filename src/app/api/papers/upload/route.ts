@@ -4,6 +4,13 @@ import { putObject, storageUnavailableReason } from '@/utils/storage';
 import { EXAM_TYPE_BY_SLUG, LEVEL_BY_SLUG } from '@/lib/catalog';
 import { toListing } from '@/lib/paperMapper';
 import { requireAdmin } from '@/utils/auth/guards';
+import {
+    forgetStockedSets,
+    setFingerprint,
+    setSlugStem,
+    suggestSetName,
+    type SetFields,
+} from '@/lib/examSets';
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB — comfortably more than any paper
 const ALLOWED = new Set(['application/pdf']);
@@ -86,6 +93,17 @@ export async function POST(req: NextRequest) {
         const examType = EXAM_TYPE_BY_SLUG[meta.exam_type]?.slug ?? 'past-paper';
         const level = LEVEL_BY_SLUG[meta.level_slug]?.slug ?? null;
 
+        // The sitting this paper belongs to. Resolved before the insert so a
+        // paper is never written ungrouped and then patched: a set that half
+        // exists is how the second subject of a sitting ends up in a set of one.
+        const setId = await resolveSetId(supabase, actor.id, meta, {
+            institution: meta.institution || null,
+            exam_type: examType,
+            term_slug: meta.term_slug || null,
+            year: meta.year ? Number(meta.year) : new Date().getFullYear(),
+            level_slug: level,
+        });
+
         const row = {
             title: String(meta.title).slice(0, 255),
             subject: String(meta.subject).slice(0, 100),
@@ -102,6 +120,7 @@ export async function POST(req: NextRequest) {
             question_count: Number(meta.question_count) || 0,
             time_limit: meta.time_limit || null,
             institution: meta.institution || null,
+            set_id: setId,
             price_cents: Math.max(0, Math.round(Number(meta.price_cents) || 0)),
             currency: 'KES',
             is_published: meta.is_published !== false,
@@ -138,6 +157,90 @@ function slugify(value: string): string {
         .replace(/^-|-$/g, '')
         .slice(0, 120);
 }
+
+/**
+ * The set this upload belongs to: the one the uploader picked, the one that
+ * already matches, a new one, or none.
+ *
+ * Three inputs, in precedence order, because they mean different things:
+ *
+ *   meta.set_id      the uploader chose an existing set from the list. An
+ *                    explicit choice, so it is honoured without re-deriving it
+ *                    — a school might run two sittings that fingerprint alike.
+ *   meta.new_set     the uploader asked for a new set, and may have edited the
+ *                    suggested name. Still checked against the fingerprint
+ *                    first, so twelve subjects uploaded one after another join
+ *                    one set rather than making twelve.
+ *   neither          ungrouped. The default, and it stays the default: a paper
+ *                    with a school name is not automatically a sitting, because
+ *                    inventing sets nobody asked for fills the shop with sets
+ *                    of one.
+ *
+ * A failure here never fails the upload. The paper is the thing being stocked;
+ * losing its grouping is a nuisance an admin can fix with a PATCH, while losing
+ * the upload means re-uploading a 20 MB PDF over a Kenyan mobile connection.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function resolveSetId(
+    supabase: any,
+    actorId: string,
+    meta: any,
+    fields: SetFields
+): Promise<string | null> {
+    try {
+        if (meta.set_id) {
+            const { data } = await supabase
+                .from('exam_sets')
+                .select('id')
+                .eq('id', meta.set_id)
+                .maybeSingle();
+            if (data) return data.id;
+        }
+
+        if (!meta.new_set || !fields.institution) return null;
+
+        const wanted = setFingerprint(fields);
+        const { data: candidates } = await supabase
+            .from('exam_sets')
+            .select('id, institution, exam_type, term_slug, year')
+            .ilike('institution', fields.institution);
+
+        const match = (candidates ?? []).find((row: any) => setFingerprint(row) === wanted);
+        if (match) return match.id;
+
+        const name = (
+            typeof meta.new_set === 'string' && meta.new_set.trim()
+                ? meta.new_set.trim()
+                : suggestSetName(fields)
+        ).slice(0, 160);
+
+        const stem = setSlugStem(name);
+        const { data: taken } = await supabase.from('exam_sets').select('slug').like('slug', `${stem}%`);
+        const used = new Set((taken ?? []).map((r: { slug: string }) => r.slug));
+        let slug = stem;
+        for (let n = 2; used.has(slug); n++) slug = `${stem}-${n}`;
+
+        const { data: created, error } = await supabase
+            .from('exam_sets')
+            .insert({ ...fields, name, slug, created_by: actorId })
+            .select('id')
+            .single();
+
+        if (error) {
+            console.error('set create during upload failed:', error.message);
+            return null;
+        }
+
+        // So the WhatsApp parser can match the new set's name on the very next
+        // message rather than after the cache expires.
+        forgetStockedSets();
+        return created.id;
+    } catch (err) {
+        console.error('resolveSetId failed:', err instanceof Error ? err.message : err);
+        return null;
+    }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 async function uniqueSlug(supabase: any, base: string): Promise<string> {

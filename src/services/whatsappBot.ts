@@ -25,6 +25,7 @@ import {
 import { createAdminClient } from '@/utils/supabase/admin';
 import { normalisePhone } from '@/lib/mpesa';
 import { formatPrice, examTypeName } from '@/lib/catalog';
+import { stockedSets } from '@/lib/examSets';
 import { durationLabel } from '@/lib/plans';
 import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
 import { ensurePaperFile, paperFilename } from './paperFiles';
@@ -154,8 +155,10 @@ async function route(
 // ============================================================================
 
 async function search(config: WhatsAppConfig, admin: any, phone: string, text: string): Promise<void> {
-    const subjects = await stockedSubjects(admin);
-    const parsed = parsePaperQuery(text, subjects);
+    const [subjects, sets] = await Promise.all([stockedSubjects(admin), stockedSets(admin)]);
+    // The sets are what let "kabras mock end term 2" mean a school's sitting
+    // rather than a mock, a term and a discarded word.
+    const parsed = parsePaperQuery(text, subjects, sets);
 
     if (parsed.empty) {
         await sendText(config, phone, `I did not catch which paper you need.\n\n${HELP}`);
@@ -171,6 +174,10 @@ async function search(config: WhatsAppConfig, admin: any, phone: string, text: s
             examType: parsed.examType,
             term: parsed.term,
             year: parsed.year,
+            // Never relaxed away — see the comment on findPapersRelaxing.
+            // Somebody who named a school and gets another school's paper has
+            // been answered wrongly, not approximately.
+            setIds: parsed.setIds,
         },
         10
     );
@@ -578,15 +585,49 @@ async function isRateLimited(admin: any, phone: string, session: any): Promise<b
 // PRESENTATION
 // ============================================================================
 
-/** Fits a list row: Meta truncates titles at 24 characters. */
-function shortTitle(paper: any): string {
-    const parts = [paper.grade_label, paper.subject].filter(Boolean).join(' ');
-    return parts || paper.title;
+/**
+ * Fits a list row: Meta truncates titles at 24 characters.
+ *
+ * The paper number is included because a sitting is where two rows most easily
+ * become indistinguishable — "Form 4 Mathematics" twice, one of them Paper 1
+ * and one of them Paper 2, with nothing on screen to tell them apart and a PDF
+ * arriving either way.
+ */
+export function shortTitle(paper: any): string {
+    const head = [paper.grade_label, paper.subject].filter(Boolean).join(' ') || paper.title || '';
+    const suffix = paperNumberLabel(paper.paper_number);
+    if (!suffix) return head;
+
+    /*
+     * The paper number is trimmed last, never first.
+     *
+     * Meta cuts a list title at 24 characters, and "Form 4 Integrated Science
+     * P1" is 28 — so appending the number naively loses the number and leaves
+     * two rows reading "Form 4 Integrated Scien…", which is the exact problem
+     * the number was added to solve. Shortening the subject instead keeps the
+     * one character pair that tells the rows apart.
+     */
+    const room = LIST_TITLE_LIMIT - suffix.length - 1;
+    const fitted = head.length > room ? `${head.slice(0, room - 1).trimEnd()}…` : head;
+    return `${fitted} ${suffix}`;
 }
 
-function paperFacts(paper: any): string {
+/** Meta's limit for a list row title. Enforced in lib/whatsapp.ts too. */
+const LIST_TITLE_LIMIT = 24;
+
+/** "Paper 1" -> "P1", so it survives the 24-character title limit. */
+function paperNumberLabel(value?: string | null): string | null {
+    if (!value) return null;
+    const digits = /(\d+)/.exec(value)?.[1];
+    return digits ? `P${digits}` : value.slice(0, 4);
+}
+
+export function paperFacts(paper: any): string {
     return [
-        paper.exam_type ? examTypeName(paper.exam_type) : null,
+        // The sitting first: in a list of one school's mock it is the only
+        // thing that distinguishes these papers from any other school's, and
+        // the description line is where there is room to say it.
+        paper.exam_sets?.name ?? (paper.exam_type ? examTypeName(paper.exam_type) : null),
         paper.year ? String(paper.year) : null,
         paper.total_marks ? `${paper.total_marks} marks` : null,
         paper.has_marking_scheme ? '+ scheme' : null,

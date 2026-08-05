@@ -13,6 +13,11 @@ interface PaperCardProps {
     onDownload?: (paper: PaperListing) => void;
     /** Stagger index for the entry reveal. */
     index?: number;
+    /**
+     * Suppresses the set name in the eyebrow. For the set page itself, where
+     * the heading already says it and eight cards repeating it is noise.
+     */
+    hideSet?: boolean;
 }
 
 /**
@@ -23,7 +28,14 @@ interface PaperCardProps {
  * The whole card is the link to the detail page, so the only button on it is the
  * commerce action.
  */
-export default function PaperCard({ paper, inCart, onToggleCart, onDownload, index = 0 }: PaperCardProps) {
+export default function PaperCard({
+    paper,
+    inCart,
+    onToggleCart,
+    onDownload,
+    index = 0,
+    hideSet = false,
+}: PaperCardProps) {
     const level = paper.level_slug ? LEVEL_BY_SLUG[paper.level_slug] : undefined;
     const isFree = paper.price_cents === 0;
     const owned = Boolean(paper.owned);
@@ -53,7 +65,13 @@ export default function PaperCard({ paper, inCart, onToggleCart, onDownload, ind
                 <span className="sr-only">{paper.title}</span>
             </Link>
 
-            <p className="overline">{examTypeName(paper.exam_type)}</p>
+            {/* The sitting, when there is one. It replaces the exam type rather
+                than joining it: "Kabras Mock End Term 2 2025" already says the
+                exam type, and a card in a grid of thirty has room for one
+                eyebrow, not two. */}
+            <p className="overline truncate" title={paper.set_name || undefined}>
+                {(!hideSet && paper.set_name) || examTypeName(paper.exam_type)}
+            </p>
 
             <h3 className="heading-ui mt-2 transition-colors group-hover:text-primary">{paper.title}</h3>
 
