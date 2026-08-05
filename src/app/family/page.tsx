@@ -147,7 +147,7 @@ export default function FamilyPage() {
                         </h2>
                         <ul className="mt-4 space-y-3">
                             {pendingRequests.map((r) => (
-                                <li key={r.id} className="sheet flex flex-wrap items-center gap-4 p-5">
+                                <li key={r.id} className="sheet flex flex-wrap items-center gap-4 p-4">
                                     <div className="min-w-0 flex-1">
                                         <p className="heading-ui">{r.who} wants to follow your progress</p>
                                         <p className="meta mt-1 leading-relaxed">
@@ -252,7 +252,7 @@ export default function FamilyPage() {
                             {activeFollowing.map((l) => {
                                 const s = summaries[l.learnerId];
                                 return (
-                                    <li key={l.id} className="sheet p-5">
+                                    <li key={l.id} className="sheet p-4">
                                         <div className="flex flex-wrap items-center gap-4">
                                             <div className="min-w-0 flex-1">
                                                 <p className="heading-ui">{l.who}</p>

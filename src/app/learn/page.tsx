@@ -56,7 +56,7 @@ export default function LearnHubPage() {
                                 <li key={level.slug}>
                                     <Link
                                         href={`/learn/${level.slug}`}
-                                        className="sheet settle-in group flex h-full flex-col p-6"
+                                        className="sheet settle-in group flex h-full flex-col p-4"
                                         style={{ '--i': index % 12 } as React.CSSProperties}
                                     >
                                         <p className="overline">{level.curriculum}</p>
@@ -102,7 +102,7 @@ export default function LearnHubPage() {
                         {RESOURCE_FAMILIES.map((family) => {
                             const kinds = RESOURCE_KINDS.filter((k) => k.family === family);
                             return (
-                                <article key={family} className="surface p-6">
+                                <article key={family} className="surface p-5">
                                     <h3 className="heading-ui">{family}</h3>
                                     <p className="meta mt-1">{FAMILY_AUDIENCE[family]}</p>
 

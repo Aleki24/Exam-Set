@@ -177,7 +177,7 @@ function AccountForm() {
                                         type="button"
                                         onClick={() => setAccountType(type.slug)}
                                         aria-pressed={active}
-                                        className={`sheet w-full p-5 text-left transition-colors duration-200 ${
+                                        className={`sheet w-full p-4 text-left transition-colors duration-200 ${
                                             active ? 'border-primary bg-primary/[0.06]' : ''
                                         }`}
                                     >

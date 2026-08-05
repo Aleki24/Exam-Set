@@ -132,7 +132,7 @@ export default async function SharePage({ params }: Params) {
                                 <li key={item.id}>
                                     <Link
                                         href={`/papers/${item.slug || item.id}`}
-                                        className="sheet settle-in group flex h-full flex-col p-5"
+                                        className="sheet settle-in group flex h-full flex-col p-4"
                                         style={{ '--i': index % 12 } as React.CSSProperties}
                                     >
                                         <p className="overline">

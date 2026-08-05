@@ -230,7 +230,7 @@ function ResourceCard({ row, index }: { row: any; index: number }) {
     return (
         <Link
             href={href}
-            className="sheet settle-in group flex h-full flex-col p-6"
+            className="sheet settle-in group flex h-full flex-col p-4"
             style={{ '--i': index % 12 } as React.CSSProperties}
         >
             {row.exam_type && <p className="overline">{examTypeName(row.exam_type)}</p>}

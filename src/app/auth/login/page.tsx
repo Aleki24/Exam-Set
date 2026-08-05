@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { friendlyAuthError } from '@/lib/authErrors';
+import { authCallbackUrl } from '@/lib/authRedirect';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 
@@ -63,7 +64,7 @@ function LoginForm() {
             const { error: resendError } = await supabase.auth.resend({
                 type: 'signup',
                 email,
-                options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+                options: { emailRedirectTo: authCallbackUrl() },
             });
             if (resendError) {
                 setError(friendlyAuthError(resendError.message));

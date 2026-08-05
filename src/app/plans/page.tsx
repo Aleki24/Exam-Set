@@ -196,7 +196,7 @@ export default function PlansPage() {
                                     type="button"
                                     onClick={() => setChosen(plan.slug)}
                                     aria-pressed={isChosen}
-                                    className={`sheet min-w-0 p-5 text-left transition-colors ${
+                                    className={`sheet min-w-0 p-4 text-left transition-colors ${
                                         isChosen ? 'border-primary ring-1 ring-primary' : 'hover:border-primary/40'
                                     }`}
                                 >

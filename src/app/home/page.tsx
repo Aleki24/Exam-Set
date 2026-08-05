@@ -126,7 +126,7 @@ export default async function HomePage() {
                                 <li key={s.sessionId}>
                                     <Link
                                         href={`/exam/${s.examId}`}
-                                        className="sheet settle-in group flex h-full flex-col p-5"
+                                        className="sheet settle-in group flex h-full flex-col p-4"
                                         style={{ '--i': i % 12 } as React.CSSProperties}
                                     >
                                         <p className="overline">Unfinished</p>
@@ -170,7 +170,7 @@ export default async function HomePage() {
                                 <li key={s.slug}>
                                     <Link
                                         href={`/learn/${level.slug}/${s.slug}`}
-                                        className="sheet settle-in group flex items-center justify-between gap-3 p-5"
+                                        className="sheet settle-in group flex items-center justify-between gap-3 p-4"
                                         style={{ '--i': index % 12 } as React.CSSProperties}
                                     >
                                         <span className="heading-ui transition-colors group-hover:text-primary">

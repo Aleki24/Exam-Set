@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { friendlyAuthError } from '@/lib/authErrors';
+import { authCallbackUrl } from '@/lib/authRedirect';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Lock, Mail, User } from 'lucide-react';
 
@@ -59,7 +60,7 @@ function SignupForm() {
                 email,
                 password,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+                    emailRedirectTo: authCallbackUrl(next),
                     data: { full_name: fullName.trim() },
                 },
             });

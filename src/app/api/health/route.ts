@@ -79,6 +79,12 @@ export async function GET() {
             questionsVisibleToPublic: questions.count ?? 0,
             publishedPapers: papers.count ?? 0,
             siteUrl: siteUrl(),
+            // The single value that has to match on the Supabase side. GoTrue
+            // ignores an `emailRedirectTo` it has not been told to allow and
+            // quietly substitutes the project's Site URL, so a confirmation
+            // link that opens localhost is this URL missing from the allow-list
+            // — a failure with no error anywhere, only a dead link in an inbox.
+            authRedirectUrl: `${siteUrl()}/auth/callback`,
             // Optional, so a missing WhatsApp config is reported rather than
             // treated as a fault — but reported by name, since a half-configured
             // bot fails as a 503 on a webhook nobody is watching.
@@ -94,7 +100,8 @@ export async function GET() {
                 : {
                       warning:
                           'NEXT_PUBLIC_BASE_URL is not set, so the public origin fell back to localhost. ' +
-                          'The sitemap will publish localhost URLs and M-Pesa callbacks will not arrive.',
+                          'The sitemap will publish localhost URLs, M-Pesa callbacks will not arrive, and ' +
+                          'confirmation emails will link to localhost.',
                   }),
         });
     } catch (err) {

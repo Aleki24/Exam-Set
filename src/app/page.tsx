@@ -267,7 +267,7 @@ export default function ShopPage() {
                     </header>
 
                     {loading ? (
-                        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                             {Array.from({ length: 6 }).map((_, i) => (
                                 <PaperCardSkeleton key={i} index={i} />
                             ))}
@@ -279,7 +279,7 @@ export default function ShopPage() {
                         />
                     ) : (
                         <>
-                            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                                 {papers.map((paper, i) => (
                                     <PaperCard
                                         key={paper.id}

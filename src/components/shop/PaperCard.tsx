@@ -44,7 +44,7 @@ export default function PaperCard({ paper, inCart, onToggleCart, onDownload, ind
 
     return (
         <article
-            className="sheet settle-in group relative flex flex-col p-6"
+            className="sheet settle-in group relative flex flex-col p-4"
             style={{ '--i': index % 12 } as React.CSSProperties}
         >
             {/* The card is the link. Sits under the content so the action button
@@ -55,16 +55,16 @@ export default function PaperCard({ paper, inCart, onToggleCart, onDownload, ind
 
             <p className="overline">{examTypeName(paper.exam_type)}</p>
 
-            <h3 className="title-2 mt-3 transition-colors group-hover:text-primary">{paper.title}</h3>
+            <h3 className="heading-ui mt-2 transition-colors group-hover:text-primary">{paper.title}</h3>
 
-            <p className="meta mt-2">{meta}</p>
+            <p className="meta mt-1.5">{meta}</p>
 
             <div className="flex-1" />
 
-            <p className="figure mt-5 text-[11px] leading-relaxed text-muted-foreground">{facts}</p>
+            <p className="figure mt-3 text-[11px] leading-relaxed text-muted-foreground">{facts}</p>
 
             {/* Price and action share the last line: the decision, in one place. */}
-            <div className="relative mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
+            <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
                 <span className="figure text-sm font-semibold">
                     {isFree ? <span className="text-success">Free</span> : formatPrice(paper.price_cents, paper.currency)}
                 </span>
@@ -102,13 +102,13 @@ export default function PaperCard({ paper, inCart, onToggleCart, onDownload, ind
 /** Placeholder that holds the real card's shape while the shop loads. */
 export function PaperCardSkeleton({ index = 0 }: { index?: number }) {
     return (
-        <div className="surface fade-in p-6" style={{ '--i': index } as React.CSSProperties}>
+        <div className="surface fade-in p-4" style={{ '--i': index } as React.CSSProperties}>
             <div className="skeleton h-2.5 w-20" />
-            <div className="skeleton mt-4 h-5 w-full" />
-            <div className="skeleton mt-2 h-5 w-3/5" />
-            <div className="skeleton mt-4 h-3 w-40" />
-            <div className="skeleton mt-8 h-3 w-52" />
-            <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
+            <div className="skeleton mt-3 h-4 w-full" />
+            <div className="skeleton mt-2 h-4 w-3/5" />
+            <div className="skeleton mt-3 h-3 w-40" />
+            <div className="skeleton mt-6 h-3 w-52" />
+            <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
                 <div className="skeleton h-4 w-16" />
                 <div className="skeleton h-9 w-20" />
             </div>

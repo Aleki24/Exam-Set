@@ -128,6 +128,31 @@ Until it is on, the claim is absent and the guards fall back to reading
 refresh. There is no point at which anybody is locked out — a missing claim
 means "ask the database", never "not an admin".
 
+### Where emailed auth links land
+
+Signup confirmations, invitations and password resets all point at
+`/auth/callback`, and the app asks for that URL by name: `authCallbackUrl()`
+builds it from `NEXT_PUBLIC_BASE_URL` so there is one canonical origin rather
+than whichever hostname the browser happened to be on.
+
+**Asking is not deciding.** GoTrue checks the requested redirect against the
+project's allow-list, and when it does not match it silently substitutes the
+project's *Site URL* instead — no error, no warning, just a link in somebody's
+inbox that opens `http://localhost:3000` and cannot be made to work from their
+phone. Both of these have to be set on the Supabase side:
+
+- Dashboard → Authentication → URL Configuration → **Site URL** — the public
+  origin, the same value as `NEXT_PUBLIC_BASE_URL`. It is the development
+  default on a new project, which is why this fails in exactly the way it does.
+- Dashboard → Authentication → URL Configuration → **Redirect URLs** — add
+  `https://your-domain/auth/callback`, plus `http://localhost:3000/auth/callback`
+  for local development. Note that `example.com` and `www.example.com` are two
+  different entries as far as this list is concerned.
+
+`GET /api/health` reports `authRedirectUrl`: the exact string that has to appear
+in that list. If a confirmation link goes somewhere unexpected, compare the two
+before looking anywhere else.
+
 The claim is a photograph of the role when the token was minted, so it can be up
 to one token lifetime out of date. Routes that hold a service-role client bypass
 row level security and have no database wall behind them, so they pass

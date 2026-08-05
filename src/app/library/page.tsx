@@ -162,7 +162,7 @@ export default function LibraryPage() {
                 </div>
 
                 {loading ? (
-                    <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                         {Array.from({ length: 3 }).map((_, i) => (
                             <div key={i} className="skeleton h-36" />
                         ))}
@@ -171,7 +171,7 @@ export default function LibraryPage() {
                     <div className="mt-6">
                         {tab === 'purchased' &&
                             (data?.purchased.length ? (
-                                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                                     {data.purchased.map((paper) => (
                                         <OwnedCard key={paper.id} paper={paper} onDownload={download} />
                                     ))}
@@ -186,7 +186,7 @@ export default function LibraryPage() {
 
                         {tab === 'sets' &&
                             (data?.sets.length ? (
-                                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                                     {data.sets.map((paper) => (
                                         <OwnedCard
                                             key={paper.id}

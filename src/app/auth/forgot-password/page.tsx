@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { friendlyAuthError } from '@/lib/authErrors';
+import { authCallbackUrl } from '@/lib/authRedirect';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 import { AlertCircle, CheckCircle, Loader2, Mail } from 'lucide-react';
 
@@ -34,7 +35,7 @@ function ForgotPasswordForm() {
             // The link lands on the callback, which exchanges the code for a
             // session and then forwards to the page that sets a new password.
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-                redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/auth/reset-password')}`,
+                redirectTo: authCallbackUrl('/auth/reset-password'),
             });
 
             if (resetError) {

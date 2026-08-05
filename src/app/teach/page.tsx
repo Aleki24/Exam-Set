@@ -243,7 +243,7 @@ export default function TeachPage() {
                                                 type="button"
                                                 onClick={() => toggle(p.id)}
                                                 aria-pressed={active}
-                                                className={`sheet w-full p-5 text-left transition-colors duration-200 ${
+                                                className={`sheet w-full p-4 text-left transition-colors duration-200 ${
                                                     active ? 'border-primary bg-primary/[0.06]' : ''
                                                 }`}
                                             >
@@ -270,7 +270,7 @@ export default function TeachPage() {
                                 </h2>
 
                                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                                    <div className="surface p-6">
+                                    <div className="surface p-5">
                                         <h3 className="heading-ui inline-flex items-center gap-2">
                                             <Users className="h-4 w-4 text-primary" aria-hidden />
                                             Hand it to a class
@@ -334,7 +334,7 @@ export default function TeachPage() {
                                         </button>
                                     </div>
 
-                                    <div className="surface p-6">
+                                    <div className="surface p-5">
                                         <h3 className="heading-ui inline-flex items-center gap-2">
                                             <Download className="h-4 w-4 text-primary" aria-hidden />
                                             Download the lot

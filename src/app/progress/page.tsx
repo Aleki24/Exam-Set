@@ -103,7 +103,7 @@ export default async function ProgressPage() {
                                         <li key={s.sessionId}>
                                             <Link
                                                 href={`/exam/${s.examId}`}
-                                                className="sheet settle-in group flex h-full flex-col p-5"
+                                                className="sheet settle-in group flex h-full flex-col p-4"
                                                 style={{ '--i': i % 12 } as React.CSSProperties}
                                             >
                                                 <p className="overline">Unfinished</p>

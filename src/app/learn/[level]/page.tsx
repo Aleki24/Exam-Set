@@ -69,7 +69,7 @@ export default async function LevelPage({ params }: Params) {
                             <li key={subject.slug}>
                                 <Link
                                     href={`/learn/${level.slug}/${subject.slug}`}
-                                    className="sheet settle-in group flex items-center justify-between gap-3 p-5"
+                                    className="sheet settle-in group flex items-center justify-between gap-3 p-4"
                                     style={{ '--i': index % 12 } as React.CSSProperties}
                                 >
                                     <span className="heading-ui transition-colors group-hover:text-primary">
@@ -108,7 +108,7 @@ export default async function LevelPage({ params }: Params) {
                                         <li key={kind.slug}>
                                             <Link
                                                 href={`/?level=${level.slug}&kind=${kind.slug}`}
-                                                className="surface group block h-full p-5 transition-colors duration-200 hover:border-primary/40"
+                                                className="surface group block h-full p-4 transition-colors duration-200 hover:border-primary/40"
                                             >
                                                 <h4 className="heading-ui transition-colors group-hover:text-primary">
                                                     {kind.plural}
