@@ -68,6 +68,8 @@ export default function AdminPage() {
     const [papers, setPapers] = useState<PaperListing[]>([]);
     const [team, setTeam] = useState<TeamMember[]>([]);
     const [diagnostics, setDiagnostics] = useState<DiagnosticCheck[] | null>(null);
+    const [mpesaTest, setMpesaTest] = useState<{ ok: boolean; detail: string; fix?: string | null } | null>(null);
+    const [testingMpesa, setTestingMpesa] = useState(false);
     const [loading, setLoading] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -115,6 +117,19 @@ export default function AdminPage() {
             setLoading(false)
         );
     }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam, loadDiagnostics]);
+
+    const testMpesa = async () => {
+        setTestingMpesa(true);
+        try {
+            const res = await fetch('/api/admin/mpesa/test', { method: 'POST' });
+            const data = await res.json();
+            setMpesaTest({ ok: Boolean(data.ok), detail: data.detail || data.error || 'No answer', fix: data.fix });
+        } catch (err) {
+            setMpesaTest({ ok: false, detail: err instanceof Error ? err.message : 'Could not reach Safaricom' });
+        } finally {
+            setTestingMpesa(false);
+        }
+    };
 
     // ------------------------------------------------------------------ actions
 
@@ -281,6 +296,44 @@ export default function AdminPage() {
                         </p>
                     </section>
                 )}
+
+                {/* Proving the payment route works should not require a customer
+                    to fail at it, so the handshake can be run on demand. */}
+                <section className="surface mt-6 p-5">
+                    <div className="rule-heading mb-3">
+                        <h2 className="overline">Payments</h2>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={testMpesa}
+                            disabled={testingMpesa}
+                            className="btn-outline"
+                        >
+                            {testingMpesa ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Test M-Pesa credentials
+                        </button>
+                        <span className="meta">
+                            Asks Safaricom whether your keys are accepted. No prompt is sent and no money moves.
+                        </span>
+                    </div>
+                    {mpesaTest && (
+                        <p
+                            className={
+                                mpesaTest.ok
+                                    ? 'mt-3 text-sm text-emerald-700 dark:text-emerald-400'
+                                    : 'mt-3 text-sm text-accent'
+                            }
+                        >
+                            {mpesaTest.detail}
+                            {mpesaTest.fix && (
+                                <span className="figure mt-1 block text-[11px] text-muted-foreground">
+                                    {mpesaTest.fix}
+                                </span>
+                            )}
+                        </p>
+                    )}
+                </section>
 
                 {/* Numbers */}
                 {summary && (

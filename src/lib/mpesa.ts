@@ -154,6 +154,21 @@ async function getAccessToken(config: MpesaConfig): Promise<string> {
     return body.access_token;
 }
 
+/**
+ * Whether Safaricom accepts this key and secret, and nothing more.
+ *
+ * The cheapest possible proof that payments are wired up: it moves no money and
+ * rings no phone, so it can be run before the shop has a single customer.
+ */
+export async function mpesaAuthCheck(config: MpesaConfig): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+        await getAccessToken(config);
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+}
+
 export interface StkQueryResult {
     /** 0 means the customer completed the payment. */
     resultCode: number;
