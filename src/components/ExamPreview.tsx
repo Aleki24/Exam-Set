@@ -1,11 +1,19 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { layoutPaper, type PaperSource, type QuestionSource } from '@/services/paperLayout';
+import {
+    layoutFor,
+    layoutPaper,
+    type PaperSource,
+    type QuestionSource,
+    type SectionDeclaration,
+} from '@/services/paperLayout';
 
 interface ExamPreviewProps {
     paper: PaperSource;
     questions: QuestionSource[];
+    /** Set when the paper was built from a format, so its own sections print. */
+    declaration?: SectionDeclaration;
 }
 
 /**
@@ -27,8 +35,8 @@ interface ExamPreviewProps {
  *   masthead and gets to question 1 on the same sheet; a cover with nine words
  *   on it is a page of the class's paper budget.
  */
-export default function ExamPreview({ paper, questions }: ExamPreviewProps) {
-    const layout = useMemo(() => layoutPaper(paper, questions), [paper, questions]);
+export default function ExamPreview({ paper, questions, declaration }: ExamPreviewProps) {
+    const layout = useMemo(() => layoutFor(paper, questions, declaration), [paper, questions, declaration]);
     const { identity } = layout;
 
     return (

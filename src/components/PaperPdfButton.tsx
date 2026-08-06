@@ -3,12 +3,14 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { downloadMarkingSchemePdf, downloadPaperPdf } from '@/services/paperPdf';
-import type { PaperSource, QuestionSource } from '@/services/paperLayout';
+import type { PaperSource, QuestionSource, SectionDeclaration } from '@/services/paperLayout';
 
 interface PaperPdfButtonProps {
     paper: PaperSource;
     questions: QuestionSource[];
     asset: 'paper' | 'scheme';
+    /** Set when the paper was built from a format, so its own sections print. */
+    declaration?: SectionDeclaration;
     filename: string;
     className?: string;
     children: React.ReactNode;
@@ -33,6 +35,7 @@ export default function PaperPdfButton({
     paper,
     questions,
     asset,
+    declaration,
     filename,
     className = '',
     children,
@@ -53,9 +56,9 @@ export default function PaperPdfButton({
             await new Promise((resolve) => setTimeout(resolve, 0));
 
             if (asset === 'scheme') {
-                downloadMarkingSchemePdf(paper, questions, filename);
+                downloadMarkingSchemePdf(paper, questions, filename, declaration);
             } else {
-                downloadPaperPdf(paper, questions, filename);
+                downloadPaperPdf(paper, questions, filename, declaration);
             }
         } catch (error) {
             console.error('Could not render the paper:', error);

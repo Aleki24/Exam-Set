@@ -446,11 +446,19 @@ export function planFeasibility(pool: DBQuestion[], plan: PaperPlan): Feasibilit
             // the report from claiming a mark the paper will not carry.
             sectionMarks = need > 0 ? Math.floor((section.marks * taken.length) / need) : 0;
         } else {
-            // No fixed count: fill by marks, smallest first so the estimate of
-            // what the bank can cover is not thrown off by one oversized item.
+            // No fixed count: fill by marks, largest that still fits first.
+            //
+            // Smallest-first reads as the cautious choice and is the worse one:
+            // it spends every small question early, then strands the section a
+            // mark or two short because nothing left is small enough to close
+            // the gap. That made this report claim a section could not be
+            // filled while the assembler went on to fill it — and a warning
+            // contradicted by the paper it warned about is worse than no
+            // warning. Taking the largest that fits keeps the small questions
+            // back for exactly the gap they are needed for.
             taken = [];
             let running = 0;
-            for (const q of [...eligible].sort((a, b) => marksOf(a) - marksOf(b))) {
+            for (const q of [...eligible].sort((a, b) => marksOf(b) - marksOf(a))) {
                 const m = marksOf(q);
                 if (running + m > section.marks) continue;
                 taken.push(q);
@@ -619,6 +627,31 @@ export function assembleFromPlan(
             }
             if (need !== null && chosen.length >= need) break;
             if (need === null && sectionPrinted >= section.marks) break;
+        }
+
+        // Close the last few marks smallest-first.
+        //
+        // The passes above take questions in usage order, which is right for
+        // spreading the bank but leaves a section stranded a mark or two short
+        // whenever the questions still available are all too big for the gap.
+        // The difficulty-only engine has always finished this way; a section
+        // needs it just as much.
+        if (need === null && sectionPrinted < section.marks) {
+            const bySize = eligible
+                .filter((q) => !taken.has(q.id))
+                .sort((a, b) => marksOf(a) - marksOf(b));
+            for (const q of bySize) {
+                if (sectionPrinted >= section.marks) break;
+                const m = marksOf(q);
+                if (sectionPrinted + m > section.marks) continue;
+
+                chosen.push(q);
+                taken.add(q.id);
+                sectionPrinted += m;
+                const d: Difficulty = DIFFICULTIES.includes(q.difficulty) ? q.difficulty : 'Medium';
+                achieved[d].marks += m;
+                achieved[d].count += 1;
+            }
         }
 
         // A section that came back part-full is worth part of its marks. Whole

@@ -26,7 +26,7 @@ const { PAPER_FORMATS, FORMAT_BY_ID, resolveFormat, toPlan } = await jiti.import
     '../src/lib/paperFormats/index.ts'
 );
 
-const { layoutPaper, layoutSectionedPaper } = await jiti.import('../src/services/paperLayout.ts');
+const { layoutPaper, layoutSectionedPaper, layoutFor } = await jiti.import('../src/services/paperLayout.ts');
 
 const { quickAddPayload, validateQuickAdd, clearedForNext, resolveContext, deficitToPrefill, applyPrefill } =
     await jiti.import('../src/lib/quickAdd.ts');
@@ -538,7 +538,11 @@ function makeSectionedBank() {
         bank.push({
             id: `str-${i}`,
             text: `Structured question ${i}`,
-            marks: [2, 3, 4][i % 3],
+            // A realistic spread. The live bank is almost entirely one-mark
+            // questions, and a fixture with none of them cannot fill a section
+            // to an exact total — which says more about the fixture than the
+            // engine.
+            marks: [1, 2, 3, 4][i % 4],
             difficulty: difficulties[i % 3],
             topic: topics[i % 3],
             type: 'Structured',
@@ -559,6 +563,29 @@ section('Fills every section of the declared format');
     check('the paper scores exactly seventy', result.scoredMarks === 70, `${result.scoredMarks}`);
     check('no shortfall', result.shortfallMarks === 0);
     check('feasibility agrees', result.feasibility.fillable);
+}
+
+section('A bank too coarse to hit the total exactly says so');
+{
+    // Only three-mark questions against a forty-mark section: thirteen reach
+    // 39 and the fourteenth would overshoot. Landing a mark short is the right
+    // answer here, and it has to be reported rather than rounded away.
+    const bank = [
+        ...makeTyped(40, { type: 'Multiple Choice', marks: 1 }),
+        ...makeTyped(40, { type: 'Structured', marks: 3 }),
+    ];
+    const report = planFeasibility(bank, sciencePlan);
+    const b = report.deficits.find((d) => d.sectionId === 'B');
+    check('the shortfall is reported', b?.missing === 1, JSON.stringify(b));
+    check('counted in marks', b?.unit === 'marks');
+
+    const result = assembleFromPlan(bank, sciencePlan);
+    check('and the paper never overshoots to compensate', result.scoredMarks <= sciencePlan.scoredMarks);
+    check(
+        'what it built and what it lacks still add up',
+        result.scoredMarks + result.shortfallMarks === sciencePlan.scoredMarks,
+        `${result.scoredMarks} + ${result.shortfallMarks}`
+    );
 }
 
 section('A section never holds a type it does not allow');
@@ -802,6 +829,29 @@ section('Does not print a heading over a section the bank could not fill');
         !layout.instructions.some((l) => /BOTH sections/i.test(l)),
         layout.instructions.join(' | ')
     );
+}
+
+section('One entry point decides, so preview and PDF cannot disagree');
+{
+    const result = assembleFromPlan(makeSectionedBank(), sciencePlan);
+    const declared = { sections: declaredSections(result), language: sciencePlan.language };
+
+    // What ExamPreview, MarkingSchemePreview and the PDF builders all call now.
+    const withPlan = layoutFor(PAPER, result.questions, declared);
+    check('declared sections are used', withPlan.sections.length === 2);
+    check('labelled from the plan', withPlan.sections[0].label === 'SECTION A');
+
+    const withoutPlan = layoutFor(PAPER, result.questions, undefined);
+    check('without a declaration it infers', withoutPlan.sections.length === 2);
+    check(
+        'and both agree on the questions',
+        withPlan.questions.length === withoutPlan.questions.length &&
+            withPlan.totalMarks === withoutPlan.totalMarks
+    );
+
+    // An empty declaration is not a declaration — it must not blank the paper.
+    const empty = layoutFor(PAPER, result.questions, { sections: [] });
+    check('an empty declaration falls back rather than printing nothing', empty.questions.length > 0);
 }
 
 section('Hand-set papers keep the old inference, untouched');

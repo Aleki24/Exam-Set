@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Sparkles, X } from 'lucide-react';
 import type { PaperBlueprint } from '@/types/shop';
 import { DEFAULT_BLUEPRINT } from '@/types/shop';
+import type { Deficit, FeasibilityReport, PaperPlan } from '@/types/paperPlan';
 
 interface AutoBuildModalProps {
     open: boolean;
@@ -11,6 +12,13 @@ interface AutoBuildModalProps {
     topics: string[];
     onClose: () => void;
     onBuild: (blueprint: PaperBlueprint, mode: 'replace' | 'append') => void;
+    /** The format KNEC (or convention) sets for this grade and subject, if any. */
+    plan?: PaperPlan | null;
+    /** What the bank can and cannot supply against that format. */
+    feasibility?: FeasibilityReport | null;
+    onBuildPlan?: (plan: PaperPlan, mode: 'replace' | 'append') => void;
+    /** Opens Quick Add already set up to write what a section is missing. */
+    onFillDeficit?: (deficit: Deficit) => void;
 }
 
 const PRESETS: { label: string; marks: number; mix: PaperBlueprint['difficultyMix'] }[] = [
@@ -24,11 +32,27 @@ const PRESETS: { label: string; marks: number; mix: PaperBlueprint['difficultyMi
  * bank. The mark target and difficulty mix are the two things a setter actually
  * cares about, so those are the only required inputs.
  */
-export default function AutoBuildModal({ open, poolSize, topics, onClose, onBuild }: AutoBuildModalProps) {
+export default function AutoBuildModal({
+    open,
+    poolSize,
+    topics,
+    onClose,
+    onBuild,
+    plan,
+    feasibility,
+    onBuildPlan,
+    onFillDeficit,
+}: AutoBuildModalProps) {
     const [blueprint, setBlueprint] = useState<PaperBlueprint>(DEFAULT_BLUEPRINT);
     const [mode, setMode] = useState<'replace' | 'append'>('replace');
+    // The official shape is the default path when there is one — a teacher
+    // setting a Grade 9 paper wants the Grade 9 paper, not a mark total.
+    const [useFormat, setUseFormat] = useState(true);
 
     if (!open) return null;
+
+    const hasFormat = Boolean(plan && onBuildPlan);
+    const onFormat = hasFormat && useFormat;
 
     const mixTotal = blueprint.difficultyMix.Easy + blueprint.difficultyMix.Medium + blueprint.difficultyMix.Difficult;
 
@@ -64,6 +88,95 @@ export default function AutoBuildModal({ open, poolSize, topics, onClose, onBuil
                         from those, never repeats one, and prefers questions you have used least.
                     </p>
 
+                    {/* The official shape, when one exists for this grade and subject */}
+                    {hasFormat && plan && (
+                        <div className={onFormat ? 'rounded-xl border-2 border-primary p-3' : 'rounded-xl border border-border p-3'}>
+                            <label className="flex items-start gap-2.5">
+                                <input
+                                    type="radio"
+                                    checked={useFormat}
+                                    onChange={() => setUseFormat(true)}
+                                    className="mt-1 h-4 w-4 accent-[var(--primary)]"
+                                />
+                                <span className="flex-1">
+                                    <span className="block text-sm font-semibold">{plan.name}</span>
+                                    <span className="block text-xs text-muted-foreground">
+                                        {plan.scoredMarks} marks · {plan.durationMinutes} min ·{' '}
+                                        {plan.sections
+                                            .map((s) => `${s.label} ${s.marks}m ${s.types[0]}`)
+                                            .join(' · ')}
+                                    </span>
+                                    {plan.origin === 'knec' ? (
+                                        <span className="mt-1 block text-xs text-muted-foreground">
+                                            Follows the published structure
+                                            {plan.provisional ? ' — provisional, worth checking' : ''}
+                                            {plan.verifiedOn ? `, checked ${plan.verifiedOn}` : ''}.
+                                        </span>
+                                    ) : (
+                                        <span className="mt-1 block text-xs text-muted-foreground">
+                                            A common school shape, not an official structure.
+                                        </span>
+                                    )}
+                                </span>
+                            </label>
+
+                            {/* What the bank can actually supply against it */}
+                            {feasibility && (
+                                <div className="mt-2.5 border-t border-border pt-2.5">
+                                    {feasibility.fillable ? (
+                                        <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                            The bank can fill every section.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                                                <AlertTriangle className="h-3.5 w-3.5" />
+                                                Covers {feasibility.coverableMarks} of {feasibility.scoredMarks} marks
+                                            </p>
+                                            {feasibility.deficits.map((d) => (
+                                                <div key={d.sectionId} className="flex items-start justify-between gap-2">
+                                                    <p className="text-xs text-muted-foreground">{d.message}</p>
+                                                    {onFillDeficit && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onFillDeficit(d)}
+                                                            className="chip shrink-0"
+                                                        >
+                                                            Write them
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <p className="text-xs text-muted-foreground">
+                                                It will still build what it can, and leave the rest clearly short.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {hasFormat && (
+                        <label className="flex items-start gap-2.5 rounded-xl border border-border p-3">
+                            <input
+                                type="radio"
+                                checked={!useFormat}
+                                onChange={() => setUseFormat(false)}
+                                className="mt-1 h-4 w-4 accent-[var(--primary)]"
+                            />
+                            <span className="flex-1">
+                                <span className="block text-sm font-semibold">Custom mix</span>
+                                <span className="block text-xs text-muted-foreground">
+                                    Choose your own total and difficulty spread, with no sections.
+                                </span>
+                            </span>
+                        </label>
+                    )}
+
+                    {!onFormat && (
+                    <>
                     {/* Presets */}
                     <div className="flex flex-wrap gap-1.5">
                         {PRESETS.map((preset) => (
@@ -173,6 +286,8 @@ export default function AutoBuildModal({ open, poolSize, topics, onClose, onBuil
                         />
                         Prefer questions I have used least
                     </label>
+                    </>
+                    )}
 
                     <fieldset>
                         <legend className="label">If the paper already has questions</legend>
@@ -201,12 +316,15 @@ export default function AutoBuildModal({ open, poolSize, topics, onClose, onBuil
                     </button>
                     <button
                         type="button"
-                        onClick={() => onBuild(blueprint, mode)}
+                        onClick={() => {
+                            if (onFormat && plan && onBuildPlan) onBuildPlan(plan, mode);
+                            else onBuild(blueprint, mode);
+                        }}
                         disabled={poolSize === 0}
                         className="btn-primary flex-1"
                     >
                         <Sparkles className="h-4 w-4" />
-                        Build paper
+                        {onFormat ? 'Build to this format' : 'Build paper'}
                     </button>
                 </div>
             </div>

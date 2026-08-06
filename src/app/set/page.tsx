@@ -26,14 +26,25 @@ import PaperPdfButton from '@/components/PaperPdfButton';
 import QuestionEntryModal from '@/components/QuestionEntryModal';
 import QuickQuestionForm from '@/components/QuickQuestionForm';
 import EnhancedBulkImport from '@/components/EnhancedBulkImport';
-import { assemblePaper, fetchQuestionPool, paperStats, totalMarks } from '@/services/paperBuilder';
+import {
+    assembleFromPlan,
+    assemblePaper,
+    declaredSections,
+    fetchQuestionPool,
+    paperStats,
+    planFeasibility,
+    totalMarks,
+} from '@/services/paperBuilder';
+import { planFor } from '@/lib/paperFormats';
+import { deficitToPrefill, type QuickPrefill } from '@/lib/quickAdd';
 import { bulkCreateQuestions, createQuestion, getGrades, getSubjects, mapDBToQuestion } from '@/services/questionService';
 import { createExam } from '@/services/examService';
-import { LEVELS, formatPrice } from '@/lib/catalog';
+import { LEVELS, formatPrice, type ExamTypeSlug } from '@/lib/catalog';
 import { useRole } from '@/lib/roles';
 import type { DBGrade, DBQuestion, DBSubject, ExamMetadata, ExamPaper, Question } from '@/types';
 import type { PaperSource } from '@/services/paperLayout';
 import type { PaperBlueprint } from '@/types/shop';
+import type { Deficit, PaperPlan, PlannedAssembly } from '@/types/paperPlan';
 
 const DEFAULT_META: PaperMeta = {
     title: 'End of Term Examination',
@@ -77,6 +88,9 @@ export default function SetterPage() {
 
     // The paper
     const [selected, setSelected] = useState<DBQuestion[]>([]);
+    // The last format-driven build, kept so the preview and the PDF can print
+    // the sections the format declared instead of guessing at them.
+    const [assembly, setAssembly] = useState<PlannedAssembly<DBQuestion> | null>(null);
     const [meta, setMeta] = useState<PaperMeta>(DEFAULT_META);
 
     // UI
@@ -87,6 +101,9 @@ export default function SetterPage() {
     // Quick Add is the primary way into the bank; the fuller entry modal is
     // what "More options" reaches for.
     const [showQuickAdd, setShowQuickAdd] = useState(false);
+    // Set when Quick Add was opened from a deficit, so it starts on the right
+    // type and counts down as the gap closes.
+    const [quickPrefill, setQuickPrefill] = useState<QuickPrefill | undefined>(undefined);
     const [showNewQuestion, setShowNewQuestion] = useState(false);
     const [showBulkImport, setShowBulkImport] = useState(false);
     const [showPublish, setShowPublish] = useState(false);
@@ -173,6 +190,44 @@ export default function SetterPage() {
 
     const selectedIds = useMemo(() => new Set(selected.map((q) => q.id)), [selected]);
 
+    /**
+     * The shape KNEC (or convention) sets for this grade and subject.
+     *
+     * Resolved from the printed grade label rather than the grades table, which
+     * carries two Grade 10 rows and a Grade 9 with no level — see
+     * lib/paperFormats. Null when nothing in the catalogue covers this pairing,
+     * and the setter simply does not offer a format rather than inventing one.
+     */
+    const officialPlan = useMemo(() => {
+        const gradeLabel = grades.find((g) => g.id === filters.gradeId)?.name || meta.gradeLabel;
+        const subject = subjects.find((s) => s.id === filters.subjectId)?.name || meta.subject;
+        if (!gradeLabel || !subject) return null;
+        return planFor({ gradeLabel, subject, examType: meta.examType as ExamTypeSlug });
+    }, [grades, subjects, filters.gradeId, filters.subjectId, meta.gradeLabel, meta.subject, meta.examType]);
+
+    /** What the filtered bank can and cannot supply against that format. */
+    const officialFeasibility = useMemo(
+        () => (officialPlan ? planFeasibility(filteredPool, officialPlan) : null),
+        [filteredPool, officialPlan]
+    );
+
+    /**
+     * The sections the preview and the PDF should print.
+     *
+     * Only while the paper on screen is still the paper that was built. The
+     * moment a question is added, removed or reordered by hand the declared
+     * structure is stale, and printing a stale one would put a heading over
+     * questions that are no longer under it — so it falls back to inference,
+     * which reads the paper as it actually stands.
+     */
+    const declaration = useMemo(() => {
+        if (!assembly) return undefined;
+        const built = assembly.questions.map((q) => q.id);
+        if (built.length !== selected.length) return undefined;
+        if (built.some((id, i) => selected[i]?.id !== id)) return undefined;
+        return { sections: declaredSections(assembly), language: assembly.plan.language };
+    }, [assembly, selected]);
+
     // ------------------------------------------------------------------ actions
 
     const addQuestion = useCallback((question: DBQuestion) => {
@@ -203,6 +258,43 @@ export default function SetterPage() {
         });
     };
 
+    /**
+     * Build to a declared format.
+     *
+     * Unlike `autoBuild`, this fills each section from the types that section
+     * allows and leaves it visibly short rather than padding it from elsewhere —
+     * so the notes coming back are the honest ones, and the paper that prints
+     * has the structure the format asked for.
+     */
+    const buildToPlan = (plan: PaperPlan, mode: 'replace' | 'append') => {
+        const existing = mode === 'append' ? selected : [];
+        const result = assembleFromPlan(filteredPool, plan, existing);
+
+        if (result.questions.length === 0) {
+            toast.error(result.notes[0] || 'Nothing in the bank fits this format');
+            return;
+        }
+
+        setSelected(mode === 'append' ? [...existing, ...result.questions] : result.questions);
+        setAssembly(mode === 'append' ? null : result);
+        setShowAutoBuild(false);
+
+        // The format knows the paper's duration; the header should say so rather
+        // than keep whatever was typed for a different paper.
+        setMeta((m) => ({
+            ...m,
+            duration: `${Math.floor(plan.durationMinutes / 60)} Hours ${plan.durationMinutes % 60} Minutes`
+                .replace(' 0 Minutes', '')
+                .replace('1 Hours', '1 Hour'),
+        }));
+
+        if (result.shortfallMarks > 0) {
+            toast.warning(`Built ${result.scoredMarks} of ${plan.scoredMarks} marks. ${result.notes[0] ?? ''}`);
+        } else {
+            toast.success(`Built a ${result.scoredMarks}-mark ${plan.name} paper`);
+        }
+    };
+
     const autoBuild = (blueprint: PaperBlueprint, mode: 'replace' | 'append') => {
         const existing = mode === 'append' ? selected : [];
         const result = assemblePaper(filteredPool, blueprint, existing);
@@ -213,6 +305,8 @@ export default function SetterPage() {
         }
 
         setSelected(mode === 'append' ? [...existing, ...result.questions] : result.questions);
+        // A custom mix has no declared sections — drop any the last format left.
+        setAssembly(null);
         setShowAutoBuild(false);
 
         const built = mode === 'append' ? totalMarks([...existing, ...result.questions]) : result.totalMarks;
@@ -418,7 +512,7 @@ export default function SetterPage() {
                                           selected.length
                                       } in your paper`}
                             </p>
-                            <button type="button" onClick={() => setShowQuickAdd(true)} className="btn-ghost btn-sm">
+                            <button type="button" onClick={() => { setQuickPrefill(undefined); setShowQuickAdd(true); }} className="btn-ghost btn-sm">
                                 <Plus className="h-3.5 w-3.5" />
                                 New question
                             </button>
@@ -472,7 +566,7 @@ export default function SetterPage() {
                                 <div className="mt-5 flex gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => setShowQuickAdd(true)}
+                                        onClick={() => { setQuickPrefill(undefined); setShowQuickAdd(true); }}
                                         className="btn-primary"
                                     >
                                         <Plus className="h-4 w-4" />
@@ -602,6 +696,21 @@ export default function SetterPage() {
                 topics={topicCounts.map((t) => t.topic)}
                 onClose={() => setShowAutoBuild(false)}
                 onBuild={autoBuild}
+                plan={officialPlan}
+                feasibility={officialFeasibility}
+                onBuildPlan={buildToPlan}
+                onFillDeficit={(deficit: Deficit) => {
+                    // Straight from "Section A needs 30 one-mark Multiple
+                    // Choice questions" to a form already set to write one.
+                    setQuickPrefill(
+                        deficitToPrefill(deficit, {
+                            grade_id: filters.gradeId || undefined,
+                            subject_id: filters.subjectId || undefined,
+                        })
+                    );
+                    setShowAutoBuild(false);
+                    setShowQuickAdd(true);
+                }}
             />
 
             {/* Preview + PDF */}
@@ -634,6 +743,7 @@ export default function SetterPage() {
                             <PaperPdfButton
                                 paper={paperSource}
                                 questions={selected}
+                                declaration={declaration}
                                 asset={previewMode === 'paper' ? 'paper' : 'scheme'}
                                 filename={pdfFilename(previewMode === 'paper' ? 'paper' : 'scheme')}
                                 className="btn-primary"
@@ -655,9 +765,9 @@ export default function SetterPage() {
                     <div className="flex-1 scroll-panel bg-muted/40 p-6">
                         <div className="mx-auto w-fit">
                             {previewMode === 'paper' ? (
-                                <ExamPreview paper={paperSource} questions={selected} />
+                                <ExamPreview paper={paperSource} questions={selected} declaration={declaration} />
                             ) : (
-                                <MarkingSchemePreview paper={paperSource} questions={selected} />
+                                <MarkingSchemePreview paper={paperSource} questions={selected} declaration={declaration} />
                             )}
                         </div>
                     </div>
@@ -666,7 +776,11 @@ export default function SetterPage() {
 
             <QuickQuestionForm
                 isOpen={showQuickAdd}
-                onClose={() => setShowQuickAdd(false)}
+                prefill={quickPrefill}
+                onClose={() => {
+                    setShowQuickAdd(false);
+                    setQuickPrefill(undefined);
+                }}
                 grades={grades}
                 subjects={subjects}
                 activeFilters={{

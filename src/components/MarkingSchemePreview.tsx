@@ -2,16 +2,19 @@
 
 import React, { useMemo } from 'react';
 import {
-    layoutPaper,
+    layoutFor,
     markingSchemeOf,
     partMarkingScheme,
     type PaperSource,
     type QuestionSource,
+    type SectionDeclaration,
 } from '@/services/paperLayout';
 
 interface MarkingSchemePreviewProps {
     paper: PaperSource;
     questions: QuestionSource[];
+    /** Set when the paper was built from a format, so its own sections print. */
+    declaration?: SectionDeclaration;
 }
 
 /**
@@ -24,8 +27,8 @@ interface MarkingSchemePreviewProps {
  * panel with green headings, which photocopies as a grey box with grey writing
  * in it — this is the document somebody marks forty scripts against.
  */
-export default function MarkingSchemePreview({ paper, questions }: MarkingSchemePreviewProps) {
-    const layout = useMemo(() => layoutPaper(paper, questions), [paper, questions]);
+export default function MarkingSchemePreview({ paper, questions, declaration }: MarkingSchemePreviewProps) {
+    const layout = useMemo(() => layoutFor(paper, questions, declaration), [paper, questions, declaration]);
     const { identity } = layout;
 
     const schemes = useMemo(() => questions.map(markingSchemeOf), [questions]);

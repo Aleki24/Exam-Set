@@ -212,6 +212,31 @@ export function layoutSectionedPaper(
     return assemble(paper, questions, questions.length === 0 ? [] : sections, language);
 }
 
+/**
+ * A paper's declared structure, as the render surfaces pass it around.
+ *
+ * Optional everywhere. A paper set by hand has no format to declare and falls
+ * back to inference; a paper built from a plan carries this so the preview, the
+ * PDF and the marking scheme all print the same sections rather than each
+ * guessing separately.
+ */
+export interface SectionDeclaration {
+    sections: DeclaredSection[];
+    language?: 'en' | 'sw';
+}
+
+/** Declared sections when there are any, inferred when there are not. */
+export function layoutFor(
+    paper: PaperSource,
+    questions: QuestionSource[],
+    declaration?: SectionDeclaration
+): PaperLayout {
+    if (declaration && declaration.sections.length > 0) {
+        return layoutSectionedPaper(paper, declaration.sections, declaration.language ?? 'en');
+    }
+    return layoutPaper(paper, questions);
+}
+
 function assemble(
     paper: PaperSource,
     questions: LaidOutQuestion[],

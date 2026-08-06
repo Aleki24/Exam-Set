@@ -30,7 +30,7 @@
 
 import { jsPDF } from 'jspdf';
 import {
-    layoutPaper,
+    layoutFor,
     markingSchemeOf,
     partMarkingScheme,
     type LaidOutQuestion,
@@ -38,6 +38,7 @@ import {
     type PaperSection,
     type PaperSource,
     type QuestionSource,
+    type SectionDeclaration,
 } from './paperLayout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -793,8 +794,12 @@ function renderStable(layout: PaperLayout, scale: number): Sheet {
  * one dimension that can give: nothing is dropped, no type is shrunk, and a
  * question never ends up with less than a line.
  */
-export function buildPaperDocument(paper: PaperSource, questions: QuestionSource[]): jsPDF {
-    const layout = layoutPaper(paper, questions);
+export function buildPaperDocument(
+    paper: PaperSource,
+    questions: QuestionSource[],
+    declaration?: SectionDeclaration
+): jsPDF {
+    const layout = layoutFor(paper, questions, declaration);
     let sheet = renderStable(layout, 1);
 
     if (sheet.doc.getNumberOfPages() > 1 && sheet.fill < 0.45) {
@@ -818,8 +823,12 @@ export function buildPaperDocument(paper: PaperSource, questions: QuestionSource
  * separately, and a teacher handing out the paper must not hand out the answers
  * with it.
  */
-export function buildMarkingSchemeDocument(paper: PaperSource, questions: QuestionSource[]): jsPDF {
-    const layout = layoutPaper(paper, questions);
+export function buildMarkingSchemeDocument(
+    paper: PaperSource,
+    questions: QuestionSource[],
+    declaration?: SectionDeclaration
+): jsPDF {
+    const layout = layoutFor(paper, questions, declaration);
     const sheet = new Sheet();
     const { doc } = sheet;
 
@@ -911,29 +920,39 @@ export function buildMarkingSchemeDocument(paper: PaperSource, questions: Questi
 // ---------------------------------------------------------------------------
 
 /** Bytes, for storing and streaming. Server only — `Buffer` is a Node type. */
-export function renderPaperPdf(paper: PaperSource, questions: QuestionSource[]): Buffer {
-    return Buffer.from(buildPaperDocument(paper, questions).output('arraybuffer'));
+export function renderPaperPdf(
+    paper: PaperSource,
+    questions: QuestionSource[],
+    declaration?: SectionDeclaration
+): Buffer {
+    return Buffer.from(buildPaperDocument(paper, questions, declaration).output('arraybuffer'));
 }
 
 /** Bytes, for storing and streaming. Server only — `Buffer` is a Node type. */
-export function renderMarkingSchemePdf(paper: PaperSource, questions: QuestionSource[]): Buffer {
-    return Buffer.from(buildMarkingSchemeDocument(paper, questions).output('arraybuffer'));
+export function renderMarkingSchemePdf(
+    paper: PaperSource,
+    questions: QuestionSource[],
+    declaration?: SectionDeclaration
+): Buffer {
+    return Buffer.from(buildMarkingSchemeDocument(paper, questions, declaration).output('arraybuffer'));
 }
 
 /** Saves the paper straight from the browser, with no round trip to the server. */
 export function downloadPaperPdf(
     paper: PaperSource,
     questions: QuestionSource[],
-    filename: string
+    filename: string,
+    declaration?: SectionDeclaration
 ): void {
-    buildPaperDocument(paper, questions).save(filename);
+    buildPaperDocument(paper, questions, declaration).save(filename);
 }
 
 /** Saves the marking scheme straight from the browser. */
 export function downloadMarkingSchemePdf(
     paper: PaperSource,
     questions: QuestionSource[],
-    filename: string
+    filename: string,
+    declaration?: SectionDeclaration
 ): void {
-    buildMarkingSchemeDocument(paper, questions).save(filename);
+    buildMarkingSchemeDocument(paper, questions, declaration).save(filename);
 }
