@@ -115,7 +115,12 @@ function mapQuestionToDB(question: Question, filters?: {
 /**
  * Map database row to Question type
  */
-function mapDBToQuestion(row: any): DBQuestion {
+/**
+ * Exported because Quick Add posts straight to `/api/questions` and gets a raw
+ * row back. Mapping it here rather than in the page keeps one definition of what
+ * a question looks like coming out of the database.
+ */
+export function mapDBToQuestion(row: any): DBQuestion {
     return {
         id: row.id,
         text: row.text,

@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import { findBestTopic, Topic as MatcherTopic } from '@/utils/topicMatcher';
+import QuickQuestionForm from '@/components/QuickQuestionForm';
+import { markingSchemeFor } from '@/lib/quickAdd';
 
 // Types
 interface Question {
@@ -137,6 +139,7 @@ export default function AdminQuestionsPage() {
     // UI states
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -182,6 +185,22 @@ export default function AdminQuestionsPage() {
     const [filterBand, setFilterBand] = useState('');
     const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
     const [formTopics, setFormTopics] = useState<Topic[]>([]);
+
+    /**
+     * What Quick Add offers as topics.
+     *
+     * `subject_topics` is the tidy source but a thin one — thirteen rows across
+     * three subjects, against thirty-six distinct topics carried on the
+     * questions themselves. Offering only the tidy list would hide most of the
+     * bank's own vocabulary and quietly push teachers into inventing synonyms
+     * for topics that already exist, so both are offered.
+     */
+    const topicSuggestions = useMemo(() => {
+        const names = new Set<string>();
+        for (const topic of topics) if (topic.name) names.add(topic.name);
+        for (const question of questions) if (question.topic) names.add(question.topic);
+        return [...names].sort((a, b) => a.localeCompare(b));
+    }, [topics, questions]);
 
     // Load available subjects dynamically based on filters
     useEffect(() => {
@@ -557,10 +576,13 @@ export default function AdminQuestionsPage() {
         setEditingQuestion(null);
     };
 
-    // Open form for new question
+    // Adding a question starts in Quick Add. The full form below is still here,
+    // reached by "More options" and by editing an existing question — but a
+    // teacher writing thirty objective questions should not walk a curriculum
+    // cascade thirty times to do it.
     const handleNewQuestion = () => {
         resetForm();
-        setShowForm(true);
+        setShowQuickAdd(true);
     };
 
     // Open form for editing
@@ -1502,6 +1524,39 @@ export default function AdminQuestionsPage() {
             </main>
 
             {/* Question Form Modal */}
+            <QuickQuestionForm
+                isOpen={showQuickAdd}
+                onClose={() => setShowQuickAdd(false)}
+                grades={grades}
+                subjects={availableSubjects.length > 0 ? availableSubjects : subjects}
+                activeFilters={{
+                    curriculum_id: filters.curriculum_id || undefined,
+                    grade_id: filters.grade_id || undefined,
+                    subject_id: filters.subject_id || undefined,
+                }}
+                topicSuggestions={topicSuggestions}
+                onSaved={() => { void fetchQuestions(); }}
+                onOpenFullForm={(quick) => {
+                    // Carry across everything the quick form collected, so
+                    // "More options" adds fields rather than starting again.
+                    setFormData((current) => ({
+                        ...current,
+                        text: quick.text,
+                        marks: quick.marks,
+                        difficulty: quick.difficulty,
+                        topic: quick.topic,
+                        type: quick.type,
+                        options: quick.options.some(Boolean) ? quick.options : current.options,
+                        marking_scheme: markingSchemeFor(quick) ?? current.marking_scheme,
+                        curriculum_id: quick.curriculum_id,
+                        grade_id: quick.grade_id,
+                        subject_id: quick.subject_id,
+                    }));
+                    setShowQuickAdd(false);
+                    setShowForm(true);
+                }}
+            />
+
             {showForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col font-sans" style={{ maxHeight: '90vh' }}>

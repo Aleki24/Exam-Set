@@ -24,9 +24,10 @@ import ExamPreview from '@/components/ExamPreview';
 import MarkingSchemePreview from '@/components/MarkingSchemePreview';
 import PaperPdfButton from '@/components/PaperPdfButton';
 import QuestionEntryModal from '@/components/QuestionEntryModal';
+import QuickQuestionForm from '@/components/QuickQuestionForm';
 import EnhancedBulkImport from '@/components/EnhancedBulkImport';
 import { assemblePaper, fetchQuestionPool, paperStats, totalMarks } from '@/services/paperBuilder';
-import { bulkCreateQuestions, createQuestion, getGrades, getSubjects } from '@/services/questionService';
+import { bulkCreateQuestions, createQuestion, getGrades, getSubjects, mapDBToQuestion } from '@/services/questionService';
 import { createExam } from '@/services/examService';
 import { LEVELS, formatPrice } from '@/lib/catalog';
 import { useRole } from '@/lib/roles';
@@ -83,6 +84,9 @@ export default function SetterPage() {
     const [showAutoBuild, setShowAutoBuild] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const [previewMode, setPreviewMode] = useState<'paper' | 'scheme'>('paper');
+    // Quick Add is the primary way into the bank; the fuller entry modal is
+    // what "More options" reaches for.
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [showNewQuestion, setShowNewQuestion] = useState(false);
     const [showBulkImport, setShowBulkImport] = useState(false);
     const [showPublish, setShowPublish] = useState(false);
@@ -414,7 +418,7 @@ export default function SetterPage() {
                                           selected.length
                                       } in your paper`}
                             </p>
-                            <button type="button" onClick={() => setShowNewQuestion(true)} className="btn-ghost btn-sm">
+                            <button type="button" onClick={() => setShowQuickAdd(true)} className="btn-ghost btn-sm">
                                 <Plus className="h-3.5 w-3.5" />
                                 New question
                             </button>
@@ -468,7 +472,7 @@ export default function SetterPage() {
                                 <div className="mt-5 flex gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => setShowNewQuestion(true)}
+                                        onClick={() => setShowQuickAdd(true)}
                                         className="btn-primary"
                                     >
                                         <Plus className="h-4 w-4" />
@@ -659,6 +663,31 @@ export default function SetterPage() {
                     </div>
                 </div>
             )}
+
+            <QuickQuestionForm
+                isOpen={showQuickAdd}
+                onClose={() => setShowQuickAdd(false)}
+                grades={grades}
+                subjects={subjects}
+                activeFilters={{
+                    grade_id: filters.gradeId || undefined,
+                    subject_id: filters.subjectId || undefined,
+                    topic: filters.topics[0],
+                }}
+                topicSuggestions={topicCounts.map((t) => t.topic)}
+                onSaved={(row) => {
+                    // Straight into the bank on screen and into the paper being
+                    // built — a question added while setting is a question the
+                    // setter wanted.
+                    const question = mapDBToQuestion(row);
+                    setPool((current) => [question, ...current]);
+                    addQuestion(question);
+                }}
+                onOpenFullForm={() => {
+                    setShowQuickAdd(false);
+                    setShowNewQuestion(true);
+                }}
+            />
 
             <QuestionEntryModal
                 isOpen={showNewQuestion}

@@ -28,6 +28,11 @@ const { PAPER_FORMATS, FORMAT_BY_ID, resolveFormat, toPlan } = await jiti.import
 
 const { layoutPaper, layoutSectionedPaper } = await jiti.import('../src/services/paperLayout.ts');
 
+const { quickAddPayload, validateQuickAdd, clearedForNext, resolveContext, deficitToPrefill, applyPrefill } =
+    await jiti.import('../src/lib/quickAdd.ts');
+
+const { schemeIsUsable, schemeIsPlainAnswer } = await jiti.import('../src/services/markingService.ts');
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -831,6 +836,131 @@ section('An empty bank produces an empty paper, not a broken one');
     check('the whole total is the shortfall', result.shortfallMarks === 70);
     check('every section is present but empty', result.sections.length === 2 && result.sections.every((s) => s.questions.length === 0));
     check('and the notes say what to do', result.notes.length > 0, result.notes.join(' | '));
+}
+
+// ===========================================================================
+// QUICK ADD — clearing the worklist the builder produces
+// ===========================================================================
+
+const quick = (over = {}) => ({
+    text: 'What is the capital of Kenya?',
+    marks: 1,
+    type: 'Multiple Choice',
+    topic: 'Kenya',
+    difficulty: 'Medium',
+    options: ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru'],
+    answer: 0,
+    curriculum_id: 'c1',
+    grade_id: 'g1',
+    subject_id: 's1',
+    ...over,
+});
+
+section('An answered objective question carries a scheme that survives marking');
+{
+    const payload = quickAddPayload(quick());
+    check('the answer becomes the marking scheme', payload.marking_scheme === 'A. Nairobi', String(payload.marking_scheme));
+
+    // markingService discards a scheme shorter than two characters, so a bare
+    // "A" would be stored and then ignored as though it were never there.
+    check('long enough for markingService to keep', schemeIsUsable(payload.marking_scheme));
+    check('and plain enough to compare directly', schemeIsPlainAnswer(payload.marking_scheme));
+    check('carries the letter the sitting UI submits', /^A\./.test(payload.marking_scheme));
+
+    const tf = quickAddPayload(quick({ type: 'True/False', answer: 'False', options: [] }));
+    check('true/false records its answer too', tf.marking_scheme === 'False', String(tf.marking_scheme));
+    check('which is also usable', schemeIsUsable(tf.marking_scheme));
+}
+
+section('Refuses to save an objective question with no answer');
+{
+    const errors = validateQuickAdd(quick({ answer: null }));
+    check('the answer is required', Boolean(errors.answer), JSON.stringify(errors));
+    check(
+        'and the reason given is the real one',
+        /cannot be marked/.test(errors.answer ?? ''),
+        errors.answer
+    );
+
+    // Structured questions are marked by a human and need no such answer.
+    const structured = validateQuickAdd(quick({ type: 'Structured', answer: null, options: [] }));
+    check('structured questions are not held to it', !structured.answer, JSON.stringify(structured));
+    check('and save cleanly', Object.keys(structured).length === 0, JSON.stringify(structured));
+}
+
+section('Blocks the things that would make a question unfindable');
+{
+    check('empty text', Boolean(validateQuickAdd(quick({ text: '   ' })).text));
+    check('text that is only markup', Boolean(validateQuickAdd(quick({ text: '<p></p>' })).text));
+    check('no topic', Boolean(validateQuickAdd(quick({ topic: '' })).topic));
+    check('no grade or subject', Boolean(validateQuickAdd(quick({ grade_id: '' })).context));
+    check('fewer than two options', Boolean(validateQuickAdd(quick({ options: ['Nairobi', '', '', ''] })).options));
+    check('marks below one', Boolean(validateQuickAdd(quick({ marks: 0 })).marks));
+    check('a complete question passes', Object.keys(validateQuickAdd(quick())).length === 0);
+}
+
+section('Sends only what the quick path actually collected');
+{
+    const payload = quickAddPayload(quick({ type: 'Structured', options: [], answer: null }));
+    check('no empty options array on a structured question', payload.options === undefined);
+    check('no marking scheme invented', payload.marking_scheme === undefined);
+    check('no blooms level guessed', payload.blooms_level === undefined);
+    check('context travels', payload.grade_id === 'g1' && payload.subject_id === 's1');
+    check('marks are whole numbers', quickAddPayload(quick({ marks: 2.6 })).marks === 3);
+    check(
+        'empty options are dropped, not stored',
+        quickAddPayload(quick({ options: ['Nairobi', 'Mombasa', '', ''] })).options.length === 2
+    );
+}
+
+section('Save & add another keeps the context and clears the question');
+{
+    const next = clearedForNext(quick());
+    check('the question is gone', next.text === '');
+    check('the answer is gone', next.answer === null);
+    check('the options are blank', next.options.every((o) => o === ''));
+    check('the type is kept', next.type === 'Multiple Choice');
+    check('the topic is kept', next.topic === 'Kenya');
+    check('the marks are kept', next.marks === 1);
+    check('the context is kept', next.grade_id === 'g1' && next.subject_id === 's1');
+}
+
+section('Context: what you are looking at beats what you saved last time');
+{
+    const remembered = { curriculum_id: 'old-c', grade_id: 'old-g', subject_id: 'old-s', topic: 'Old', type: 'Essay' };
+    const resolved = resolveContext({ grade_id: 'new-g', subject_id: 'new-s' }, remembered);
+    check('filters win', resolved.grade_id === 'new-g' && resolved.subject_id === 'new-s');
+    check('the rest is remembered', resolved.curriculum_id === 'old-c' && resolved.topic === 'Old');
+    check('as is the last type used', resolved.type === 'Essay');
+
+    const nothing = resolveContext(undefined, undefined);
+    check('with neither, nothing is invented', nothing.grade_id === '' && nothing.subject_id === '');
+    check('and the default type is structured', nothing.type === 'Structured');
+}
+
+section('A deficit opens a form already set up to clear it');
+{
+    // Straight from the builder: the real deficit off the live bank shape.
+    const report = planFeasibility(makeTyped(200, { type: 'Structured', marks: 4 }), sciencePlan);
+    const deficit = report.deficits.find((d) => d.sectionId === 'A');
+    const prefill = deficitToPrefill(deficit, { grade_id: 'g9', subject_id: 'sci' });
+
+    check('the type is the one the section needs', prefill.type === 'Multiple Choice', prefill.type);
+    check('the marks match the section', prefill.marks === 1, String(prefill.marks));
+    check('the count to clear comes across', prefill.remaining === 30, String(prefill.remaining));
+    check('the context is pinned', prefill.grade_id === 'g9' && prefill.subject_id === 'sci');
+    check('and the teacher is told why', /Multiple Choice/.test(prefill.reason ?? ''), prefill.reason);
+
+    const form = applyPrefill({ ...quick(), type: 'Essay', marks: 9, answer: 2 }, prefill);
+    check('the form takes the type', form.type === 'Multiple Choice');
+    check('and the marks', form.marks === 1);
+    check('and starts with no answer selected', form.answer === null);
+
+    // A marks-driven section counts in marks, so there is no question count.
+    const bySection = report.deficits.find((d) => d.unit === 'marks');
+    if (bySection) {
+        check('a marks deficit offers no misleading count', deficitToPrefill(bySection).remaining === undefined);
+    }
 }
 
 // ---------------------------------------------------------------------------
