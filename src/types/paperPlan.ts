@@ -189,6 +189,45 @@ export interface Deficit {
     message: string;
 }
 
+/** One section of an assembled paper, with what it actually carries. */
+export interface AssembledSection<Q> {
+    plan: SectionPlan;
+    questions: Q[];
+    /** Marks of the questions printed in this section. */
+    printedMarks: number;
+    /** Marks the candidate can earn here — capped by the section's plan. */
+    scoredMarks: number;
+}
+
+export interface PlannedAssembly<Q> {
+    plan: PaperPlan;
+    sections: AssembledSection<Q>[];
+
+    /**
+     * Every question, in section order.
+     *
+     * This is what `/set` holds and what `paperLayout` renders. The order is the
+     * point: because the objective section is assembled first and stays first,
+     * `splitIntoSections` recognises the paper as sectioned and prints
+     * SECTION A / SECTION B. The old engine's closing sort by difficulty
+     * scattered the objective questions and suppressed that.
+     */
+    questions: Q[];
+
+    /** What the candidate is marked out of. Never exceeds `plan.scoredMarks`. */
+    scoredMarks: number;
+    /** What the paper puts on the page — larger wherever a section is optional. */
+    printedMarks: number;
+    /** Scored marks the plan asked for and the bank could not supply. */
+    shortfallMarks: number;
+
+    difficultyBreakdown: Record<Difficulty, { targetMarks: number; actualMarks: number; count: number }>;
+    strandBreakdown: Record<string, { targetMarks: number; actualMarks: number }>;
+
+    feasibility: FeasibilityReport;
+    notes: string[];
+}
+
 export interface FeasibilityReport {
     /** True when every section can be filled from the pool as it stands. */
     fillable: boolean;

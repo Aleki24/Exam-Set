@@ -14,7 +14,14 @@
 import { publicBrowserClient } from '@/utils/supabase/publicClient';
 import type { Difficulty, DBQuestion, Question, QuestionType } from '@/types';
 import type { PaperBlueprint } from '@/types/shop';
-import type { Deficit, FeasibilityReport, PaperPlan, SectionPlan } from '@/types/paperPlan';
+import type {
+    AssembledSection,
+    Deficit,
+    FeasibilityReport,
+    PaperPlan,
+    PlannedAssembly,
+    SectionPlan,
+} from '@/types/paperPlan';
 
 // ============================================================================
 // SHUFFLING
@@ -500,6 +507,206 @@ export function planFeasibility(pool: DBQuestion[], plan: PaperPlan): Feasibilit
         withinDuration: Math.abs(estimatedMinutes - plan.durationMinutes) <= tolerance,
         scoredMarks: plan.scoredMarks,
         coverableMarks,
+    };
+}
+
+// ============================================================================
+// SECTION-AWARE ASSEMBLY
+// ============================================================================
+
+/**
+ * Builds a paper to the shape a format declares.
+ *
+ * The difference from `assemblePaper` is not that this has more constraints. It
+ * is that the paper has a structure before any question is chosen: sections come
+ * from the plan, questions are assigned into them, and the running order that
+ * comes out is the order that prints. `assemblePaper` sorted its result by
+ * difficulty at the very end, which scattered the objective questions and left
+ * `paperLayout` unable to recognise a Section A even when one was there.
+ *
+ * Rules, in order of precedence:
+ *   1. a section only ever holds the types it allows — no substitution, ever
+ *   2. no section exceeds the marks it declares
+ *   3. the paper never scores more than the plan's total
+ *   4. no question appears twice, or repeats one already in `existing`
+ *   5. the difficulty mix is honoured as far as 1–4 leave room
+ *   6. least-used questions first when `preferUnused` is set
+ *
+ * Rule 1 outranks everything below it on purpose. A structured question in the
+ * objective section is a mistake rather than a compromise, so a thin bank leaves
+ * the section visibly short and `feasibility` says exactly what is missing.
+ */
+export function assembleFromPlan(
+    pool: DBQuestion[],
+    plan: PaperPlan,
+    existing: DBQuestion[] = []
+): PlannedAssembly<DBQuestion> {
+    const notes: string[] = [];
+    const taken = new Set<string>(plan.avoidDuplicates ? existing.map((q) => q.id) : []);
+
+    let candidates = pool.filter((q) => marksOf(q) > 0 && !taken.has(q.id));
+
+    if (plan.coverage && plan.coverage.strands.length > 0) {
+        const taught = new Set(plan.coverage.strands.map((s) => s.toLowerCase()));
+        candidates = candidates.filter((q) => q.topic && taught.has(q.topic.toLowerCase()));
+    }
+
+    // Shuffle first so equal candidates vary between builds, then let usage
+    // order win — a stable sort keeps the shuffle as the tie-break inside a
+    // usage tier, exactly as the difficulty-only engine does.
+    candidates = shuffle(candidates);
+    if (plan.preferUnused) {
+        candidates.sort((a, b) => (a.usage_count ?? 0) - (b.usage_count ?? 0));
+    }
+
+    // The difficulty mix is a whole-paper target rather than a per-section one:
+    // a twenty-question objective section has no room for three difficulty
+    // budgets, but the paper around it does.
+    const mix = normaliseMix(plan.difficultyMix);
+    const difficultyBudget: Record<Difficulty, number> = {
+        Easy: Math.round((plan.scoredMarks * mix.Easy) / 100),
+        Medium: Math.round((plan.scoredMarks * mix.Medium) / 100),
+        Difficult: Math.round((plan.scoredMarks * mix.Difficult) / 100),
+    };
+    const achieved: Record<Difficulty, { marks: number; count: number }> = {
+        Easy: { marks: 0, count: 0 },
+        Medium: { marks: 0, count: 0 },
+        Difficult: { marks: 0, count: 0 },
+    };
+
+    const sections: AssembledSection<DBQuestion>[] = [];
+    let scoredMarks = 0;
+    let printedMarks = 0;
+
+    for (const section of plan.sections) {
+        const eligible = eligibleForSection(candidates, section).filter((q) => !taken.has(q.id));
+        const need = sectionQuestionsNeeded(section);
+
+        // What the section may print. An "answer any five of eight" section
+        // prints eight questions' worth while scoring five.
+        const printCeiling =
+            need !== null && section.marksPerQuestion
+                ? need * section.marksPerQuestion
+                : need !== null
+                  ? Infinity
+                  : section.marks;
+
+        const chosen: DBQuestion[] = [];
+        let sectionPrinted = 0;
+
+        // Two passes. The first takes only questions whose difficulty still has
+        // whole-paper budget left, so the mix is served where the section allows
+        // it; the second fills whatever the first could not, because an unfilled
+        // section is a worse outcome than a skewed one.
+        for (const wantedBudget of [true, false]) {
+            for (const q of eligible) {
+                if (need !== null && chosen.length >= need) break;
+                if (taken.has(q.id)) continue;
+
+                const m = marksOf(q);
+                if (sectionPrinted + m > printCeiling) continue;
+                if (need === null && sectionPrinted + m > section.marks) continue;
+
+                const d: Difficulty = DIFFICULTIES.includes(q.difficulty) ? q.difficulty : 'Medium';
+                if (wantedBudget && achieved[d].marks + m > difficultyBudget[d]) continue;
+
+                chosen.push(q);
+                taken.add(q.id);
+                sectionPrinted += m;
+                achieved[d].marks += m;
+                achieved[d].count += 1;
+            }
+            if (need !== null && chosen.length >= need) break;
+            if (need === null && sectionPrinted >= section.marks) break;
+        }
+
+        // A section that came back part-full is worth part of its marks. Whole
+        // sections are worth exactly what they declare, so a mark is never
+        // invented by the arithmetic of the fill.
+        const sectionScored =
+            need !== null
+                ? need > 0
+                    ? Math.floor((section.marks * chosen.length) / need)
+                    : 0
+                : Math.min(sectionPrinted, section.marks);
+
+        // Inside a section, easier first and grouped by strand — the same
+        // readability instinct the difficulty-only engine applied to the whole
+        // paper, now applied where it cannot break the structure.
+        const order: Record<Difficulty, number> = { Easy: 0, Medium: 1, Difficult: 2 };
+        chosen.sort((a, b) => {
+            const byDifficulty = (order[a.difficulty] ?? 1) - (order[b.difficulty] ?? 1);
+            if (byDifficulty !== 0) return byDifficulty;
+            return (a.topic || '').localeCompare(b.topic || '');
+        });
+
+        sections.push({
+            plan: section,
+            questions: chosen,
+            printedMarks: sectionPrinted,
+            scoredMarks: sectionScored,
+        });
+        scoredMarks += sectionScored;
+        printedMarks += sectionPrinted;
+    }
+
+    const questions = sections.flatMap((s) => s.questions);
+    const feasibility = planFeasibility(pool.filter((q) => !existing.some((e) => e.id === q.id)), plan);
+
+    for (const deficit of feasibility.deficits) notes.push(deficit.message);
+    if (scoredMarks < plan.scoredMarks) {
+        notes.push(
+            `Built ${scoredMarks} of ${plan.scoredMarks} marks. Add the missing questions to the bank, or relax the format.`
+        );
+    }
+    if (feasibility.schemeGaps > 0) {
+        notes.push(
+            `${feasibility.schemeGaps} of these questions have no marking scheme, so the scheme will be incomplete.`
+        );
+    }
+    if (plan.provisional) {
+        notes.push(`${plan.name} is a provisional format. Check it against the current structure before a school sits it.`);
+    }
+
+    // Strand targets only mean something against a declared list of strands.
+    // Free-text topics are reported as they are, never scored against a weight
+    // nobody set.
+    const strandBreakdown: Record<string, { targetMarks: number; actualMarks: number }> = {};
+    for (const weight of plan.strandWeights ?? []) {
+        strandBreakdown[weight.strand] = {
+            targetMarks: Math.round((plan.scoredMarks * weight.percent) / 100),
+            actualMarks: 0,
+        };
+    }
+    for (const q of questions) {
+        const strand = q.topic || 'Untagged';
+        if (!strandBreakdown[strand]) strandBreakdown[strand] = { targetMarks: 0, actualMarks: 0 };
+        strandBreakdown[strand].actualMarks += marksOf(q);
+    }
+
+    return {
+        plan,
+        sections,
+        questions,
+        scoredMarks,
+        printedMarks,
+        shortfallMarks: Math.max(0, plan.scoredMarks - scoredMarks),
+        difficultyBreakdown: {
+            Easy: { targetMarks: difficultyBudget.Easy, actualMarks: achieved.Easy.marks, count: achieved.Easy.count },
+            Medium: {
+                targetMarks: difficultyBudget.Medium,
+                actualMarks: achieved.Medium.marks,
+                count: achieved.Medium.count,
+            },
+            Difficult: {
+                targetMarks: difficultyBudget.Difficult,
+                actualMarks: achieved.Difficult.marks,
+                count: achieved.Difficult.count,
+            },
+        },
+        strandBreakdown,
+        feasibility,
+        notes,
     };
 }
 

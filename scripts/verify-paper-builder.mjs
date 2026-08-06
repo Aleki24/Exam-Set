@@ -20,9 +20,13 @@ const { assemblePaper, paperStats, totalMarks, shuffle, planFeasibility, planMin
     '../src/services/paperBuilder.ts'
 );
 
+const { assembleFromPlan } = await jiti.import('../src/services/paperBuilder.ts');
+
 const { PAPER_FORMATS, FORMAT_BY_ID, resolveFormat, toPlan } = await jiti.import(
     '../src/lib/paperFormats/index.ts'
 );
+
+const { layoutPaper } = await jiti.import('../src/services/paperLayout.ts');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -501,6 +505,255 @@ section('An empty bank is a worklist, not a crash');
     check('one deficit per section', report.deficits.length === sciencePlan.sections.length);
     check('every deficit carries a sentence', report.deficits.every((d) => d.message.length > 20));
     check('nothing is coverable', report.coverableMarks === 0);
+}
+
+// ===========================================================================
+// SECTION-AWARE ASSEMBLY
+// ===========================================================================
+
+/** A bank deep enough to fill a KJSEA-shaped paper, spread over difficulties. */
+function makeSectionedBank() {
+    const bank = [];
+    const difficulties = ['Easy', 'Medium', 'Difficult'];
+    const topics = ['Mixtures', 'Energy', 'Living Things'];
+    for (let i = 0; i < 60; i++) {
+        bank.push({
+            id: `mcq-${i}`,
+            text: `Objective question ${i}`,
+            marks: 1,
+            difficulty: difficulties[i % 3],
+            topic: topics[i % 3],
+            type: 'Multiple Choice',
+            options: ['A', 'B', 'C', 'D'],
+            usage_count: 0,
+            markingScheme: 'B',
+        });
+    }
+    for (let i = 0; i < 60; i++) {
+        bank.push({
+            id: `str-${i}`,
+            text: `Structured question ${i}`,
+            marks: [2, 3, 4][i % 3],
+            difficulty: difficulties[i % 3],
+            topic: topics[i % 3],
+            type: 'Structured',
+            usage_count: 0,
+            markingScheme: 'Award marks as shown.',
+        });
+    }
+    return bank;
+}
+
+section('Fills every section of the declared format');
+{
+    const result = assembleFromPlan(makeSectionedBank(), sciencePlan);
+    check('two sections', result.sections.length === 2);
+    check('Section A carries thirty questions', result.sections[0].questions.length === 30, `${result.sections[0].questions.length}`);
+    check('Section A is worth its thirty marks', result.sections[0].scoredMarks === 30);
+    check('Section B reaches its forty', result.sections[1].scoredMarks === 40, `${result.sections[1].scoredMarks}`);
+    check('the paper scores exactly seventy', result.scoredMarks === 70, `${result.scoredMarks}`);
+    check('no shortfall', result.shortfallMarks === 0);
+    check('feasibility agrees', result.feasibility.fillable);
+}
+
+section('A section never holds a type it does not allow');
+{
+    const result = assembleFromPlan(makeSectionedBank(), sciencePlan);
+    for (const s of result.sections) {
+        check(
+            `${s.plan.label} holds only ${s.plan.types.join('/')}`,
+            s.questions.every((q) => s.plan.types.includes(q.type)),
+            s.questions.filter((q) => !s.plan.types.includes(q.type)).map((q) => q.type).join()
+        );
+    }
+}
+
+section('Leaves a section short rather than padding it from elsewhere');
+{
+    // Four MCQs and a deep structured bank — the tempting substitution.
+    const bank = [
+        ...makeTyped(4, { type: 'Multiple Choice', marks: 1 }),
+        ...makeTyped(100, { type: 'Structured', marks: 2 }),
+    ];
+    const result = assembleFromPlan(bank, sciencePlan);
+
+    check('Section A holds only the four that exist', result.sections[0].questions.length === 4);
+    check('and nothing else was let in', result.sections[0].questions.every((q) => q.type === 'Multiple Choice'));
+    check('Section B still fills', result.sections[1].scoredMarks === 40);
+    check('the paper is short by the objective marks', result.scoredMarks === 44, `${result.scoredMarks}`);
+    check('the shortfall is reported', result.shortfallMarks === 26);
+    check(
+        'and explained in words',
+        result.notes.some((n) => /Multiple Choice/.test(n) && /26 missing/.test(n)),
+        result.notes.join(' | ')
+    );
+}
+
+section('Never exceeds a section ceiling or the paper total');
+{
+    for (const id of ['kjsea-mathematics', 'kjsea-integrated-science', 'upper-primary-end-term']) {
+        const format = FORMAT_BY_ID[id];
+        const plan = toPlan(format, { gradeLabel: format.grades[0], subject: 'Mathematics', examType: 'end-term' });
+        const result = assembleFromPlan(makeSectionedBank(), plan);
+        check(
+            `${id} never scores more than its total`,
+            result.scoredMarks <= plan.scoredMarks,
+            `${result.scoredMarks} of ${plan.scoredMarks}`
+        );
+        check(
+            `${id} keeps every section inside its marks`,
+            result.sections.every((s) => s.scoredMarks <= s.plan.marks),
+            result.sections.map((s) => `${s.plan.label}:${s.scoredMarks}/${s.plan.marks}`).join(' ')
+        );
+    }
+}
+
+section('Prints more than it scores where the format says questions are optional');
+{
+    const bank = [
+        ...makeTyped(40, { type: 'Structured', marks: 10, prefix: 'ten' }),
+        ...makeTyped(60, { type: 'Structured', marks: 3, prefix: 'three' }),
+    ];
+    const kcse = toPlan(FORMAT_BY_ID['kcse-mathematics-paper-1'], {
+        gradeLabel: 'Form 4',
+        subject: 'Mathematics',
+        examType: 'mock',
+    });
+    const result = assembleFromPlan(bank, kcse);
+
+    const two = result.sections.find((s) => s.plan.id === 'II');
+    check('Section II prints eight questions', two.questions.length === 8, `${two.questions.length}`);
+    check('worth eighty printed marks', two.printedMarks === 80, `${two.printedMarks}`);
+    check('but scored out of fifty', two.scoredMarks === 50, `${two.scoredMarks}`);
+    check('the candidate is marked out of a hundred', result.scoredMarks === 100, `${result.scoredMarks}`);
+    check('while the paper carries more on the page', result.printedMarks > 100, `${result.printedMarks} printed`);
+}
+
+section('Never repeats a question, or one already in the paper');
+{
+    const bank = makeSectionedBank();
+    const result = assembleFromPlan(bank, sciencePlan);
+    const ids = result.questions.map((q) => q.id);
+    check('all picks unique', new Set(ids).size === ids.length);
+    check('sections do not share questions', ids.length === result.sections.reduce((n, s) => n + s.questions.length, 0));
+
+    const alreadyIn = bank.slice(0, 40);
+    const second = assembleFromPlan(bank, sciencePlan, alreadyIn);
+    const used = new Set(alreadyIn.map((q) => q.id));
+    check('nothing already in the paper comes back', second.questions.every((q) => !used.has(q.id)));
+}
+
+section('Honours the difficulty mix where the sections leave room');
+{
+    const plan = { ...sciencePlan, difficultyMix: { Easy: 30, Medium: 50, Difficult: 20 } };
+    const result = assembleFromPlan(makeSectionedBank(), plan);
+    const { Easy, Medium, Difficult } = result.difficultyBreakdown;
+    check('easy within 12 marks', Math.abs(Easy.actualMarks - Easy.targetMarks) <= 12, `${Easy.actualMarks} vs ${Easy.targetMarks}`);
+    check('medium within 12 marks', Math.abs(Medium.actualMarks - Medium.targetMarks) <= 12, `${Medium.actualMarks} vs ${Medium.targetMarks}`);
+    check(
+        'difficult within 12 marks',
+        Math.abs(Difficult.actualMarks - Difficult.targetMarks) <= 12,
+        `${Difficult.actualMarks} vs ${Difficult.targetMarks}`
+    );
+}
+
+section('A CAT draws only on what has been taught');
+{
+    const bank = [
+        ...makeTyped(20, { type: 'Multiple Choice', marks: 1, topic: 'Mixtures', prefix: 'taught-m' }),
+        ...makeTyped(30, { type: 'Structured', marks: 2, topic: 'Mixtures', prefix: 'taught-s' }),
+        ...makeTyped(50, { type: 'Structured', marks: 2, topic: 'Astronomy', prefix: 'untaught' }),
+    ];
+    const cat = toPlan(FORMAT_BY_ID['jss-cat'], { ...pin, examType: 'cat' }, { coverage: { strands: ['Mixtures'] } });
+    const result = assembleFromPlan(bank, cat);
+    check('the paper fills', result.shortfallMarks === 0, `${result.scoredMarks} of ${cat.scoredMarks}`);
+    check('nothing untaught appears', result.questions.every((q) => q.topic === 'Mixtures'));
+    check('the strand breakdown reports it', Boolean(result.strandBreakdown['Mixtures']));
+}
+
+// ===========================================================================
+// THE PAYOFF — the renderer can finally see the sections
+// ===========================================================================
+
+const PAPER = { title: 'End of Term', subject: 'Integrated Science', grade_label: 'Grade 9', total_marks: 70 };
+
+section('An assembled paper renders as SECTION A and SECTION B');
+{
+    const result = assembleFromPlan(makeSectionedBank(), sciencePlan);
+    const layout = layoutPaper(PAPER, result.questions);
+
+    check('the renderer finds two sections', layout.sections.length === 2, `${layout.sections.length}`);
+    check('the first is Section A', layout.sections[0]?.label === 'SECTION A', layout.sections[0]?.label);
+    check('the second is Section B', layout.sections[1]?.label === 'SECTION B', layout.sections[1]?.label);
+    check(
+        'Section A is the objective questions',
+        layout.sections[0]?.questions.every((q) => q.type === 'Multiple Choice')
+    );
+    check('the mark table has a row per section', layout.examinerRows.length === 2, `${layout.examinerRows.length}`);
+    check(
+        'and the instructions say there are two',
+        layout.instructions.some((line) => /BOTH sections/i.test(line)),
+        layout.instructions.join(' | ')
+    );
+}
+
+section('Which the difficulty-only engine could not do with the same bank');
+{
+    // Not a criticism of assemblePaper — it was never told the paper had a
+    // shape. Its closing sort by difficulty interleaves objective and
+    // structured questions, so `splitIntoSections` cannot recognise a Section A
+    // and prints one undifferentiated run. This is the bug the plan describes,
+    // pinned so it cannot quietly come back.
+    const flat = assemblePaper(makeSectionedBank(), {
+        targetMarks: 70,
+        difficultyMix: { Easy: 25, Medium: 50, Difficult: 25 },
+        topics: [],
+        questionTypes: [],
+        preferUnused: true,
+        avoidDuplicates: true,
+    });
+    const layout = layoutPaper(PAPER, flat.questions);
+    check('the old path renders one run', layout.sections.length === 1, `${layout.sections.length} sections`);
+    check('with no section label at all', layout.sections[0]?.label === null, layout.sections[0]?.label);
+}
+
+section('Renders a Kiswahili paper with Kiswahili headings in the plan');
+{
+    const kiswahili = toPlan(FORMAT_BY_ID['kjsea-kiswahili-karatasi-1'], {
+        gradeLabel: 'Grade 9',
+        subject: 'Kiswahili',
+        examType: 'end-term',
+    });
+    check('the plan is in Kiswahili', kiswahili.language === 'sw');
+    check('and its sections are labelled SEHEMU', kiswahili.sections.every((s) => s.label.startsWith('SEHEMU')));
+    check(
+        'with Kiswahili instructions',
+        kiswahili.sections.every((s) => /Jibu maswali/.test(s.instruction)),
+        kiswahili.sections.map((s) => s.instruction).join(' | ')
+    );
+
+    // paperLayout still prints its own English labels — the renderer contract
+    // is phase 3. Pinned here so the gap is visible rather than assumed closed.
+    const result = assembleFromPlan(
+        makeTyped(50, { type: 'Multiple Choice', marks: 1 }),
+        kiswahili
+    );
+    const layout = layoutPaper({ ...PAPER, subject: 'Kiswahili' }, result.questions);
+    check(
+        'but the renderer has not been taught them yet (phase 3)',
+        layout.sections.every((s) => s.label === null || s.label.startsWith('SECTION')),
+        layout.sections.map((s) => s.label).join()
+    );
+}
+
+section('An empty bank produces an empty paper, not a broken one');
+{
+    const result = assembleFromPlan([], sciencePlan);
+    check('no questions', result.questions.length === 0);
+    check('no marks', result.scoredMarks === 0);
+    check('the whole total is the shortfall', result.shortfallMarks === 70);
+    check('every section is present but empty', result.sections.length === 2 && result.sections.every((s) => s.questions.length === 0));
+    check('and the notes say what to do', result.notes.length > 0, result.notes.join(' | '));
 }
 
 // ---------------------------------------------------------------------------
