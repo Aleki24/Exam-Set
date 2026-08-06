@@ -20,13 +20,13 @@ const { assemblePaper, paperStats, totalMarks, shuffle, planFeasibility, planMin
     '../src/services/paperBuilder.ts'
 );
 
-const { assembleFromPlan } = await jiti.import('../src/services/paperBuilder.ts');
+const { assembleFromPlan, declaredSections } = await jiti.import('../src/services/paperBuilder.ts');
 
 const { PAPER_FORMATS, FORMAT_BY_ID, resolveFormat, toPlan } = await jiti.import(
     '../src/lib/paperFormats/index.ts'
 );
 
-const { layoutPaper } = await jiti.import('../src/services/paperLayout.ts');
+const { layoutPaper, layoutSectionedPaper } = await jiti.import('../src/services/paperLayout.ts');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -717,7 +717,32 @@ section('Which the difficulty-only engine could not do with the same bank');
     check('with no section label at all', layout.sections[0]?.label === null, layout.sections[0]?.label);
 }
 
-section('Renders a Kiswahili paper with Kiswahili headings in the plan');
+// ===========================================================================
+// THE RENDERER CONTRACT — sections declared, not guessed
+// ===========================================================================
+
+section('Prints the sections the format declared, not the ones it can infer');
+{
+    const result = assembleFromPlan(makeSectionedBank(), sciencePlan);
+    const layout = layoutSectionedPaper(PAPER, declaredSections(result));
+
+    check('two sections', layout.sections.length === 2);
+    check('labelled from the plan', layout.sections.map((s) => s.label).join() === 'SECTION A,SECTION B');
+    check(
+        'carrying the plan’s own instructions',
+        layout.sections[0].instruction === sciencePlan.sections[0].instruction,
+        layout.sections[0].instruction
+    );
+    check('titled from the plan', layout.sections[0].title === 'Objective Questions', layout.sections[0].title);
+    check('numbered straight through', layout.questions.map((q) => q.number).join() === layout.questions.map((_, i) => i + 1).join());
+    check('a mark-table row per section', layout.examinerRows.length === 2);
+    check(
+        'and the rows add up to the paper',
+        layout.examinerRows.reduce((n, r) => n + r.marks, 0) === layout.totalMarks
+    );
+}
+
+section('A Kiswahili paper prints SEHEMU, not SECTION');
 {
     const kiswahili = toPlan(FORMAT_BY_ID['kjsea-kiswahili-karatasi-1'], {
         gradeLabel: 'Grade 9',
@@ -726,24 +751,76 @@ section('Renders a Kiswahili paper with Kiswahili headings in the plan');
     });
     check('the plan is in Kiswahili', kiswahili.language === 'sw');
     check('and its sections are labelled SEHEMU', kiswahili.sections.every((s) => s.label.startsWith('SEHEMU')));
-    check(
-        'with Kiswahili instructions',
-        kiswahili.sections.every((s) => /Jibu maswali/.test(s.instruction)),
-        kiswahili.sections.map((s) => s.instruction).join(' | ')
+
+    const bank = [
+        ...makeTyped(30, { type: 'Multiple Choice', marks: 1, prefix: 'ufahamu' }),
+        ...makeTyped(40, { type: 'Fill-in-the-blank', marks: 1, prefix: 'sarufi' }),
+    ];
+    const result = assembleFromPlan(bank, kiswahili);
+    const layout = layoutSectionedPaper(
+        { ...PAPER, subject: 'Kiswahili', time_limit: 'Saa 1 dakika 40' },
+        declaredSections(result),
+        kiswahili.language
     );
 
-    // paperLayout still prints its own English labels — the renderer contract
-    // is phase 3. Pinned here so the gap is visible rather than assumed closed.
-    const result = assembleFromPlan(
-        makeTyped(50, { type: 'Multiple Choice', marks: 1 }),
-        kiswahili
-    );
-    const layout = layoutPaper({ ...PAPER, subject: 'Kiswahili' }, result.questions);
+    check('the headings are Kiswahili', layout.sections.every((s) => s.label.startsWith('SEHEMU')), layout.sections.map((s) => s.label).join());
     check(
-        'but the renderer has not been taught them yet (phase 3)',
-        layout.sections.every((s) => s.label === null || s.label.startsWith('SECTION')),
-        layout.sections.map((s) => s.label).join()
+        'the section instructions are Kiswahili',
+        layout.sections.every((s) => /Jibu maswali/.test(s.instruction ?? '')),
+        layout.sections.map((s) => s.instruction).join(' | ')
     );
+    check(
+        'and so are the instructions to the candidate',
+        layout.instructions.some((l) => /Jibu maswali YOTE katika SEHEMU ZOTE/.test(l)),
+        layout.instructions.join(' | ')
+    );
+    check(
+        'with no English rubric left at the top',
+        !layout.instructions.some((l) => /Answer ALL|Write your name/.test(l)),
+        layout.instructions.join(' | ')
+    );
+}
+
+section('Does not print a heading over a section the bank could not fill');
+{
+    // No objective questions at all — the live bank's actual shape. A paper
+    // labelled SECTION B with no Section A above it would puzzle a class.
+    const bank = makeTyped(60, { type: 'Structured', marks: 2 });
+    const result = assembleFromPlan(bank, sciencePlan);
+    const layout = layoutSectionedPaper(PAPER, declaredSections(result));
+
+    check('the empty section is dropped', layout.sections.length === 1, `${layout.sections.length}`);
+    check('and what is left prints unlabelled', layout.sections[0].label === null, layout.sections[0].label);
+    check('the questions are still there', layout.questions.length > 0);
+    check(
+        'the instructions do not promise two sections',
+        !layout.instructions.some((l) => /BOTH sections/i.test(l)),
+        layout.instructions.join(' | ')
+    );
+}
+
+section('Hand-set papers keep the old inference, untouched');
+{
+    // layoutPaper is what /set calls today and what every stored paper renders
+    // through. Its behaviour must not have moved.
+    const objectiveFirst = [
+        ...makeTyped(5, { type: 'Multiple Choice', marks: 1 }),
+        ...makeTyped(5, { type: 'Structured', marks: 4 }),
+    ];
+    const inferred = layoutPaper(PAPER, objectiveFirst);
+    check('still infers a clean split', inferred.sections.length === 2, `${inferred.sections.length}`);
+    check('still labels it SECTION A', inferred.sections[0].label === 'SECTION A');
+    check('still in English', inferred.instructions.some((l) => /Answer ALL/.test(l)));
+
+    const interleaved = assemblePaper(makeSectionedBank(), {
+        targetMarks: 70,
+        difficultyMix: { Easy: 25, Medium: 50, Difficult: 25 },
+        topics: [],
+        questionTypes: [],
+        preferUnused: true,
+        avoidDuplicates: true,
+    });
+    check('and still refuses to invent one', layoutPaper(PAPER, interleaved.questions).sections.length === 1);
 }
 
 section('An empty bank produces an empty paper, not a broken one');

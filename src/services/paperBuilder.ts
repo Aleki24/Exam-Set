@@ -22,6 +22,7 @@ import type {
     PlannedAssembly,
     SectionPlan,
 } from '@/types/paperPlan';
+import type { DeclaredSection } from '@/services/paperLayout';
 
 // ============================================================================
 // SHUFFLING
@@ -708,6 +709,22 @@ export function assembleFromPlan(
         feasibility,
         notes,
     };
+}
+
+/**
+ * An assembled paper in the shape `layoutSectionedPaper` wants.
+ *
+ * The renderer is told the sections rather than left to work them out from the
+ * running order, which is how a Kiswahili paper gets SEHEMU A at the top instead
+ * of SECTION A.
+ */
+export function declaredSections(assembly: PlannedAssembly<DBQuestion>): DeclaredSection[] {
+    return assembly.sections.map((s) => ({
+        label: s.plan.label,
+        title: s.plan.title,
+        instruction: s.plan.instruction,
+        questions: s.questions,
+    }));
 }
 
 // ============================================================================

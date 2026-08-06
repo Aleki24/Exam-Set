@@ -144,19 +144,90 @@ export interface PaperLayout {
 
 export function layoutPaper(paper: PaperSource, source: QuestionSource[]): PaperLayout {
     const questions = (source ?? []).map((q, i) => layoutQuestion(q, i + 1));
+    return assemble(paper, questions, splitIntoSections(questions), 'en');
+}
 
+/**
+ * A section as the paper's format declared it, rather than as the running order
+ * suggests. Kept deliberately small: a label, what to call it, what to tell the
+ * candidate, and the questions that belong to it.
+ */
+export interface DeclaredSection {
+    /** "SECTION A", "SEHEMU A" — printed as given. */
+    label: string;
+    title?: string | null;
+    instruction?: string | null;
+    questions: QuestionSource[];
+}
+
+/**
+ * Lays out a paper whose sections were decided by its format.
+ *
+ * `layoutPaper` has to work out where the sections are by looking at the order
+ * of the questions, because a hand-set paper has no format to ask — and
+ * reordering somebody's paper to fit a convention would be worse than having no
+ * convention at all. A paper built from a plan does have a format, so it says so
+ * here instead of leaving the renderer to guess and printing English headings on
+ * a Kiswahili paper.
+ *
+ * Empty sections are dropped: a format may ask for thirty multiple-choice
+ * questions the bank cannot supply, and a heading over nothing is worse than no
+ * heading. If that leaves one section standing, the paper prints as a single
+ * unlabelled run — "SECTION B" with no Section A above it would puzzle a class.
+ */
+export function layoutSectionedPaper(
+    paper: PaperSource,
+    declared: DeclaredSection[],
+    language: 'en' | 'sw' = 'en'
+): PaperLayout {
+    const filled = (declared ?? []).filter((s) => (s.questions ?? []).length > 0);
+
+    let number = 0;
+    const laidOut = filled.map((s) => ({
+        declared: s,
+        questions: s.questions.map((q) => layoutQuestion(q, ++number)),
+    }));
+
+    const questions = laidOut.flatMap((s) => s.questions);
+
+    const sections: PaperSection[] =
+        laidOut.length > 1
+            ? laidOut.map((s) => ({
+                  label: s.declared.label,
+                  title: s.declared.title ?? null,
+                  instruction: s.declared.instruction ?? null,
+                  marks: sumMarks(s.questions),
+                  questions: s.questions,
+              }))
+            : [
+                  {
+                      label: null,
+                      title: null,
+                      instruction: laidOut[0]?.declared.instruction ?? null,
+                      marks: sumMarks(questions),
+                      questions,
+                  },
+              ];
+
+    return assemble(paper, questions, questions.length === 0 ? [] : sections, language);
+}
+
+function assemble(
+    paper: PaperSource,
+    questions: LaidOutQuestion[],
+    sections: PaperSection[],
+    language: 'en' | 'sw'
+): PaperLayout {
     // What the questions actually add up to wins over what the row says. A
     // stored total goes stale the moment a question is swapped out, and a paper
     // whose header claims 60 marks while its mark table adds to 20 is the kind
     // of thing a teacher notices in front of a class.
     const counted = questions.reduce((sum, q) => sum + q.marks, 0);
     const totalMarks = counted > 0 ? counted : Number(paper.total_marks) || 0;
-    const identity = layoutIdentity(paper);
-    const sections = splitIntoSections(questions);
 
     return {
-        identity,
-        instructions: buildInstructions(paper, questions, totalMarks, sections),
+        identity: layoutIdentity(paper),
+        instructions: buildInstructions(paper, questions, totalMarks, sections, language),
         sections,
         questions,
         totalMarks,
@@ -299,7 +370,8 @@ function buildInstructions(
     paper: PaperSource,
     questions: LaidOutQuestion[],
     totalMarks: number,
-    sections: PaperSection[]
+    sections: PaperSection[],
+    language: 'en' | 'sw' = 'en'
 ): string[] {
     const typed = (paper.instructions ?? '')
         .split('\n')
@@ -308,6 +380,23 @@ function buildInstructions(
 
     if (typed.length > 0) return typed;
     if (questions.length === 0) return [];
+
+    // A Kiswahili paper with English rubrics at the top is not a Kiswahili
+    // paper. The section headings come from the format; these do not, so they
+    // are written here in both languages rather than left in one.
+    if (language === 'sw') {
+        const lines = [
+            'Andika jina lako, nambari yako ya usajili na darasa katika nafasi ulizoachiwa hapo juu.',
+            sections.length > 1
+                ? 'Jibu maswali YOTE katika SEHEMU ZOTE mbili katika nafasi ulizoachiwa.'
+                : 'Jibu maswali YOTE katika nafasi ulizoachiwa.',
+            'Onyesha kazi yako yote pale inapohitajika.',
+        ];
+        if (totalMarks > 0) lines.push(`Karatasi hii ina jumla ya alama ${totalMarks}.`);
+        if (paper.time_limit) lines.push(`Umepewa muda wa ${clean(paper.time_limit)} kukamilisha karatasi hii.`);
+        lines.push('Andika majibu yako katika nafasi ulizoachiwa kwa kutumia kalamu ya wino wa buluu au mweusi.');
+        return lines;
+    }
 
     const lines = [
         'Write your name, admission number and class in the spaces provided above.',

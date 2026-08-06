@@ -324,37 +324,21 @@ export const SECTION_TYPE_LABELS: Record<QuestionSectionType, string> = {
     general: 'General'
 };
 
-// Paper template section configuration
-export interface TemplateSectionConfig {
-    section_label: string;           // "A", "B", "C", etc.
-    name: string;                    // "Map Analysis"
-    section_type: QuestionSectionType;
-    question_count: number;
-    marks_per_question: number;
-    topics?: number[];               // Topic numbers to draw from (optional)
-    instructions?: string;           // Section-specific instructions
-}
-
-// Paper template for generating exams
-export interface PaperTemplate {
-    id: string;
-    name: string;
-    description?: string;
-    subject_id?: string;
-    grade_id?: string;
-    total_marks: number;
-    time_limit?: string;
-    sections: TemplateSectionConfig[];
-    shuffle_within_sections: boolean;
-    shuffle_sections: boolean;
-    is_default: boolean;
-    created_by?: string;
-    created_at?: string;
-    updated_at?: string;
-    // Joined data
-    subject_name?: string;
-    grade_name?: string;
-}
+/*
+ * `PaperTemplate` and `TemplateSectionConfig` used to sit here, describing a
+ * second section-aware paper engine that never ran: `paper_templates` held no
+ * rows, and its topic filter queried a `questions.topic_id` column that does not
+ * exist, so any section restricted by topic came back empty and said nothing.
+ *
+ * A paper's shape is now declared in types/paperPlan.ts and filled by
+ * services/paperBuilder, which is pure and covered by verify:builder. The
+ * section vocabulary worth keeping — a label, a name, per-section instructions —
+ * moved across with it. See docs/PAPER-BUILDER-RENEWAL.md.
+ *
+ * `QuestionSectionType` below stays: it describes the `questions.section_type`
+ * column and the admin lookup that fills its dropdown, which are a way of
+ * tagging questions rather than part of the retired engine.
+ */
 
 // Image bank entry for visual content
 export type ImageType = 'map' | 'diagram' | 'photo' | 'puzzle' | 'chart' | 'illustration' | 'general';

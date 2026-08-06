@@ -14,7 +14,6 @@ import {
     Loader2,
     Lock,
     Plus,
-    Receipt,
     Tags,
     Trash2,
     Users,
@@ -312,10 +311,6 @@ export default function AdminPage() {
                     <Link href="/admin/topics" className="chip">
                         <Tags className="h-3.5 w-3.5" />
                         Topics &amp; strands
-                    </Link>
-                    <Link href="/admin/templates" className="chip">
-                        <Receipt className="h-3.5 w-3.5" />
-                        Paper templates
                     </Link>
                 </div>
 

@@ -1,0 +1,24 @@
+-- ============================================================================
+-- RETIRE paper_templates
+-- ============================================================================
+--
+-- This table backed a second paper-assembly engine that never ran.
+--
+-- It held no rows in any environment. The service that read it filtered on
+-- `questions.topic_id`, a column that does not exist — the questions table has
+-- `topic` and `strand_id` — so any template section restricted by topic returned
+-- nothing and reported nothing. It also filtered on `questions.section_type`,
+-- which is null on every row. The engine was I/O-coupled throughout, so unlike
+-- the pure assembler in services/paperBuilder it could never be covered by a
+-- verification script.
+--
+-- A paper's shape is now declared as data in src/lib/paperFormats and filled by
+-- services/paperBuilder, which is pure and tested without a database. See
+-- docs/PAPER-BUILDER-RENEWAL.md for why the two engines were consolidated into
+-- that one rather than the other.
+--
+-- Dropped without CASCADE on purpose. If anything still depends on this table,
+-- this migration should fail loudly rather than quietly take that dependency
+-- down with it.
+
+DROP TABLE IF EXISTS paper_templates;
