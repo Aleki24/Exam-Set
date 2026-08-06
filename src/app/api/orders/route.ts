@@ -155,9 +155,13 @@ export async function POST(req: NextRequest) {
                     p_phone: phone,
                 });
 
+                // The CheckoutRequestID stays on the server. It is the handle the
+                // callback settles an order by, and handing it to the browser
+                // gave a buyer the one piece of a forged payment they could not
+                // otherwise guess. Nothing on the client ever read it; only the
+                // message meant for the buyer goes back.
                 return NextResponse.json({
                     order: { ...order, status: 'awaiting_confirmation', items },
-                    stk: push,
                     message: push.customerMessage,
                 });
             } catch (pushError) {

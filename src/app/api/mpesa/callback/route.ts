@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { deliverAfterPayment } from '@/services/whatsappBot';
+import { stkQuery } from '@/lib/mpesa';
 
 /**
  * POST /api/mpesa/callback — Daraja STK push result.
@@ -59,6 +60,49 @@ export async function POST(req: NextRequest) {
             await admin.rpc('fail_order_payment', {
                 p_order_id: order.id,
                 p_reason: resultDesc || `ResultCode ${resultCode}`,
+            });
+            return ack;
+        }
+
+        /*
+         * Ask Safaricom before believing any of this.
+         *
+         * This route cannot require a session — Daraja posts without one — and it
+         * settles orders with the service role. Checkout also hands the buyer
+         * their own CheckoutRequestID. Together those made a complete bypass of
+         * the paywall: start a real checkout, decline the prompt on the phone,
+         * then post a hand-written success here and collect the papers for
+         * nothing. No amount of checking the payload closes it, because whatever
+         * Safaricom can send, a buyer can send too.
+         *
+         * So the callback is treated as a hint that something may have happened,
+         * and Safaricom's own answer decides whether it did.
+         */
+        let verified: { resultCode: number; resultDesc: string };
+        try {
+            verified = await stkQuery(checkoutRequestId);
+        } catch (queryError) {
+            // Fail closed, but do not mark the order failed: a buyer who really
+            // paid must not be written off because Daraja was briefly
+            // unreachable. Safaricom retries the callback, and an admin can
+            // settle it by hand from the console meanwhile.
+            console.error(
+                'Could not verify an M-Pesa callback with Daraja, so it was not settled:',
+                queryError instanceof Error ? queryError.message : queryError,
+                { checkoutRequestId }
+            );
+            return ack;
+        }
+
+        if (verified.resultCode !== 0) {
+            console.warn('M-Pesa callback claimed success but Daraja disagrees:', {
+                checkoutRequestId,
+                resultCode: verified.resultCode,
+                resultDesc: verified.resultDesc,
+            });
+            await admin.rpc('fail_order_payment', {
+                p_order_id: order.id,
+                p_reason: verified.resultDesc || `Daraja reported ResultCode ${verified.resultCode}`,
             });
             return ack;
         }

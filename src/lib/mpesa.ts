@@ -88,6 +88,61 @@ async function getAccessToken(config: MpesaConfig): Promise<string> {
     return body.access_token;
 }
 
+export interface StkQueryResult {
+    /** 0 means the customer completed the payment. */
+    resultCode: number;
+    resultDesc: string;
+}
+
+/**
+ * Asks Safaricom what actually happened to a checkout request.
+ *
+ * WHY THE CALLBACK IS NOT ENOUGH
+ *
+ * Daraja posts its result to a URL that cannot require a session — Safaricom
+ * carries no credentials — so `/api/mpesa/callback` has to accept anonymous
+ * POSTs, and it settles orders with the service role. Meanwhile checkout hands
+ * the buyer their own `CheckoutRequestID` in the response. Between those two
+ * facts sat a complete bypass of the paywall: start a real checkout, decline the
+ * prompt on the phone, then post a hand-written success to the callback and
+ * collect the papers without paying.
+ *
+ * Nothing in the payload can close that, because anything Safaricom sends, a
+ * buyer can also send. The only thing that cannot be forged is Safaricom's own
+ * answer, so the callback is now a hint that a payment may have happened, and
+ * this is what decides whether it did.
+ */
+export async function stkQuery(checkoutRequestId: string): Promise<StkQueryResult> {
+    const config = getMpesaConfig();
+    if (!config) throw new Error('M-Pesa is not configured');
+
+    const timestamp = mpesaTimestamp();
+    const password = Buffer.from(`${config.shortcode}${config.passkey}${timestamp}`).toString('base64');
+    const token = await getAccessToken(config);
+
+    const res = await fetch(`${apiBase(config.env)}/mpesa/stkpushquery/v1/query`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            BusinessShortCode: config.shortcode,
+            Password: password,
+            Timestamp: timestamp,
+            CheckoutRequestID: checkoutRequestId,
+        }),
+        cache: 'no-store',
+    });
+
+    const body = (await res.json()) as Record<string, string>;
+    if (!res.ok) {
+        throw new Error(body.errorMessage || body.ResponseDescription || `M-Pesa query failed (${res.status})`);
+    }
+    if (body.ResultCode === undefined) {
+        throw new Error('M-Pesa query returned no result code');
+    }
+
+    return { resultCode: Number(body.ResultCode), resultDesc: String(body.ResultDesc || '') };
+}
+
 export interface StkPushResult {
     checkoutRequestId: string;
     merchantRequestId: string;
