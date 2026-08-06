@@ -73,27 +73,82 @@ export default function UploadPaperPage() {
 
         setUploading(true);
         try {
-            const body = new FormData();
-            body.append('paper', paperFile);
-            if (schemeFile) body.append('scheme', schemeFile);
-            body.append(
-                'meta',
-                JSON.stringify({
-                    ...form,
-                    total_marks: form.total_marks ? Number(form.total_marks) : 0,
-                    question_count: form.question_count ? Number(form.question_count) : 0,
-                    price_cents: Math.round(form.price * 100),
-                    // Exactly one of these, so the server never has to guess
-                    // whether an id and a name disagree on purpose.
-                    set_id: setChoice.mode === 'existing' ? setChoice.setId : undefined,
-                    new_set:
-                        setChoice.mode === 'new'
-                            ? setChoice.newSetName.trim() || true
-                            : undefined,
-                })
-            );
+            const meta = {
+                ...form,
+                total_marks: form.total_marks ? Number(form.total_marks) : 0,
+                question_count: form.question_count ? Number(form.question_count) : 0,
+                price_cents: Math.round(form.price * 100),
+                // Exactly one of these, so the server never has to guess
+                // whether an id and a name disagree on purpose.
+                set_id: setChoice.mode === 'existing' ? setChoice.setId : undefined,
+                new_set:
+                    setChoice.mode === 'new' ? setChoice.newSetName.trim() || true : undefined,
+            };
 
-            const res = await fetch('/api/papers/upload', { method: 'POST', body });
+            /*
+             * The file goes to the bucket, not through the server.
+             *
+             * Posting it here as multipart meant it crossed a serverless
+             * function, and Vercel stops a request body at about 4.5 MB — which
+             * a scanned past paper passes easily. The upload died at the
+             * platform with a message that had nothing to do with this app's own
+             * 25 MB rule, and compressing the PDF was the only way through. Now
+             * the server hands out a signed URL, the browser sends the bytes
+             * straight to storage, and only the key comes back.
+             */
+            const signRes = await fetch('/api/papers/upload/sign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stem: `${form.grade_label || ''} ${form.year || ''} ${form.title}`,
+                    files: [
+                        { kind: 'paper', contentType: paperFile.type, size: paperFile.size },
+                        ...(schemeFile
+                            ? [{ kind: 'scheme', contentType: schemeFile.type, size: schemeFile.size }]
+                            : []),
+                    ],
+                }),
+            });
+            const signed = await signRes.json();
+            if (!signRes.ok) {
+                toast.error(signed.error || 'Could not start the upload');
+                return;
+            }
+
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const tickets: any[] = signed.tickets ?? [];
+            for (const [file, kind] of [
+                [paperFile, 'paper'],
+                [schemeFile, 'scheme'],
+            ] as const) {
+                if (!file) continue;
+                const ticket = tickets.find((t) => t.kind === kind);
+                if (!ticket) {
+                    toast.error('The upload was not authorised. Try again.');
+                    return;
+                }
+                const put = await fetch(ticket.url, {
+                    method: ticket.method,
+                    headers: ticket.headers,
+                    body: file,
+                });
+                if (!put.ok) {
+                    toast.error(
+                        `Could not upload the ${kind === 'paper' ? 'paper' : 'marking scheme'} (${put.status}).`
+                    );
+                    return;
+                }
+            }
+
+            const res = await fetch('/api/papers/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    meta,
+                    pdf_storage_key: tickets.find((t) => t.kind === 'paper')?.key,
+                    marking_scheme_storage_key: tickets.find((t) => t.kind === 'scheme')?.key,
+                }),
+            });
             const data = await res.json();
 
             if (!res.ok) {

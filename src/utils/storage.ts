@@ -18,7 +18,13 @@
  * throws a message that says exactly what to set.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+    S3Client,
+    PutObjectCommand,
+    GetObjectCommand,
+    DeleteObjectCommand,
+    HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createAdminClient } from '@/utils/supabase/admin';
 
@@ -118,6 +124,106 @@ export async function putObject(key: string, body: Buffer, contentType: string):
     const { error } = await supabaseStorage().upload(key, body, { contentType, upsert: true });
     if (error) throw new Error(`Upload failed: ${error.message}`);
     return { key };
+}
+
+/**
+ * Permission for the browser to put one object straight into the bucket.
+ *
+ * WHY UPLOADS DO NOT COME THROUGH THE SERVER ANY MORE
+ *
+ * `putObject` needs the whole file in memory in a serverless function, and
+ * Vercel caps a route handler's request body at about 4.5 MB on every plan — so
+ * a scanned past paper was rejected by the platform before this app saw it, with
+ * an error that had nothing to do with the 25 MB limit the upload route
+ * advertised. Handing the browser a signed URL takes the function out of the
+ * path entirely: the bytes go from the seller's laptop to the bucket, and only
+ * the key comes back here.
+ *
+ * The key is minted server-side and namespaced by uploader. The browser is
+ * never allowed to choose where a file lands.
+ */
+export interface UploadTicket {
+    /** Where the object will live. Recorded against the paper afterwards. */
+    key: string;
+    /** The URL to send the bytes to. */
+    url: string;
+    method: 'PUT';
+    headers: Record<string, string>;
+    backend: StorageBackend;
+}
+
+export async function signedUploadTicket(
+    key: string,
+    contentType: string,
+    expiresIn = 900
+): Promise<UploadTicket> {
+    const backend = requireStorage();
+
+    if (backend === 'r2') {
+        const url = await getSignedUrl(
+            r2(),
+            new PutObjectCommand({
+                Bucket: process.env.R2_BUCKET_NAME!,
+                Key: key,
+                ContentType: contentType,
+            }),
+            { expiresIn }
+        );
+        // The signature covers Content-Type, so the browser has to send the same
+        // one back or R2 rejects it.
+        return { key, url, method: 'PUT', headers: { 'Content-Type': contentType }, backend };
+    }
+
+    const { data, error } = await supabaseStorage().createSignedUploadUrl(key);
+    if (error || !data?.signedUrl) {
+        throw new Error(`Could not authorise the upload: ${error?.message ?? 'unknown error'}`);
+    }
+    // Supabase puts the token in the URL, so a plain PUT of the file body is
+    // all the browser needs.
+    return {
+        key,
+        url: data.signedUrl,
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        backend,
+    };
+}
+
+/**
+ * What is actually in the bucket at `key`, or null when nothing is.
+ *
+ * The finalising request is just JSON, so on its own it is a claim that a file
+ * was uploaded rather than proof. Without this a seller could skip the upload
+ * — or have it fail silently — and still create a paper the shop would happily
+ * sell and then fail to deliver.
+ */
+export async function objectInfo(key: string): Promise<{ size: number; contentType?: string } | null> {
+    const backend = requireStorage();
+
+    if (backend === 'r2') {
+        try {
+            const head = await r2().send(
+                new HeadObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: key })
+            );
+            return { size: Number(head.ContentLength) || 0, contentType: head.ContentType };
+        } catch {
+            return null;
+        }
+    }
+
+    const slash = key.lastIndexOf('/');
+    const folder = slash === -1 ? '' : key.slice(0, slash);
+    const name = slash === -1 ? key : key.slice(slash + 1);
+
+    const { data, error } = await supabaseStorage().list(folder, { search: name, limit: 100 });
+    if (error) return null;
+
+    const found = (data ?? []).find((entry) => entry.name === name);
+    if (!found) return null;
+
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const meta = (found as any).metadata ?? {};
+    return { size: Number(meta.size) || 0, contentType: meta.mimetype };
 }
 
 /**
