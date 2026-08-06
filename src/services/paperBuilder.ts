@@ -14,6 +14,7 @@
 import { publicBrowserClient } from '@/utils/supabase/publicClient';
 import type { Difficulty, DBQuestion, Question, QuestionType } from '@/types';
 import type { PaperBlueprint } from '@/types/shop';
+import type { Deficit, FeasibilityReport, PaperPlan, SectionPlan } from '@/types/paperPlan';
 
 // ============================================================================
 // SHUFFLING
@@ -282,6 +283,223 @@ export function paperStats(questions: Question[]): PaperStats {
         byTopic,
         estimatedMinutes: Math.round(marks * 1.2 + questions.length * 0.5),
         duplicateIds: [...seen.entries()].filter(([, n]) => n > 1).map(([id]) => id),
+    };
+}
+
+// ============================================================================
+// FEASIBILITY
+// ============================================================================
+
+/**
+ * How long a question takes, by type.
+ *
+ * The flat `marks × 1.2` used by `paperStats` was calibrated for structured
+ * work, and it is badly wrong on the papers this catalogue exists to produce: a
+ * KJSEA Section A of thirty one-mark multiple-choice questions comes out at
+ * fifty-one minutes against an official allowance of about thirty. Objective
+ * questions cost what they cost to read and decide — roughly a minute — whatever
+ * they are worth. Everything else scales with the marks.
+ *
+ * Checked against three published papers: KJSEA Mathematics (132 estimated
+ * against 120 allowed), KJSEA Integrated Science (86 against 100) and KCSE
+ * Mathematics Paper 1 (140 against 150). All inside the ±15% band `timeOk` uses.
+ */
+const MINUTES_PER_QUESTION: Partial<Record<QuestionType, number>> = {
+    'Multiple Choice': 1,
+    'True/False': 0.75,
+    'Fill-in-the-blank': 1,
+    Matching: 1.5,
+};
+
+const MINUTES_PER_MARK: Partial<Record<QuestionType, number>> = {
+    Structured: 1.4,
+    'Short Answer': 1.2,
+    Numeric: 1.5,
+    Essay: 2,
+    Practical: 2,
+    Oral: 1,
+};
+
+/** Structured is the sensible default for an untyped or unknown question. */
+const DEFAULT_MINUTES_PER_MARK = 1.4;
+
+/** How long one question takes a candidate. */
+export function questionMinutes(q: Pick<Question, 'marks' | 'subParts' | 'type'>): number {
+    const perQuestion = MINUTES_PER_QUESTION[q.type];
+    if (perQuestion !== undefined) return perQuestion;
+    return marksOf(q) * (MINUTES_PER_MARK[q.type] ?? DEFAULT_MINUTES_PER_MARK);
+}
+
+/**
+ * How many questions a section prints, where that is knowable.
+ *
+ * Null means "as many as it takes to reach the marks" — a structured section
+ * that does not fix a count.
+ */
+export function sectionQuestionsNeeded(section: SectionPlan): number | null {
+    if (section.questionsSet !== undefined) return section.questionsSet;
+    if (section.marksPerQuestion) return Math.round(section.marks / section.marksPerQuestion);
+    return null;
+}
+
+/** Time for a section, priced from what the candidate answers, not what is printed. */
+function sectionMinutes(section: SectionPlan): number {
+    const primary = section.types[0];
+    const perQuestion = primary ? MINUTES_PER_QUESTION[primary] : undefined;
+
+    if (perQuestion !== undefined) {
+        const answered = section.answerAny ?? sectionQuestionsNeeded(section) ?? section.marks;
+        return answered * perQuestion;
+    }
+    // `section.marks` is the scored total, so an "answer any five of eight"
+    // section is already priced at five answers rather than eight.
+    return section.marks * ((primary && MINUTES_PER_MARK[primary]) ?? DEFAULT_MINUTES_PER_MARK);
+}
+
+/** Minutes a plan should take a candidate, independent of what the bank holds. */
+export function planMinutes(plan: PaperPlan): number {
+    return Math.round(plan.sections.reduce((sum, s) => sum + sectionMinutes(s), 0));
+}
+
+/**
+ * Questions that may appear in a section.
+ *
+ * Type is a hard filter, not a preference. A structured question in the
+ * objective section is a mistake rather than a compromise, so a thin bank leaves
+ * the section visibly short instead of being quietly padded from elsewhere.
+ */
+function eligibleForSection(pool: DBQuestion[], section: SectionPlan): DBQuestion[] {
+    const types = new Set(section.types);
+    const difficulties = section.difficulties ? new Set<Difficulty>(section.difficulties) : null;
+    const strands = section.strands ? new Set(section.strands.map((s) => s.toLowerCase())) : null;
+
+    return pool.filter((q) => {
+        if (!types.has(q.type)) return false;
+        if (difficulties && !difficulties.has(q.difficulty)) return false;
+        if (strands && !(q.topic && strands.has(q.topic.toLowerCase()))) return false;
+
+        const m = marksOf(q);
+        if (m <= 0) return false;
+        // A section that sets one mark per question cannot use a five-mark one,
+        // and reporting it as available would be a lie the setter finds later.
+        if (section.marksPerQuestion !== undefined && m !== section.marksPerQuestion) return false;
+        return true;
+    });
+}
+
+function describeTypes(types: QuestionType[]): string {
+    if (types.length === 0) return 'question';
+    if (types.length === 1) return types[0];
+    return `${types.slice(0, -1).join(', ')} or ${types[types.length - 1]}`;
+}
+
+/**
+ * Can this format be filled from this bank, and if not, what exactly is missing?
+ *
+ * This runs BEFORE assembly, and it is the feature that matters most while a
+ * bank is thin — which is the normal condition of every school in its first term
+ * on the platform, not an error state. A builder that can only answer "here is
+ * your paper" has nothing to say to a school that has not stocked its bank yet.
+ * This answers "you need 26 one-mark Multiple Choice questions", which is a
+ * worklist the entry form, the bulk import, the extractor and the AI author can
+ * all be pointed at.
+ *
+ * Sections are considered in the order they are declared, each drawing from what
+ * the ones before it left behind. Section A is normally the most constrained —
+ * objective questions only — so declaration order gives the scarce section first
+ * claim, which is also how a person would fill the paper.
+ */
+export function planFeasibility(pool: DBQuestion[], plan: PaperPlan): FeasibilityReport {
+    const deficits: Deficit[] = [];
+    const placed: DBQuestion[] = [];
+
+    let remaining = pool.filter((q) => marksOf(q) > 0);
+
+    // A CAT covers the term so far. Judging it against the whole syllabus would
+    // report a perfectly good paper as unbalanced.
+    if (plan.coverage && plan.coverage.strands.length > 0) {
+        const taught = new Set(plan.coverage.strands.map((s) => s.toLowerCase()));
+        remaining = remaining.filter((q) => q.topic && taught.has(q.topic.toLowerCase()));
+    }
+
+    const used = new Set<string>();
+    let coverableMarks = 0;
+
+    for (const section of plan.sections) {
+        const eligible = eligibleForSection(remaining, section).filter((q) => !used.has(q.id));
+        const need = sectionQuestionsNeeded(section);
+
+        let taken: DBQuestion[];
+        let sectionMarks: number;
+
+        if (need !== null) {
+            taken = eligible.slice(0, need);
+            // Part of a section is worth part of its marks. Rounding down keeps
+            // the report from claiming a mark the paper will not carry.
+            sectionMarks = need > 0 ? Math.floor((section.marks * taken.length) / need) : 0;
+        } else {
+            // No fixed count: fill by marks, smallest first so the estimate of
+            // what the bank can cover is not thrown off by one oversized item.
+            taken = [];
+            let running = 0;
+            for (const q of [...eligible].sort((a, b) => marksOf(a) - marksOf(b))) {
+                const m = marksOf(q);
+                if (running + m > section.marks) continue;
+                taken.push(q);
+                running += m;
+            }
+            sectionMarks = running;
+        }
+
+        for (const q of taken) used.add(q.id);
+        placed.push(...taken);
+        coverableMarks += sectionMarks;
+
+        const unit: Deficit['unit'] = need !== null ? 'questions' : 'marks';
+        const have = need !== null ? taken.length : sectionMarks;
+        const wanted = need !== null ? need : section.marks;
+
+        if (have < wanted) {
+            const missing = wanted - have;
+            const each = section.marksPerQuestion ? `${section.marksPerQuestion}-mark ` : '';
+            const where = section.strands ? ` on ${section.strands.join(', ')}` : '';
+            const message =
+                unit === 'questions'
+                    ? `${section.label} needs ${wanted} ${each}${describeTypes(section.types)} question${
+                          wanted === 1 ? '' : 's'
+                      }${where}; the bank has ${have}. ${missing} missing.`
+                    : `${section.label} needs ${wanted} marks of ${describeTypes(section.types)} question${
+                          section.types.length === 1 ? '' : 's'
+                      }${where}; the bank covers ${have}. ${missing} marks missing.`;
+
+            deficits.push({
+                sectionId: section.id,
+                sectionLabel: section.label,
+                unit,
+                need: wanted,
+                have,
+                missing,
+                types: section.types,
+                strands: section.strands,
+                marksEach: section.marksPerQuestion,
+                message,
+            });
+        }
+    }
+
+    const estimatedMinutes = planMinutes(plan);
+    const tolerance = plan.durationMinutes * 0.15;
+
+    return {
+        fillable: deficits.length === 0,
+        deficits,
+        // A school printing forty papers needs forty marking schemes, and
+        // finding that out at the printer is too late.
+        schemeGaps: placed.filter((q) => !q.markingScheme || q.markingScheme.trim() === '').length,
+        estimatedMinutes,
+        withinDuration: Math.abs(estimatedMinutes - plan.durationMinutes) <= tolerance,
+        scoredMarks: plan.scoredMarks,
+        coverableMarks,
     };
 }
 
