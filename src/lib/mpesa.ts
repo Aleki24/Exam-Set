@@ -12,7 +12,24 @@
 export interface MpesaConfig {
     consumerKey: string;
     consumerSecret: string;
+    /**
+     * The shortcode Daraja authenticates the request as, and the one the
+     * password is built from.
+     *
+     * On a paybill this is the paybill number. On a till it is the store or
+     * head-office number, which is NOT the number written on the shop counter —
+     * that one is `till` below, and they are frequently different.
+     */
     shortcode: string;
+    /**
+     * Set only when collecting through Buy Goods.
+     *
+     * Its presence is what switches the request from CustomerPayBillOnline to
+     * CustomerBuyGoodsOnline, because the two are not interchangeable: send a
+     * till a paybill request and Daraja rejects it, and the sale simply does not
+     * happen.
+     */
+    till?: string;
     passkey: string;
     callbackUrl: string;
     env: 'sandbox' | 'production';
@@ -27,13 +44,62 @@ export function getMpesaConfig(): MpesaConfig | null {
 
     if (!consumerKey || !consumerSecret || !shortcode || !passkey || !baseUrl) return null;
 
+    const till = (process.env.MPESA_TILL || '').trim();
+
     return {
         consumerKey,
         consumerSecret,
         shortcode,
+        till: till || undefined,
         passkey,
         callbackUrl: `${baseUrl.replace(/\/$/, '')}/api/mpesa/callback`,
         env: process.env.MPESA_ENV === 'production' ? 'production' : 'sandbox',
+    };
+}
+
+/** Whether this deployment collects through a till or a paybill. */
+export function collectionMode(config: MpesaConfig): 'buy-goods' | 'paybill' {
+    return config.till ? 'buy-goods' : 'paybill';
+}
+
+/**
+ * The body of an STK push, built and kept separate so it can be checked without
+ * calling Safaricom.
+ *
+ * The two shapes differ in exactly two fields, and getting either wrong fails
+ * the payment rather than degrading it:
+ *
+ *   paybill    TransactionType CustomerPayBillOnline,  PartyB = the paybill
+ *   buy goods  TransactionType CustomerBuyGoodsOnline, PartyB = the till
+ *
+ * `BusinessShortCode` stays the authenticating shortcode either way, because it
+ * is what the password was signed with.
+ */
+export function stkPayload(
+    config: MpesaConfig,
+    opts: {
+        phone: string;
+        amount: number;
+        timestamp: string;
+        password: string;
+        reference: string;
+        description: string;
+    }
+): Record<string, string | number> {
+    const buyGoods = collectionMode(config) === 'buy-goods';
+
+    return {
+        BusinessShortCode: config.shortcode,
+        Password: opts.password,
+        Timestamp: opts.timestamp,
+        TransactionType: buyGoods ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline',
+        Amount: opts.amount,
+        PartyA: opts.phone,
+        PartyB: buyGoods ? config.till! : config.shortcode,
+        PhoneNumber: opts.phone,
+        CallBackURL: config.callbackUrl,
+        AccountReference: opts.reference.slice(0, 12),
+        TransactionDesc: opts.description.slice(0, 60),
     };
 }
 
@@ -173,19 +239,16 @@ export async function stkPush(opts: {
     const res = await fetch(`${apiBase(config.env)}/mpesa/stkpush/v1/processrequest`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            BusinessShortCode: config.shortcode,
-            Password: password,
-            Timestamp: timestamp,
-            TransactionType: 'CustomerPayBillOnline',
-            Amount: amount,
-            PartyA: phone,
-            PartyB: config.shortcode,
-            PhoneNumber: phone,
-            CallBackURL: config.callbackUrl,
-            AccountReference: opts.reference.slice(0, 12),
-            TransactionDesc: opts.description.slice(0, 60),
-        }),
+        body: JSON.stringify(
+            stkPayload(config, {
+                phone,
+                amount,
+                timestamp,
+                password,
+                reference: opts.reference,
+                description: opts.description,
+            })
+        ),
         cache: 'no-store',
     });
 

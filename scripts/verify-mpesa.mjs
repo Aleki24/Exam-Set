@@ -18,7 +18,17 @@ const jiti = createJiti(import.meta.url, {
     interopDefault: true,
 });
 
-const { normalisePhone, mpesaTimestamp } = await jiti.import('../src/lib/mpesa.ts');
+const { normalisePhone, mpesaTimestamp, stkPayload, collectionMode } = await jiti.import('../src/lib/mpesa.ts');
+
+/** A configured deployment, minus the credentials none of these checks need. */
+const BASE = {
+    consumerKey: 'k',
+    consumerSecret: 's',
+    shortcode: '400200',
+    passkey: 'p',
+    callbackUrl: 'https://exam-set.vercel.app/api/mpesa/callback',
+    env: 'sandbox',
+};
 
 let failures = 0;
 function check(name, condition, detail = '') {
@@ -72,6 +82,54 @@ section('Stamps the time in East Africa, whatever the server thinks');
     check('rolls the date over correctly', midnight === '20260201010000', midnight);
 
     check('zero-pads single digits', mpesaTimestamp(new Date('2026-03-05T01:02:03Z')) === '20260305040203');
+}
+
+section('Knows which way it is collecting');
+{
+    check('no till means paybill', collectionMode({ ...BASE, till: undefined }) === 'paybill');
+    check('a till means buy goods', collectionMode({ ...BASE, till: '7616114' }) === 'buy-goods');
+}
+
+section('Builds a paybill request when no till is configured');
+{
+    const payload = stkPayload(
+        { ...BASE, till: undefined },
+        { phone: '254712345678', amount: 50, timestamp: '20260806120000', password: 'pw', reference: 'REF1', description: 'One paper' }
+    );
+    check('transaction type', payload.TransactionType === 'CustomerPayBillOnline', String(payload.TransactionType));
+    check('paid to the paybill', payload.PartyB === '400200', String(payload.PartyB));
+    check('authenticated as the same shortcode', payload.BusinessShortCode === '400200');
+}
+
+section('Builds a Buy Goods request when a till is configured');
+{
+    const payload = stkPayload(
+        { ...BASE, till: '7616114' },
+        { phone: '254712345678', amount: 50, timestamp: '20260806120000', password: 'pw', reference: 'REF1', description: 'One paper' }
+    );
+    check('transaction type switches', payload.TransactionType === 'CustomerBuyGoodsOnline', String(payload.TransactionType));
+    check('paid to the till', payload.PartyB === '7616114', String(payload.PartyB));
+
+    // The store number and the number on the counter are usually different, and
+    // the password was signed with the store number — so this must not follow
+    // PartyB across.
+    check('still authenticated as the store number', payload.BusinessShortCode === '400200', String(payload.BusinessShortCode));
+}
+
+section('Keeps the parts Daraja is strict about');
+{
+    const payload = stkPayload(BASE, {
+        phone: '254712345678',
+        amount: 50,
+        timestamp: '20260806120000',
+        password: 'pw',
+        reference: 'A-VERY-LONG-ORDER-REFERENCE-INDEED',
+        description: 'x'.repeat(200),
+    });
+    check('reference truncated to 12', String(payload.AccountReference).length === 12, String(payload.AccountReference));
+    check('description truncated to 60', String(payload.TransactionDesc).length === 60);
+    check('payer and payee phone agree', payload.PartyA === payload.PhoneNumber);
+    check('callback carries the public URL', payload.CallBackURL === BASE.callbackUrl);
 }
 
 console.log(failures === 0 ? '\nAll M-Pesa checks passed.\n' : `\n${failures} check(s) failed.\n`);

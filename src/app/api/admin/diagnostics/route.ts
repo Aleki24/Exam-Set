@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
 import { storageBackend } from '@/utils/storage';
-import { getMpesaConfig } from '@/lib/mpesa';
+import { collectionMode, getMpesaConfig } from '@/lib/mpesa';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 /**
@@ -67,7 +67,14 @@ export async function GET() {
                 // buyers can see a paybill to pay to.
                 ok: Boolean(mpesa) || Boolean(paybill),
                 detail: mpesa
-                    ? `STK push (${mpesa.env})`
+                    ? // Which way the money is being collected is worth saying out
+                      // loud: a paybill deployment that meant to be a till looks
+                      // identical here until a real payment is refused.
+                      `STK push (${mpesa.env}) — ${
+                          collectionMode(mpesa) === 'buy-goods'
+                              ? `Buy Goods, till ${mpesa.till}`
+                              : `paybill ${mpesa.shortcode}`
+                      }`
                     : paybill
                       ? 'Manual confirmation — buyers pay to the paybill, an admin confirms'
                       : 'No payment route: no Daraja credentials and no paybill to show',
