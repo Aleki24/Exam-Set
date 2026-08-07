@@ -1,484 +1,359 @@
-'use client';
-
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion, Upload } from 'lucide-react';
+import {
+    ArrowRight,
+    Download,
+    PenSquare,
+    Search,
+    ShieldCheck,
+    Smartphone,
+    Sparkles,
+} from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
-import { useRole } from '@/lib/roles';
-import PaperCard, { PaperCardSkeleton } from '@/components/shop/PaperCard';
-import LevelStrip from '@/components/shop/LevelStrip';
-import FilterRail from '@/components/shop/FilterRail';
-import { useCart } from '@/lib/cart';
-import { LEVELS, examTypeName } from '@/lib/catalog';
-import type { PaperFilters, PaperListing, PaperListResponse } from '@/types/shop';
+import Footer from '@/components/shell/Footer';
+import KindCard from '@/components/shop/KindCard';
+import { LEVELS } from '@/lib/catalog';
+import { catalogStats } from '@/lib/catalogStats';
+import {
+    FAMILY_AUDIENCE,
+    RESOURCE_FAMILIES,
+    RESOURCE_KINDS,
+    subjectsForLevel,
+} from '@/lib/resources';
 
-const PAGE_SIZE = 24;
+export const metadata: Metadata = {
+    title: 'Skulbase — CBE resources for every Kenyan classroom',
+    description:
+        'Schemes of work, lesson plans, records of work, revision notes, set-book guides and exam papers with marking schemes — Playgroup to Form 4. Pay with M-Pesa and download straight away.',
+};
 
-const SORTS = [
-    { value: 'newest', label: 'Newest' },
-    { value: 'popular', label: 'Most bought' },
-    { value: 'price-asc', label: 'Price: low to high' },
-    { value: 'price-desc', label: 'Price: high to low' },
-    { value: 'title', label: 'A-Z' },
-] as const;
+/** The catalogue moves; the curriculum does not. An hour is plenty. */
+export const revalidate = 3600;
 
 /**
- * THE SHOP — the front door of the platform.
+ * THE FRONT DOOR.
  *
- * No marketing landing page: the first thing anyone sees is the papers they can
- * buy, filtered the way a teacher actually shops (level, then exam type).
+ * `/` was the shop for as long as the product was a shop, and the argument for
+ * that was written down and was a good one. It stopped being true when the shop
+ * became a library: someone arriving cold now meets a filter rail and
+ * twenty-six exam types with nothing telling them what this is or why the
+ * contents can be trusted. The catalogue is one click away at `/catalog` and
+ * still owns search — this page owns the introduction.
+ *
+ * Rendered on the server with a single count query, holding to the standard
+ * `/learn` already set: on a Kenyan mobile connection this page is HTML and
+ * nothing else, and it is complete the moment it arrives. No hero image — the
+ * two files in `public/` weigh 1.7 MB between them, which is the performance
+ * argument for this whole redesign, inverted.
  */
-export default function ShopPage() {
-    const router = useRouter();
-    const cart = useCart();
-
-    const [filters, setFilters] = useState<PaperFilters>({ sort: 'newest' });
-    const [searchDraft, setSearchDraft] = useState('');
-    const [papers, setPapers] = useState<PaperListing[]>([]);
-    const [response, setResponse] = useState<PaperListResponse | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [offset, setOffset] = useState(0);
-    const [showFiltersMobile, setShowFiltersMobile] = useState(false);
-
-    // Debounce the search box so typing does not hammer the API.
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setFilters((f) =>
-                f.search === (searchDraft || undefined) ? f : { ...f, search: searchDraft || undefined }
-            );
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [searchDraft]);
-
-    const queryString = useCallback(
-        (from: number) => {
-            const params = new URLSearchParams();
-            if (filters.level) params.set('level', filters.level);
-            if (filters.grade) params.set('grade', filters.grade);
-            if (filters.subject) params.set('subject', filters.subject);
-            if (filters.exam_type) params.set('exam_type', filters.exam_type);
-            if (filters.term) params.set('term', filters.term);
-            if (filters.year) params.set('year', String(filters.year));
-            if (filters.set) params.set('set', filters.set);
-            if (filters.price) params.set('price', filters.price);
-            if (filters.search) params.set('search', filters.search);
-            if (filters.sort) params.set('sort', filters.sort);
-            params.set('limit', String(PAGE_SIZE));
-            params.set('offset', String(from));
-            return params.toString();
-        },
-        [filters]
-    );
-
-    // Reload from the top whenever the filters change.
-    useEffect(() => {
-        let cancelled = false;
-        setLoading(true);
-        setOffset(0);
-
-        fetch(`/api/papers?${queryString(0)}`)
-            .then((res) => res.json())
-            .then((data: PaperListResponse & { error?: string }) => {
-                if (cancelled) return;
-                if (data.error) {
-                    // The raw database message is useful in the console, not in
-                    // a toast the buyer has to read.
-                    console.error('GET /api/papers:', data.error);
-                    toast.error('Could not load papers right now. Please try again.');
-                    return;
-                }
-                setPapers(data.papers || []);
-                setResponse(data);
-            })
-            .catch(() => !cancelled && toast.error('Could not load papers. Check your connection and try again.'))
-            .finally(() => !cancelled && setLoading(false));
-
-        return () => {
-            cancelled = true;
-        };
-    }, [queryString]);
-
-    const loadMore = async () => {
-        const next = offset + PAGE_SIZE;
-        setLoadingMore(true);
-        try {
-            const res = await fetch(`/api/papers?${queryString(next)}`);
-            const data: PaperListResponse = await res.json();
-            setPapers((current) => [...current, ...(data.papers || [])]);
-            setResponse(data);
-            setOffset(next);
-        } catch {
-            toast.error('Could not load more papers.');
-        } finally {
-            setLoadingMore(false);
-        }
-    };
-
-    const subjects = useMemo(
-        () => Object.keys(response?.facets?.subjects || {}).sort((a, b) => a.localeCompare(b)),
-        [response]
-    );
-
-    const patchFilters = (patch: Partial<PaperFilters>) => setFilters((f) => ({ ...f, ...patch }));
-    const resetFilters = () => {
-        setFilters({ sort: filters.sort });
-        setSearchDraft('');
-    };
-
-    const handleToggleCart = (paper: PaperListing) => {
-        const added = cart.toggle(paper);
-        toast.success(added ? `Added "${paper.title}" to your cart` : 'Removed from cart');
-    };
-
-    /** Free papers and papers you already own download straight away. */
-    const handleDownload = async (paper: PaperListing) => {
-        try {
-            const res = await fetch(`/api/papers/${paper.id}/download`);
-            const data = await res.json();
-
-            if (res.status === 401) {
-                toast.error('Sign in to download this paper');
-                router.push(`/auth/login?next=/papers/${paper.slug || paper.id}`);
-                return;
-            }
-            if (!res.ok) {
-                toast.error(data.error || 'Could not start the download');
-                return;
-            }
-            window.open(data.url, '_blank', 'noopener');
-        } catch {
-            toast.error('Could not start the download');
-        }
-    };
-
-    const activeSummary = [
-        filters.level && LEVELS.find((l) => l.slug === filters.level)?.name,
-        filters.grade,
-        filters.exam_type && examTypeName(filters.exam_type),
-        filters.subject,
-        filters.year,
-    ].filter(Boolean);
+export default async function LandingPage() {
+    /*
+     * The sitemap advertised `/?level=<slug>` for years and those results are
+     * indexed. Anyone arriving on one wanted a filtered list, and `redirects()`
+     * in `next.config.ts` sends them to the page that can give them one — done
+     * there rather than here so that reading `searchParams` never drags this
+     * page out of the static cache.
+     */
+    const stats = await catalogStats();
 
     return (
         <div className="min-h-screen bg-background">
             <TopNav />
 
-            {/* Search + sort. Shares the nav's sticky region so the page has a
-                single edge rather than two stacked bars. */}
-            <div className="sticky top-16 z-40 border-b bar-blur">
-                <div className="shell-width flex items-center gap-2 py-2.5">
-                    <div className="relative flex-1">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Hero />
+            <Levels stats={stats} />
+            <Categories stats={stats} />
+            <HowItWorks />
+            <ForTeachers />
+            <SetYourOwn />
+
+            <Footer />
+        </div>
+    );
+}
+
+/* ========================================================================== */
+
+function Hero() {
+    return (
+        <section className="relative overflow-hidden border-b border-border">
+            {/* Ruled exercise-book lines — the same blank page the empty
+                catalogue uses, so the two read as one product. Kept faint: at
+                full strength a rule lands straight through the kicker and
+                reads as a strikethrough, which is very obvious on a phone. */}
+            <div className="ruled mask-linear-fade pointer-events-none absolute inset-0 opacity-[0.22]" aria-hidden />
+
+            <div className="shell-width relative py-16 sm:py-24">
+                <p className="overline">Organised by the KICD learning areas · CBC / CBE and 8-4-4</p>
+
+                <h1 className="display-1 mt-5 max-w-3xl">Everything a Kenyan classroom needs, in one place.</h1>
+
+                <p className="lead mt-6 max-w-xl">
+                    Schemes of work, lesson plans, records of work, revision notes, set-book
+                    guides and exam papers with their marking schemes — from baby class to
+                    Form 4. Pay with M-Pesa and download it straight away.
+                </p>
+
+                {/* A real form, so it works before JavaScript does — and on the
+                    connection this page was designed for, that matters. */}
+                <form action="/catalog" method="get" className="mt-9 flex max-w-xl flex-wrap gap-2">
+                    <div className="relative min-w-0 flex-1">
+                        <Search
+                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            aria-hidden
+                        />
                         <input
                             type="search"
-                            value={searchDraft}
-                            onChange={(e) => setSearchDraft(e.target.value)}
-                            placeholder="Search papers — subject, school, topic, year…"
+                            name="search"
                             className="field pl-9"
-                            aria-label="Search papers"
+                            placeholder="Search — subject, class, topic, school…"
+                            aria-label="Search the catalogue"
                         />
-                        {searchDraft && (
-                            <button
-                                type="button"
-                                onClick={() => setSearchDraft('')}
-                                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-muted-foreground hover:bg-secondary"
-                                aria-label="Clear search"
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </button>
-                        )}
                     </div>
-
-                    <select
-                        value={filters.sort}
-                        onChange={(e) => patchFilters({ sort: e.target.value as PaperFilters['sort'] })}
-                        className="field hidden w-auto sm:block"
-                        aria-label="Sort papers"
-                    >
-                        {SORTS.map((s) => (
-                            <option key={s.value} value={s.value}>
-                                {s.label}
-                            </option>
-                        ))}
-                    </select>
-
-                    <button type="button" onClick={() => setShowFiltersMobile(true)} className="btn-outline lg:hidden">
-                        <SlidersHorizontal className="h-4 w-4" />
-                        Filters
+                    <button type="submit" className="btn-primary shrink-0">
+                        Search
                     </button>
+                </form>
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <Link
+                        href="/learn"
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+                    >
+                        Or start with your class
+                        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    </Link>
+                    <span className="meta">No account needed to browse.</span>
                 </div>
             </div>
+        </section>
+    );
+}
 
-            <div className="shell-width grid min-w-0 gap-8 py-6 lg:grid-cols-[212px_1fr]">
-                {/* Desktop rail */}
-                <aside className="hidden lg:block">
-                    <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] scroll-panel pr-2">
-                        <FilterRail
-                            filters={filters}
-                            facets={response?.facets}
-                            subjects={subjects}
-                            onChange={patchFilters}
-                        />
-                    </div>
-                </aside>
+/* ========================================================================== */
 
-                {/* Results */}
-                <main className="min-w-0">
-                    {/* Level strip: the fastest way in, and it doubles as the
-                        page's only "hero" — no marketing, just the catalog. */}
-                    <div className="mb-8">
-                        <LevelStrip
-                            active={filters.level}
-                            counts={response?.facets?.levels}
-                            onSelect={(level) => patchFilters({ level, grade: undefined })}
-                        />
-                    </div>
+function Levels({ stats }: { stats: Awaited<ReturnType<typeof catalogStats>> }) {
+    return (
+        <section aria-labelledby="levels-heading" className="shell-width py-14 sm:py-20">
+            <div className="rule-heading">
+                <h2 id="levels-heading" className="overline">
+                    Start with a class
+                </h2>
+            </div>
 
-                    <AppliedFilters
-                        filters={filters}
-                        facets={response?.facets}
-                        onChange={patchFilters}
-                        onClearSearch={() => setSearchDraft('')}
-                        onReset={resetFilters}
-                    />
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {LEVELS.map((level, index) => {
+                    const count = stats?.levels[level.slug];
+                    return (
+                        <li key={level.slug}>
+                            <Link
+                                href={`/learn/${level.slug}`}
+                                className="sheet settle-in group flex h-full flex-col p-5"
+                                style={{ '--i': index % 12 } as React.CSSProperties}
+                            >
+                                <p className="overline">{level.curriculum}</p>
 
-                    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-                        <div className="min-w-0">
-                            <p className="overline mb-2.5">
-                                {loading
-                                    ? 'Loading'
-                                    : `${response?.total ?? 0} paper${(response?.total ?? 0) === 1 ? '' : 's'}`}
-                            </p>
-                            <h1 className="display-2">
-                                {activeSummary.length > 0 ? activeSummary.join(' · ') : 'Every exam paper'}
-                            </h1>
-                            {activeSummary.length === 0 && !filters.search && (
-                                <p className="lead mt-3 max-w-md text-sm sm:text-[15px]">
-                                    Question papers and marking schemes, ready to print.
+                                <h3 className="title-2 mt-3 transition-colors group-hover:text-primary">
+                                    {level.name}
+                                </h3>
+
+                                <p className="meta mt-2">{level.grades.join(' · ')}</p>
+
+                                <div className="flex-1" />
+
+                                <p className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-3">
+                                    <span className="figure text-xs text-muted-foreground">
+                                        {count === undefined
+                                            ? `${subjectsForLevel(level.slug).length} learning areas`
+                                            : `${count} resource${count === 1 ? '' : 's'}`}
+                                    </span>
+                                    <ArrowRight
+                                        className="h-3.5 w-3.5 text-primary transition-transform duration-200 group-hover:translate-x-0.5"
+                                        aria-hidden
+                                    />
                                 </p>
-                            )}
-                        </div>
+                            </Link>
+                        </li>
+                    );
+                })}
+            </ul>
+        </section>
+    );
+}
 
-                        <Link href="/set" className="btn-outline shrink-0">
-                            <PenSquare className="h-4 w-4" aria-hidden />
-                            Set your own exam
-                        </Link>
-                    </header>
+/* ========================================================================== */
 
-                    {loading ? (
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                            {Array.from({ length: 6 }).map((_, i) => (
-                                <PaperCardSkeleton key={i} index={i} />
-                            ))}
-                        </div>
-                    ) : papers.length === 0 ? (
-                        <EmptyState
-                            hasFilters={activeSummary.length > 0 || Boolean(filters.search)}
-                            onReset={resetFilters}
-                        />
-                    ) : (
-                        <>
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                                {papers.map((paper, i) => (
-                                    <PaperCard
-                                        key={paper.id}
-                                        paper={paper}
-                                        index={i}
-                                        inCart={cart.has(paper.id)}
-                                        onToggleCart={handleToggleCart}
-                                        onDownload={handleDownload}
+function Categories({ stats }: { stats: Awaited<ReturnType<typeof catalogStats>> }) {
+    return (
+        <section aria-labelledby="kinds-heading" className="shell-width pb-14 sm:pb-20">
+            <div className="rule-heading">
+                <h2 id="kinds-heading" className="overline">
+                    Or start with what you need
+                </h2>
+            </div>
+
+            <div className="mt-8 space-y-12">
+                {RESOURCE_FAMILIES.map((family) => {
+                    const kinds = RESOURCE_KINDS.filter((k) => k.family === family);
+                    if (kinds.length === 0) return null;
+
+                    return (
+                        <div key={family}>
+                            <h3 className="title-2">{family}</h3>
+                            <p className="meta mt-1">{FAMILY_AUDIENCE[family]}</p>
+
+                            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                {kinds.map((kind, index) => (
+                                    <KindCard
+                                        key={kind.slug}
+                                        kind={kind}
+                                        count={stats?.kinds[kind.slug]}
+                                        href={`/catalog/${kind.slug}`}
+                                        index={index}
+                                        showFamily={false}
                                     />
                                 ))}
                             </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
 
-                            {response?.hasMore && (
-                                <div className="mt-10 flex flex-col items-center gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={loadMore}
-                                        disabled={loadingMore}
-                                        className="btn-outline"
-                                    >
-                                        {loadingMore ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                                        ) : null}
-                                        Load more papers
-                                    </button>
-                                    <p className="figure text-[11px] text-muted-foreground">
-                                        {papers.length} of {response.total}
-                                    </p>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </main>
+/* ========================================================================== */
+
+/**
+ * How buying works, said once and said plainly.
+ *
+ * Every claim here is one the code actually honours: the order creates an STK
+ * push, the Safaricom callback grants the entitlement, and the download route
+ * mints a signed URL against it. Nothing on this page promises a review nobody
+ * performs.
+ */
+const STEPS = [
+    {
+        icon: Search,
+        title: 'Find it',
+        body: 'Search the catalogue, or browse down from your class to the learning area. Everything is free to look at.',
+    },
+    {
+        icon: Smartphone,
+        title: 'Pay with M-Pesa',
+        body: 'The payment request goes straight to your phone. Prices are in KES, and buying several at once brings the price down.',
+    },
+    {
+        icon: Download,
+        title: 'Download straight away',
+        body: 'Your download unlocks the moment payment is confirmed, and stays in your library to fetch again whenever you need it.',
+    },
+];
+
+function HowItWorks() {
+    return (
+        <section aria-labelledby="how-heading" className="border-y border-border bg-card">
+            <div className="shell-width py-14 sm:py-20">
+                <div className="rule-heading">
+                    <h2 id="how-heading" className="overline">
+                        How it works
+                    </h2>
+                </div>
+
+                <ol className="mt-8 grid gap-3 sm:grid-cols-3">
+                    {STEPS.map((step, index) => (
+                        <li
+                            key={step.title}
+                            className="surface settle-in p-6"
+                            style={{ '--i': index } as React.CSSProperties}
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="figure text-2xl font-bold text-primary">
+                                    {String(index + 1).padStart(2, '0')}
+                                </span>
+                                <step.icon className="h-5 w-5 text-muted-foreground" aria-hidden />
+                            </div>
+                            <h3 className="heading-ui mt-4">{step.title}</h3>
+                            <p className="meta mt-2">{step.body}</p>
+                        </li>
+                    ))}
+                </ol>
+
+                <p className="meta mt-6 flex items-start gap-2">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                    Paid for something and the download has not appeared? The paybill details and a
+                    receipt box are on the checkout page, and{' '}
+                    <Link href="/contact" className="font-semibold text-primary hover:underline">
+                        we will sort it out
+                    </Link>
+                    .
+                </p>
+            </div>
+        </section>
+    );
+}
+
+/* ========================================================================== */
+
+/** The three doors a teacher actually walks through on a Sunday night. */
+const TEACHER_KINDS = ['scheme-of-work', 'lesson-plan', 'record-of-work'] as const;
+
+function ForTeachers() {
+    const kinds = TEACHER_KINDS.map((slug) => RESOURCE_KINDS.find((k) => k.slug === slug)).filter(
+        (k): k is NonNullable<typeof k> => Boolean(k)
+    );
+
+    return (
+        <section aria-labelledby="teachers-heading" className="shell-width py-14 sm:py-20">
+            <div className="max-w-2xl">
+                <p className="overline">For teachers</p>
+                <h2 id="teachers-heading" className="display-2 mt-3">
+                    The planning, already done
+                </h2>
+                <p className="lead mt-4">
+                    The three documents every term asks for, laid out the way the curriculum
+                    designs set them out — so the evening goes on teaching rather than on
+                    formatting.
+                </p>
             </div>
 
-            {/* Mobile filter sheet */}
-            {showFiltersMobile && (
-                <div className="fixed inset-0 z-50 lg:hidden">
-                    <div
-                        className="absolute inset-0 bg-foreground/40"
-                        onClick={() => setShowFiltersMobile(false)}
-                        aria-hidden
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {kinds.map((kind, index) => (
+                    <KindCard
+                        key={kind.slug}
+                        kind={kind}
+                        href={`/catalog/${kind.slug}`}
+                        index={index}
+                        showFamily={false}
                     />
-                    <div className="absolute inset-y-0 right-0 flex w-[85%] max-w-sm flex-col bg-card shadow-xl">
-                        <div className="flex items-center justify-between border-b border-border p-4">
-                            <h2 className="font-bold">Filters</h2>
-                            <button
-                                type="button"
-                                onClick={() => setShowFiltersMobile(false)}
-                                className="grid h-9 w-9 place-items-center rounded-lg hover:bg-secondary"
-                                aria-label="Close filters"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                        <div className="flex-1 scroll-panel p-4">
-                            <FilterRail
-                                filters={filters}
-                                facets={response?.facets}
-                                subjects={subjects}
-                                onChange={patchFilters}
-                            />
-                        </div>
-                        <div className="border-t border-border p-4">
-                            <button
-                                type="button"
-                                onClick={() => setShowFiltersMobile(false)}
-                                className="btn-primary w-full"
-                            >
-                                Show {response?.total ?? 0} papers
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+                ))}
+            </div>
+        </section>
     );
 }
 
-/**
- * Applied filters, restated above the results.
- *
- * The rail folds groups away, so this is the honest record of what is narrowing
- * the list — and the one place to undo any of it.
- */
-function AppliedFilters({
-    filters,
-    facets,
-    onChange,
-    onClearSearch,
-    onReset,
-}: {
-    filters: PaperFilters;
-    facets?: PaperListResponse['facets'];
-    onChange: (patch: Partial<PaperFilters>) => void;
-    onClearSearch: () => void;
-    onReset: () => void;
-}) {
-    const applied: { label: string; clear: Partial<PaperFilters>; isSearch?: boolean }[] = [];
+/* ========================================================================== */
 
-    if (filters.level) {
-        const level = LEVELS.find((l) => l.slug === filters.level);
-        applied.push({ label: level?.name ?? filters.level, clear: { level: undefined, grade: undefined } });
-    }
-    if (filters.grade) applied.push({ label: filters.grade, clear: { grade: undefined } });
-    if (filters.exam_type) applied.push({ label: examTypeName(filters.exam_type), clear: { exam_type: undefined } });
-    if (filters.subject) applied.push({ label: filters.subject, clear: { subject: undefined } });
-    if (filters.set) {
-        // Named from the facets rather than the slug: a chip reading
-        // "kabras-mock-end-term-2-2025" is a URL, not a filter somebody set.
-        const named = Object.entries(facets?.sets ?? {}).find(([slug]) => slug === filters.set);
-        applied.push({ label: named?.[1].name ?? filters.set, clear: { set: undefined } });
-    }
-    if (filters.term) applied.push({ label: filters.term, clear: { term: undefined } });
-    if (filters.year) applied.push({ label: String(filters.year), clear: { year: undefined } });
-    if (filters.price) {
-        applied.push({ label: filters.price === 'free' ? 'Free' : 'Premium', clear: { price: undefined } });
-    }
-    if (filters.search) {
-        applied.push({ label: `“${filters.search}”`, clear: { search: undefined }, isSearch: true });
-    }
-
-    if (applied.length === 0) return null;
-
+function SetYourOwn() {
     return (
-        <div className="mb-6 flex flex-wrap items-center gap-1.5">
-            {applied.map((item) => (
-                <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => (item.isSearch ? onClearSearch() : onChange(item.clear))}
-                    className="chip-applied"
-                    aria-label={`Remove filter ${item.label}`}
-                >
-                    {item.label}
-                    <X className="h-3 w-3 opacity-60" aria-hidden />
-                </button>
-            ))}
-            {applied.length > 1 && (
-                <button
-                    type="button"
-                    onClick={onReset}
-                    className="ml-1 text-xs font-semibold text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                    Clear all
-                </button>
-            )}
-        </div>
-    );
-}
-
-/**
- * The empty shop.
- *
- * An owner and a shopper are looking at the same screen for opposite reasons:
- * one has nothing to buy, the other has nothing stocked. Telling the person who
- * runs the shop to go and set an exam — when what they need is to upload the
- * PDFs sitting on their laptop — is the wrong instruction to the wrong person,
- * and it was the only one offered.
- */
-function EmptyState({ hasFilters, onReset }: { hasFilters: boolean; onReset: () => void }) {
-    const { isAdmin } = useRole();
-
-    return (
-        <div className="surface relative overflow-hidden px-6 py-20 text-center">
-            {/* Ruled exercise-book lines, faded out — a blank page. */}
-            <div className="ruled pointer-events-none absolute inset-0 opacity-40" aria-hidden />
-            <div className="relative">
-                <FileQuestion className="mx-auto mb-5 h-9 w-9 text-muted-foreground" aria-hidden />
-                <h2 className="title-1">
-                    {hasFilters ? 'No papers match this yet' : isAdmin ? 'Your shop has no papers yet' : 'No papers match this yet'}
-                </h2>
-                <p className="lead mx-auto mt-3 max-w-md text-sm sm:text-base">
-                    {hasFilters
-                        ? 'Try a wider level or exam type — or build the paper yourself from the question bank.'
-                        : isAdmin
-                          ? 'Upload the PDFs you already have, or build one from your question bank. Either way it appears here for sale straight away.'
-                          : 'The catalog is empty. Check back shortly.'}
+        <section className="shell-width pb-16 sm:pb-24">
+            <div className="ruled rounded-[var(--radius)] border border-border p-8 text-center sm:p-12">
+                <Sparkles className="mx-auto h-6 w-6 text-primary" aria-hidden />
+                <h2 className="title-1 mt-4">Cannot find the exact paper? Build it.</h2>
+                <p className="lead mx-auto mt-3 max-w-lg">
+                    Pick questions from the bank by topic and difficulty, and get a formatted
+                    paper with its marking scheme — in your school&apos;s own layout.
                 </p>
-                <div className="mt-8 flex flex-wrap justify-center gap-2">
-                    {hasFilters && (
-                        <button type="button" onClick={onReset} className="btn-outline">
-                            Clear filters
-                        </button>
-                    )}
-                    {isAdmin && (
-                        <Link href="/papers/new" className="btn-buy">
-                            <Upload className="h-4 w-4" aria-hidden />
-                            Upload a paper
-                        </Link>
-                    )}
-                    <Link href="/set" className={isAdmin ? 'btn-outline' : 'btn-primary'}>
+                <div className="mt-7 flex flex-wrap justify-center gap-3">
+                    <Link href="/set" className="btn-primary">
                         <PenSquare className="h-4 w-4" aria-hidden />
-                        Set an exam
+                        Set your own exam
+                    </Link>
+                    <Link href="/plans" className="btn-outline">
+                        See passes &amp; pricing
                     </Link>
                 </div>
             </div>
-        </div>
+        </section>
     );
 }

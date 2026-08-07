@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronRight, FileQuestion } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import { createClient } from '@/utils/supabase/server';
 import { LEVEL_BY_SLUG, formatPrice, examTypeName, type LevelSlug } from '@/lib/catalog';
 import {
@@ -120,6 +121,7 @@ export default async function SubjectPage({ params }: Params) {
                     </nav>
                 )}
             </main>
+            <Footer />
         </div>
     );
 }
@@ -283,7 +285,7 @@ function EmptyShelf({ level, subject }: { level: string; subject: string }) {
                 <Link href="/set" className="btn-primary">
                     Set your own paper
                 </Link>
-                <Link href="/" className="btn-outline">
+                <Link href="/catalog" className="btn-outline">
                     Search the catalogue
                 </Link>
             </div>

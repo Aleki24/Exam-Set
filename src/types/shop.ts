@@ -82,6 +82,8 @@ export interface PaperFilters {
     grade?: string;
     subject?: string;
     exam_type?: string;
+    /** A `resource_kind` slug — scheme of work, lesson plan, notes. See lib/resources.ts. */
+    kind?: string;
     term?: string;
     year?: number;
     /** A set slug — restricts to one sitting. See lib/examSets.ts. */
@@ -103,6 +105,8 @@ export interface PaperListResponse {
         levels: Record<string, number>;
         examTypes: Record<string, number>;
         subjects: Record<string, number>;
+        /** Keyed by `resource_kind` slug — see lib/resources.ts. */
+        kinds?: Record<string, number>;
         /** Keyed by set slug, valued `{ name, count }` — see lib/examSets.ts. */
         sets?: Record<string, { name: string; count: number }>;
     };

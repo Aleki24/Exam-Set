@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import { LEVELS, LEVEL_BY_SLUG, type LevelSlug } from '@/lib/catalog';
 import { kindFamiliesForLevel, subjectsForLevel } from '@/lib/resources';
 
@@ -107,7 +108,7 @@ export default async function LevelPage({ params }: Params) {
                                     {group.kinds.map((kind) => (
                                         <li key={kind.slug}>
                                             <Link
-                                                href={`/?level=${level.slug}&kind=${kind.slug}`}
+                                                href={`/catalog?level=${level.slug}&kind=${kind.slug}`}
                                                 className="surface group block h-full p-4 transition-colors duration-200 hover:border-primary/40"
                                             >
                                                 <h4 className="heading-ui transition-colors group-hover:text-primary">
@@ -138,6 +139,7 @@ export default async function LevelPage({ params }: Params) {
                     </ul>
                 </nav>
             </main>
+            <Footer />
         </div>
     );
 }

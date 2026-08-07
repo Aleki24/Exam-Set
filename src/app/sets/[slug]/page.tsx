@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, ShoppingCart } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import PaperCard, { PaperCardSkeleton } from '@/components/shop/PaperCard';
 import { useCart } from '@/lib/cart';
 import { formatPrice, sumCents, bundleDiscount } from '@/lib/catalog';
@@ -79,7 +80,7 @@ export default function SetPage() {
                         <p className="lead mt-2 text-sm">
                             It may have been unpublished, or the link may be wrong.
                         </p>
-                        <Link href="/" className="btn-primary mt-6">
+                        <Link href="/catalog" className="btn-primary mt-6">
                             Browse every paper
                         </Link>
                     </div>
@@ -94,7 +95,7 @@ export default function SetPage() {
 
             <div className="shell-width py-6">
                 <Link
-                    href="/"
+                    href="/catalog"
                     className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -154,6 +155,7 @@ export default function SetPage() {
                     </div>
                 )}
             </div>
+            <Footer />
         </div>
     );
 }

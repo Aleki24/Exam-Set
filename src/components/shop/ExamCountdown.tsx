@@ -55,8 +55,8 @@ export default function ExamCountdown({ level }: { level?: string | null }) {
                 <Link
                     href={
                         level
-                            ? `/?level=${level}&kind=${urgent ? 'prediction' : 'past-paper'}`
-                            : '/?kind=past-paper'
+                            ? `/catalog?level=${level}&kind=${urgent ? 'prediction' : 'past-paper'}`
+                            : '/catalog?kind=past-paper'
                     }
                     className={urgent ? 'btn-primary btn-sm shrink-0' : 'btn-outline btn-sm shrink-0'}
                 >

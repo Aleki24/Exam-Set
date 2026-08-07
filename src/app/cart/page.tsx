@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, ClipboardCheck, Loader2, ShieldCheck, ShoppingCart, Trash2, Smartphone } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, Infinity as InfinityIcon, LifeBuoy, Loader2, ShieldCheck, ShoppingCart, Trash2, Smartphone } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import PaymentPending from '@/components/checkout/PaymentPending';
 import { useCart } from '@/lib/cart';
 import { BUNDLE_TIERS, examTypeName, formatPrice } from '@/lib/catalog';
@@ -154,7 +155,7 @@ export default function CartPage() {
                         Add papers from the shop, or build one yourself in the setter.
                     </p>
                     <div className="mt-6 flex justify-center gap-2">
-                        <Link href="/" className="btn-primary">
+                        <Link href="/catalog" className="btn-primary">
                             Browse papers
                         </Link>
                         <Link href="/set" className="btn-outline">
@@ -162,6 +163,7 @@ export default function CartPage() {
                         </Link>
                     </div>
                 </div>
+                <Footer />
             </div>
         );
     }
@@ -172,7 +174,7 @@ export default function CartPage() {
 
             <div className="shell-width py-6">
                 <Link
-                    href="/"
+                    href="/catalog"
                     className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -285,24 +287,42 @@ export default function CartPage() {
                             {!order ? (
                                 <div className="mt-5">
                                     {totals.totalCents > 0 && (
-                                        <div className="mb-3">
+                                        /* The payment gets its own panel. It is
+                                           the one decision on this screen, and
+                                           a bare label under a price table did
+                                           not look like one. Green is the
+                                           wordmark's own `--brand-green` — a
+                                           token that already exists, not a new
+                                           colour borrowed from Safaricom. */
+                                        <div
+                                            className="mb-4 rounded-[var(--radius)] border p-4"
+                                            style={{
+                                                borderColor:
+                                                    'color-mix(in oklab, var(--brand-green) 30%, var(--border))',
+                                                background:
+                                                    'color-mix(in oklab, var(--brand-green) 5%, transparent)',
+                                            }}
+                                        >
                                             <label className="label" htmlFor="phone">
-                                                M-Pesa number
+                                                Pay with M-Pesa
                                             </label>
                                             <div className="relative">
                                                 <Smartphone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                                 <input
                                                     id="phone"
+                                                    name="phone"
                                                     type="tel"
                                                     inputMode="tel"
+                                                    autoComplete="tel"
                                                     value={phone}
                                                     onChange={(e) => setPhone(e.target.value)}
                                                     placeholder="0712 345 678"
                                                     className="field pl-9"
                                                 />
                                             </div>
-                                            <p className="mt-1.5 text-xs text-muted-foreground">
-                                                We send the payment request straight to your phone.
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                The request goes straight to this phone. Use the number
+                                                that holds the M-Pesa account.
                                             </p>
                                         </div>
                                     )}
@@ -313,10 +333,14 @@ export default function CartPage() {
                                         disabled={submitting || signedIn === null}
                                         className="btn-buy w-full"
                                     >
-                                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                        {submitting ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : totals.totalCents > 0 ? (
+                                            <Smartphone className="h-4 w-4" aria-hidden />
+                                        ) : null}
                                         {totals.totalCents === 0
                                             ? 'Add to my library'
-                                            : `Pay ${formatPrice(totals.totalCents, totals.currency)}`}
+                                            : `Pay ${formatPrice(totals.totalCents, totals.currency)} with M-Pesa`}
                                     </button>
 
                                     {signedIn === false && (
@@ -336,14 +360,34 @@ export default function CartPage() {
                                 />
                             )}
 
-                            <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
-                                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                Papers unlock only after payment is confirmed, then stay in your library for good.
-                            </p>
+                            <ul className="mt-5 space-y-2.5 border-t border-border pt-4">
+                                <li className="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
+                                    <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                                    <span>
+                                        Downloads unlock the moment payment is confirmed — no waiting
+                                        for anyone to email you a file.
+                                    </span>
+                                </li>
+                                <li className="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
+                                    <InfinityIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                                    <span>Everything you buy stays in your library, to fetch again any time.</span>
+                                </li>
+                                <li className="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
+                                    <LifeBuoy className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                                    <span>
+                                        Paid and nothing arrived?{' '}
+                                        <Link href="/contact" className="font-semibold text-primary hover:underline">
+                                            Tell us
+                                        </Link>{' '}
+                                        — we fix it by hand.
+                                    </span>
+                                </li>
+                            </ul>
                         </div>
                     </aside>
                 </div>
             </div>
+            <Footer />
         </div>
     );
 }

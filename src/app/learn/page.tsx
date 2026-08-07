@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import { LEVELS } from '@/lib/catalog';
 import { RESOURCE_FAMILIES, FAMILY_AUDIENCE, RESOURCE_KINDS } from '@/lib/resources';
 import { subjectsForLevel } from '@/lib/resources';
@@ -127,7 +128,7 @@ export default function LearnHubPage() {
                         question bank.
                     </p>
                     <div className="mt-6 flex flex-wrap justify-center gap-3">
-                        <Link href="/" className="btn-primary">
+                        <Link href="/catalog" className="btn-primary">
                             Search every paper
                         </Link>
                         <Link href="/set" className="btn-outline">
@@ -136,6 +137,7 @@ export default function LearnHubPage() {
                     </div>
                 </section>
             </main>
+            <Footer />
         </div>
     );
 }

@@ -212,8 +212,8 @@ export default function LoginPage() {
                 </div>
 
                 <p className="mt-6 text-center">
-                    <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-                        ← Back to the paper shop
+                    <Link href="/catalog" className="text-sm text-muted-foreground hover:text-foreground">
+                        ← Back to the catalogue
                     </Link>
                 </p>
             </div>

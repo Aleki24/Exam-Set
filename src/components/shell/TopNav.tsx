@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen, Home, Settings2, TrendingUp, Users, Heart } from 'lucide-react';
+import { FileText, PenSquare, ShoppingCart, Library, LogOut, Menu, X, Moon, Sun, Search, ShieldCheck, Upload, BookOpen, Home, Settings2, TrendingUp, Users, Heart, Info, LifeBuoy } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { createClient, resetClient } from '@/utils/supabase/client';
 import { clearSupabaseCookies, clearSupabaseStorage, ensureUsableSession } from '@/utils/supabase/session';
@@ -28,10 +28,20 @@ import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 const PRIMARY_LINKS = [
     {
         href: '/',
-        label: 'Exam papers',
+        label: 'Home',
+        icon: Home,
+        // Exactly `/`. Leaving the old prefix match here would light "Home" up
+        // while somebody reads a paper, which is precisely the scent this
+        // link exists to provide.
+        match: (p: string) => p === '/',
+    },
+    {
+        href: '/catalog',
+        label: 'Catalog',
         icon: FileText,
         // `/sets/...` is a sitting in the shop, not the setter. It belongs here.
-        match: (p: string) => p === '/' || p.startsWith('/papers') || p.startsWith('/sets'),
+        match: (p: string) =>
+            p === '/catalog' || p.startsWith('/catalog/') || p.startsWith('/papers') || p.startsWith('/sets'),
     },
     { href: '/learn', label: 'Library', icon: BookOpen, match: (p: string) => p.startsWith('/learn') },
     {
@@ -185,7 +195,7 @@ export default function TopNav() {
                             suffix="Exams"
                             className="block font-display text-[17px] font-bold leading-none tracking-[-0.02em]"
                         />
-                        <span className="overline mt-1 block">CBE paper shop</span>
+                        <span className="overline mt-1 block">CBE resources for Kenya</span>
                     </span>
                 </Link>
 
@@ -470,6 +480,7 @@ export default function TopNav() {
                                         </Link>
                                     </>
                                 )}
+                                <SecondaryMobileLinks />
                                 <button
                                     type="button"
                                     onClick={signOut}
@@ -481,6 +492,8 @@ export default function TopNav() {
                                 </button>
                             </>
                         ) : (
+                            <>
+                            <SecondaryMobileLinks />
                             <div className="flex gap-2 px-1 py-2">
                                 <Link href="/auth/login" className="btn-outline flex-1">
                                     Sign in
@@ -489,6 +502,7 @@ export default function TopNav() {
                                     Create account
                                 </Link>
                             </div>
+                            </>
                         )}
                     </nav>
                 </div>
@@ -504,5 +518,34 @@ export function NavSearchHint() {
             <Search className="h-3.5 w-3.5" />
             Search papers
         </span>
+    );
+}
+
+/**
+ * About and Contact, on mobile only.
+ *
+ * They earn a place in the sheet because the footer that otherwise carries them
+ * is a long scroll away on a phone — but not a place in the desktop bar, which
+ * already holds four links, a cart, a library, two admin buttons, a theme
+ * toggle and an avatar, and is tight at tablet widths as it is.
+ */
+function SecondaryMobileLinks() {
+    return (
+        <>
+            <Link
+                href="/about"
+                className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground hover:bg-secondary"
+            >
+                <Info className="h-4 w-4" />
+                About us
+            </Link>
+            <Link
+                href="/contact"
+                className="flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground hover:bg-secondary"
+            >
+                <LifeBuoy className="h-4 w-4" />
+                Contact &amp; help
+            </Link>
+        </>
     );
 }

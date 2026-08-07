@@ -4,9 +4,11 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, ClipboardCheck, Download, Loader2, Plus, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, ClipboardCheck, Download, Infinity as InfinityIcon, Loader2, Plus, School, ShieldCheck, Zap } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import PaperCard from '@/components/shop/PaperCard';
+import PaperCover from '@/components/shop/PaperCover';
 import { useCart } from '@/lib/cart';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
@@ -218,7 +220,7 @@ export default function PaperDetailPage() {
                     <p className="mt-2 text-sm text-muted-foreground">
                         It may have been unpublished by its author.
                     </p>
-                    <Link href="/" className="btn-primary mt-6 inline-flex">
+                    <Link href="/catalog" className="btn-primary mt-6 inline-flex">
                         Browse all papers
                     </Link>
                 </div>
@@ -238,7 +240,7 @@ export default function PaperDetailPage() {
 
             <div className="shell-width py-6">
                 <Link
-                    href="/"
+                    href="/catalog"
                     className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -306,7 +308,9 @@ export default function PaperDetailPage() {
 
                     {/* Buy panel */}
                     <aside>
-                        <div className="surface sticky top-24 p-5">
+                        <div className="sticky top-24 space-y-4">
+                        <PaperCover paper={paper} />
+                        <div className="surface p-5">
                             <div className="flex items-baseline justify-between">
                                 <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
                                     {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
@@ -386,16 +390,40 @@ export default function PaperDetailPage() {
                                 )}
                             </div>
 
-                            <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
-                                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                Pay with M-Pesa. Your download unlocks the moment payment is confirmed.
-                            </p>
+                            {/* Every line here is a claim the code honours.
+                                Nothing about review or verification, because
+                                nobody performs either. */}
+                            <ul className="mt-5 space-y-2.5 border-t border-border pt-4">
+                                <Assurance icon={ShieldCheck}>
+                                    Pay with M-Pesa. Your download unlocks the moment payment is
+                                    confirmed.
+                                </Assurance>
+                                <Assurance icon={InfinityIcon}>
+                                    Yours to download again, any time, from your library.
+                                </Assurance>
+                                {paper.has_marking_scheme && (
+                                    <Assurance icon={ClipboardCheck}>
+                                        The marking scheme comes with it, with answers and mark
+                                        allocation.
+                                    </Assurance>
+                                )}
+                                {paper.institution && (
+                                    <Assurance icon={School}>Sat at {paper.institution}.</Assurance>
+                                )}
+                                {paper.purchase_count > 0 && (
+                                    <Assurance icon={Zap}>
+                                        Bought {paper.purchase_count} time
+                                        {paper.purchase_count === 1 ? '' : 's'}.
+                                    </Assurance>
+                                )}
+                            </ul>
 
                             {paper.download_count > 0 && (
                                 <p className="figure mt-4 border-t border-border pt-3 text-[11px] text-muted-foreground">
                                     {paper.download_count} download{paper.download_count === 1 ? '' : 's'}
                                 </p>
                             )}
+                        </div>
                         </div>
                     </aside>
                 </div>
@@ -473,7 +501,24 @@ export default function PaperDetailPage() {
                     </section>
                 )}
             </div>
+            <Footer />
         </div>
+    );
+}
+
+/** One true thing about this purchase. */
+function Assurance({
+    icon: Icon,
+    children,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    children: React.ReactNode;
+}) {
+    return (
+        <li className="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
+            <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+            <span>{children}</span>
+        </li>
     );
 }
 

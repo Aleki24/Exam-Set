@@ -18,6 +18,14 @@ interface PaperCardProps {
      * the heading already says it and eight cards repeating it is noise.
      */
     hideSet?: boolean;
+    /**
+     * `compact` keeps the price and the action on one row — right for a dense
+     * shop grid. `stacked` gives the action the full width of the card, which
+     * is the bigger tap target a category page wants.
+     *
+     * Defaults to `compact` so every existing grid is untouched.
+     */
+    layout?: 'compact' | 'stacked';
 }
 
 /**
@@ -35,7 +43,9 @@ export default function PaperCard({
     onDownload,
     index = 0,
     hideSet = false,
+    layout = 'compact',
 }: PaperCardProps) {
+    const stacked = layout === 'stacked';
     const level = paper.level_slug ? LEVEL_BY_SLUG[paper.level_slug] : undefined;
     const isFree = paper.price_cents === 0;
     const owned = Boolean(paper.owned);
@@ -82,13 +92,23 @@ export default function PaperCard({
             <p className="figure mt-3 text-[11px] leading-relaxed text-muted-foreground">{facts}</p>
 
             {/* Price and action share the last line: the decision, in one place. */}
-            <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
-                <span className="figure text-sm font-semibold">
+            <div
+                className={
+                    stacked
+                        ? 'relative mt-3 border-t border-border pt-3'
+                        : 'relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-3'
+                }
+            >
+                <span className={stacked ? 'figure block text-sm font-semibold' : 'figure text-sm font-semibold'}>
                     {isFree ? <span className="text-success">Free</span> : formatPrice(paper.price_cents, paper.currency)}
                 </span>
 
                 {owned || isFree ? (
-                    <button type="button" onClick={() => onDownload?.(paper)} className="btn-primary btn-sm">
+                    <button
+                        type="button"
+                        onClick={() => onDownload?.(paper)}
+                        className={stacked ? 'btn-primary mt-3 w-full' : 'btn-primary btn-sm'}
+                    >
                         <Download className="h-3.5 w-3.5" aria-hidden />
                         {owned && !isFree ? 'Download' : 'Get it'}
                     </button>
@@ -96,7 +116,13 @@ export default function PaperCard({
                     <button
                         type="button"
                         onClick={() => onToggleCart(paper)}
-                        className={inCart ? 'btn-outline btn-sm' : 'btn-primary btn-sm'}
+                        className={
+                            stacked
+                                ? `${inCart ? 'btn-outline' : 'btn-primary'} mt-3 w-full`
+                                : inCart
+                                  ? 'btn-outline btn-sm'
+                                  : 'btn-primary btn-sm'
+                        }
                         aria-pressed={inCart}
                     >
                         {inCart ? (
@@ -107,7 +133,7 @@ export default function PaperCard({
                         ) : (
                             <>
                                 <Plus className="h-3.5 w-3.5" aria-hidden />
-                                Add
+                                {stacked ? 'Add to cart' : 'Add'}
                             </>
                         )}
                     </button>
