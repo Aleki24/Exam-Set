@@ -77,9 +77,11 @@ export default async function LandingPage() {
 function Hero() {
     return (
         <section className="relative overflow-hidden border-b border-border">
-            {/* Ruled exercise-book lines, faded out — the same blank page the
-                empty catalogue uses, so the two read as one product. */}
-            <div className="ruled mask-linear-fade pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+            {/* Ruled exercise-book lines — the same blank page the empty
+                catalogue uses, so the two read as one product. Kept faint: at
+                full strength a rule lands straight through the kicker and
+                reads as a strikethrough, which is very obvious on a phone. */}
+            <div className="ruled mask-linear-fade pointer-events-none absolute inset-0 opacity-[0.22]" aria-hidden />
 
             <div className="shell-width relative py-16 sm:py-24">
                 <p className="overline">Organised by the KICD learning areas · CBC / CBE and 8-4-4</p>
@@ -160,7 +162,7 @@ function Levels({ stats }: { stats: Awaited<ReturnType<typeof catalogStats>> }) 
                                 <div className="flex-1" />
 
                                 <p className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-3">
-                                    <span className="figure text-[11px] text-muted-foreground">
+                                    <span className="figure text-xs text-muted-foreground">
                                         {count === undefined
                                             ? `${subjectsForLevel(level.slug).length} learning areas`
                                             : `${count} resource${count === 1 ? '' : 's'}`}

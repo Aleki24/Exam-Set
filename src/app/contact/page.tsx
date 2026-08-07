@@ -60,9 +60,12 @@ export default function ContactPage() {
                                                 <MessageCircle className="h-4 w-4" aria-hidden />
                                                 Message us on WhatsApp
                                             </a>
-                                            <p className="meta mt-2">
-                                                Fastest, and the number that answers is the same one
-                                                the bot runs on.
+                                            <p className="figure meta mt-2">
+                                                {channels.whatsappDisplay ?? channels.whatsapp}
+                                            </p>
+                                            <p className="meta mt-1">
+                                                Fastest way to reach us, and the quickest route to a
+                                                stuck payment.
                                             </p>
                                         </li>
                                     )}

@@ -1,7 +1,9 @@
 import React from 'react';
 import Link from 'next/link';
+import { Mail, MessageCircle } from 'lucide-react';
 import { LEVELS } from '@/lib/catalog';
 import { RESOURCE_KINDS } from '@/lib/resources';
+import { contactChannels } from '@/lib/contact';
 import { BrandMark, Wordmark } from '@/components/shell/Wordmark';
 
 /**
@@ -32,6 +34,7 @@ const FOOTER_KINDS = [
 
 export default function Footer() {
     const year = new Date().getFullYear();
+    const channels = contactChannels();
 
     const kinds = FOOTER_KINDS.map((slug) => RESOURCE_KINDS.find((k) => k.slug === slug)).filter(
         (k): k is NonNullable<typeof k> => Boolean(k)
@@ -60,6 +63,40 @@ export default function Footer() {
                             Pay with M-Pesa. Your download unlocks the moment payment is confirmed,
                             and stays in your library for good.
                         </p>
+
+                        {/* Reachable from the bottom of every page, because the
+                            person who needs this most has just had a payment
+                            fail and should not have to go hunting. */}
+                        {(channels.whatsapp || channels.email) && (
+                            <ul className="mt-5 space-y-1.5">
+                                {channels.whatsapp && (
+                                    <li>
+                                        <a
+                                            href={`https://wa.me/${channels.whatsapp}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                        >
+                                            <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                            <span className="figure">
+                                                {channels.whatsappDisplay ?? channels.whatsapp}
+                                            </span>
+                                        </a>
+                                    </li>
+                                )}
+                                {channels.email && (
+                                    <li>
+                                        <a
+                                            href={`mailto:${channels.email}`}
+                                            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                        >
+                                            <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                            <span className="figure break-all">{channels.email}</span>
+                                        </a>
+                                    </li>
+                                )}
+                            </ul>
+                        )}
                     </div>
 
                     {/* What to browse */}
@@ -109,10 +146,10 @@ export default function Footer() {
                 </div>
 
                 <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6">
-                    <p className="figure text-[11px] text-muted-foreground">
+                    <p className="figure text-xs text-muted-foreground">
                         © {year} Skulbase. Built in Kenya, for Kenyan classrooms.
                     </p>
-                    <p className="figure text-[11px] text-muted-foreground">
+                    <p className="figure text-xs text-muted-foreground">
                         Organised around the KICD curriculum designs · CBC / CBE and 8-4-4
                     </p>
                 </div>
@@ -126,7 +163,7 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
         <li>
             <Link
                 href={href}
-                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                className="text-[15px] text-muted-foreground transition-colors hover:text-foreground"
             >
                 {children}
             </Link>

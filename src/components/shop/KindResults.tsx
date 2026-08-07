@@ -194,7 +194,7 @@ export default function KindResults({ kind, levels }: { kind: ResourceKindDef; l
                                 {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
                                 Load more
                             </button>
-                            <p className="figure text-[11px] text-muted-foreground">
+                            <p className="figure text-xs text-muted-foreground">
                                 {papers.length} of {response.total}
                             </p>
                         </div>

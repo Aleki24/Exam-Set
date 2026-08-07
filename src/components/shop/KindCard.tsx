@@ -127,7 +127,7 @@ function CountLabel({ count }: { count?: number }) {
     }
 
     return (
-        <span className="figure text-[11px] text-muted-foreground">
+        <span className="figure text-xs text-muted-foreground">
             {count} resource{count === 1 ? '' : 's'}
         </span>
     );
