@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, Check, Loader2, Smartphone } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import Footer from '@/components/shell/Footer';
 import PaymentPending from '@/components/checkout/PaymentPending';
 import { formatPrice } from '@/lib/catalog';
 import { durationLabel, perMonth, savingsPercent, type SubscriptionPlan, type SubscriptionStatus } from '@/lib/plans';
@@ -147,7 +148,7 @@ export default function PlansPage() {
 
             <div className="shell-width min-w-0 py-10">
                 <Link
-                    href="/"
+                    href="/catalog"
                     className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -279,6 +280,7 @@ export default function PlansPage() {
                     </div>
                 )}
             </div>
+            <Footer />
         </div>
     );
 }

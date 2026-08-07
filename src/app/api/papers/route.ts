@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
         // at catalog scale and keeps the rail honest about empty options.
         const { data: facetRows } = await supabase
             .from('exams')
-            .select('level_slug, exam_type, subject, exam_sets (name, slug)')
+            .select('level_slug, exam_type, subject, resource_kind, exam_sets (name, slug)')
             .eq('source', 'catalog')
             .eq('is_published', true)
             .limit(5000);
@@ -116,6 +116,11 @@ export async function GET(req: NextRequest) {
             levels: {} as Record<string, number>,
             examTypes: {} as Record<string, number>,
             subjects: {} as Record<string, number>,
+            // What each thing *is* — past paper, scheme of work, lesson plan.
+            // The `kind` filter has always worked; only the count was missing,
+            // which is why nothing could show "how many schemes of work exist"
+            // without inventing the number.
+            kinds: {} as Record<string, number>,
             // Keyed by slug and carrying the name, because the rail shows the
             // set's own wording and filters by its slug.
             sets: {} as Record<string, { name: string; count: number }>,
@@ -124,6 +129,7 @@ export async function GET(req: NextRequest) {
             if (row.level_slug) facets.levels[row.level_slug] = (facets.levels[row.level_slug] ?? 0) + 1;
             if (row.exam_type) facets.examTypes[row.exam_type] = (facets.examTypes[row.exam_type] ?? 0) + 1;
             if (row.subject) facets.subjects[row.subject] = (facets.subjects[row.subject] ?? 0) + 1;
+            if (row.resource_kind) facets.kinds[row.resource_kind] = (facets.kinds[row.resource_kind] ?? 0) + 1;
 
             /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
             const set = (row as any).exam_sets;

@@ -28,6 +28,31 @@ const nextConfig: NextConfig = {
             bodySizeLimit: '50mb',
         },
     },
+    /**
+     * `/` was the shop until the library outgrew it, and the sitemap has been
+     * handing Google `/?level=<slug>` for every level since. Those results are
+     * already indexed, and without this they would land on the new marketing
+     * page with the filter silently dropped — a visitor who clicked "Junior
+     * School exam papers" would get a hero and no papers.
+     *
+     * Only the filtered form redirects. A bare `/` is the landing page now and
+     * must stay one, so the `has` guard is what makes this safe — and doing it
+     * here rather than in the page keeps `/` a static, hourly-revalidated
+     * document instead of a dynamic render on every visit.
+     */
+    async redirects() {
+        // One entry per key, because several `has` conditions on one rule are
+        // ANDed — and these need to be ORed. Next forwards the query string to
+        // the destination, so the filter survives the hop.
+        return ['level', 'kind', 'subject', 'grade', 'exam_type', 'term', 'year', 'set', 'search'].map(
+            (key) => ({
+                source: '/',
+                has: [{ type: 'query' as const, key }],
+                destination: '/catalog',
+                permanent: true,
+            })
+        );
+    },
 };
 
 export default nextConfig;

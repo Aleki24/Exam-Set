@@ -209,7 +209,7 @@ export default function UploadPaperPage() {
                         <Link href="/set" className="btn-primary">
                             Set an exam
                         </Link>
-                        <Link href="/" className="btn-outline">
+                        <Link href="/catalog" className="btn-outline">
                             Browse papers
                         </Link>
                     </div>

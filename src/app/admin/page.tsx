@@ -746,7 +746,7 @@ function Gate({ title, body }: { title: string; body: string }) {
                 <h1 className="title-1">{title}</h1>
                 <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{body}</p>
                 <div className="mt-6 flex justify-center gap-2">
-                    <Link href="/" className="btn-primary">
+                    <Link href="/catalog" className="btn-primary">
                         Browse papers
                     </Link>
                     <Link href="/set" className="btn-outline">

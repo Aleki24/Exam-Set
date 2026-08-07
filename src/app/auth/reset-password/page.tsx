@@ -76,8 +76,8 @@ export default function ResetPasswordPage() {
             }
 
             // Signed in already as a side effect of the recovery link, so go
-            // straight to the shop rather than asking them to sign in again.
-            router.push('/');
+            // straight to the catalogue rather than asking them to sign in again.
+            router.push('/catalog');
             router.refresh();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');

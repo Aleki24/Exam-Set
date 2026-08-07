@@ -105,7 +105,10 @@ either wading through the other's material.
 ## 3. Routes
 
 ```
-/                              Shop — flat, filtered, search-first (exists)
+/                              Landing — what this is, and the way in
+/catalog                       Shop — flat, filtered, search-first (was `/`)
+/catalog/[kind]                One kind: schemes of work, lesson plans, notes
+/about  /contact               Who we are, and how to get help
 /set                           Exam setter (exists)
 /cart  /plans  /library        Commerce and account (exists)
 /auth/*                        Sign in, sign up, recovery (exists)
@@ -124,8 +127,8 @@ either wading through the other's material.
 /s/[token]                     A list a teacher handed a class (no account)
 ```
 
-`/` and `/learn` are deliberately different doors to the same stock, because two
-different people arrive.
+`/catalog` and `/learn` are deliberately different doors to the same stock,
+because two different people arrive.
 
 Someone who knows what they want types it — that is `/`, which is search and
 filters over everything, and it already works well. Someone who does *not* know
@@ -136,6 +139,31 @@ with twenty-six exam types is a wall. The hierarchy asks level, then subject,
 then shows what exists.
 
 Both read the same `/api/papers`. There is one catalogue, two ways in.
+
+### Why the shop stopped being `/`
+
+The shop held `/` for as long as the product *was* a shop, and the reasoning was
+sound: no marketing page, the first thing anyone sees is what they can buy. That
+stopped being true when the shop became a library. A visitor arriving cold now
+met a filter rail and twenty-six exam types with nothing telling them what this
+is — and the page they met it on was the slowest in the product, a client
+component rendering nothing until `/api/papers` answered.
+
+So `/` is now a static, server-rendered landing page and the shop moved to
+`/catalog`, one click away and linked from everywhere that used to say "browse".
+The landing holds to the standard `/learn` already set: on a Kenyan mobile
+connection it is HTML and nothing else, complete the moment it arrives.
+
+Two things were fixed on the way, and both had been broken since the taxonomy
+shipped. `/catalog` now reads its own URL — the kind tiles on `/learn/[level]`
+have always linked to `?level=…&kind=…`, and the page ignored every one of
+them — and `/api/papers` now counts `resource_kind` in its facets, so a category
+can state how much it holds without anybody inventing the number.
+
+`/catalog/[kind]` is the third door, and it exists because "schemes of work
+grade 9" is how the request is actually typed. Sixteen prerendered pages, one
+per kind, each with its own title and description. A query string could never
+be that.
 
 ---
 
@@ -258,7 +286,7 @@ does differently. Migration 029 has the reasoning.
 | **Printable booklet layout** | Its own typesetting problem, not a variation on the PDF renderer. |
 | **Assignment tracking beyond counts** | Per-learner completion needs the consent model extended to classrooms, which is a design question before it is a build. |
 | **Recommended study plan for parents** | Needs the topic breakdown turned into advice. Advice a parent acts on should not come from a rule of thumb invented in an afternoon. |
-| **Educator-verified badge** | Needs somebody to perform the review it claims. |
+| **Educator-verified badge** | Needs somebody to perform the review it claims. The front-of-house redesign deliberately shipped without it — `/about` now states in as many words that there is no review process and no ratings, which is a stronger signal than a badge nobody can check. |
 | **"Most downloaded this week"** | Needs a downloads-by-day table. |
 | **Sets in the WhatsApp bot beyond search** | The bot recognises a set name and filters by it. It does not group its list into per-set sections (`sendList` sends one hardcoded section, `lib/whatsapp.ts`), offer a browse-the-set-then-pick-a-paper flow, or deliver a whole sitting after one payment. The last two need `rememberPending` to stop overwriting `pending.candidates` and `deliverAfterPayment` to loop rather than send one paper — both deliberate, both untouched. |
 | **A set price of its own** | Sets price as the sum of their members. A set-level price would be a second source of truth for money and a second thing entitlements must reason about — see §1. |

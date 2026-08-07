@@ -19,7 +19,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     const staticRoutes: MetadataRoute.Sitemap = [
         { url: base, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
+        { url: `${base}/catalog`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
+        { url: `${base}/learn`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
         { url: `${base}/set`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
+        { url: `${base}/about`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
+        { url: `${base}/contact`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
         // Worth indexing even though it is not in the navigation: "unlimited
         // KCSE past papers" is a query people type, and this is the page that
         // answers it.
@@ -29,7 +33,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Level landing pages. These match how people actually search — by the class
     // they teach — and each one is a real filtered view of the catalog.
     const levelRoutes: MetadataRoute.Sitemap = LEVELS.map((level) => ({
-        url: `${base}/?level=${level.slug}`,
+        url: `${base}/catalog?level=${level.slug}`,
         lastModified: new Date(),
         changeFrequency: 'weekly' as const,
         priority: 0.7,
