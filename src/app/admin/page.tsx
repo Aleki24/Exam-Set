@@ -16,8 +16,7 @@ import {
     Plus,
     Tags,
     Trash2,
-    Users,
-} from 'lucide-react';
+    Users, Layers, ClipboardCheck, KeyRound} from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { ROLE_LABELS, useRole, type Role } from '@/lib/roles';
 import { examTypeName, formatPrice } from '@/lib/catalog';
@@ -62,6 +61,7 @@ interface Summary {
 export default function AdminPage() {
     const { isAdmin, isOwner, role, ready, signedIn } = useRole();
     const [tab, setTab] = useState<Tab>('payments');
+    const [pendingReview, setPendingReview] = useState(0);
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [summary, setSummary] = useState<Summary | null>(null);
@@ -117,6 +117,20 @@ export default function AdminPage() {
             setLoading(false)
         );
     }, [ready, isAdmin, loadPayments, loadCatalog, loadTeam, loadDiagnostics]);
+
+    /*
+     * How much is waiting to be read. Fetched on its own rather than inside the
+     * batch above so a slow or failing count never holds up the page — a badge
+     * that is briefly absent is better than an admin screen that is briefly
+     * blank, and this one is only a number.
+     */
+    useEffect(() => {
+        if (!ready || !isAdmin) return;
+        fetch('/api/admin/questions/review?status=pending')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => setPendingReview(d?.total ?? 0))
+            .catch(() => undefined);
+    }, [ready, isAdmin]);
 
     const testMpesa = async () => {
         setTestingMpesa(true);
@@ -253,9 +267,13 @@ export default function AdminPage() {
                         </p>
                     </div>
                     <div className="flex gap-2">
-                        <Link href="/papers/new" className="btn-buy">
+                        <Link href="/papers/bulk" className="btn-buy">
+                            <Layers className="h-4 w-4" />
+                            Bulk upload
+                        </Link>
+                        <Link href="/papers/new" className="btn-outline">
                             <FileUp className="h-4 w-4" />
-                            Upload a paper
+                            One paper
                         </Link>
                         <Link href="/set" className="btn-outline">
                             <Plus className="h-4 w-4" />
@@ -364,6 +382,17 @@ export default function AdminPage() {
                     <Link href="/admin/topics" className="chip">
                         <Tags className="h-3.5 w-3.5" />
                         Topics &amp; strands
+                    </Link>
+                    {/* The count is the point: a review queue nobody can see the
+                        size of is a queue that never gets worked. */}
+                    <Link href="/admin/review" className={pendingReview > 0 ? 'chip chip-active' : 'chip'}>
+                        <ClipboardCheck className="h-3.5 w-3.5" />
+                        Review queue
+                        {pendingReview > 0 && <span className="figure ml-1 text-[11px]">{pendingReview}</span>}
+                    </Link>
+                    <Link href="/admin/keys" className="chip">
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Ingest keys
                     </Link>
                 </div>
 
@@ -521,12 +550,19 @@ function CatalogTable({
                 <FileUp className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
                 <h2 className="title-2">No papers listed yet</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                    Upload a PDF, or build one in the setter and publish it.
+                    Drop a folder of PDFs and let the covers be read for you, upload one at a time,
+                    or build a paper in the setter and publish it.
                 </p>
-                <Link href="/papers/new" className="btn-buy mt-5 inline-flex">
-                    <FileUp className="h-4 w-4" />
-                    Upload a paper
-                </Link>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <Link href="/papers/bulk" className="btn-buy inline-flex">
+                        <Layers className="h-4 w-4" />
+                        Bulk upload
+                    </Link>
+                    <Link href="/papers/new" className="btn-outline inline-flex">
+                        <FileUp className="h-4 w-4" />
+                        One paper
+                    </Link>
+                </div>
             </div>
         );
     }

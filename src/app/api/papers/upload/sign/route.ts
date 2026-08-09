@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
             }
             if (Number(file.size) > MAX_BYTES) {
                 return NextResponse.json(
-                    { error: 'That file is larger than 100 MB — please compress it' },
+                    { error: 'That file is larger than 25 MB — please compress it' },
                     { status: 400 }
                 );
             }
