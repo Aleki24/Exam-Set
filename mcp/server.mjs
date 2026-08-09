@@ -87,6 +87,30 @@ const TOOLS = [
         },
     },
     {
+        name: 'attach_figure',
+        description:
+            "Attach a diagram to a question that already exists in the bank. A large share of a Kenyan " +
+            'science or maths paper is unanswerable as text — a velocity-time graph, a ray diagram, a map ' +
+            'extract — and the question is worthless without the picture. Send the image inline as base64. ' +
+            'JPG, PNG or WebP, up to 3 MB; crop to the diagram itself. Set required=true when the question ' +
+            'cannot be answered without it, which keeps it out of any paper until the figure is there. ' +
+            'Attaching a figure does not approve a question.',
+        inputSchema: {
+            type: 'object',
+            required: ['question_id', 'content_type', 'data_base64'],
+            properties: {
+                question_id: { type: 'string', description: 'UUID of the question, as returned by submit_questions.' },
+                content_type: { type: 'string', enum: ['image/jpeg', 'image/png', 'image/webp'] },
+                data_base64: { type: 'string', description: 'The image bytes, base64. A data: prefix is accepted.' },
+                caption: { type: 'string', description: 'Printed under the figure, e.g. "Figure 1".' },
+                required: {
+                    type: 'boolean',
+                    description: 'True when the question cannot be answered without the figure.',
+                },
+            },
+        },
+    },
+    {
         name: 'list_curriculum',
         description:
             'The subjects and grades this Skulbase instance knows about, and how many approved questions each ' +
@@ -105,6 +129,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     try {
         if (name === 'submit_questions') return text(await post('/api/ingest/questions', args));
+        if (name === 'attach_figure') {
+            return text(
+                await post('/api/ingest/figures', {
+                    questionId: args?.question_id,
+                    contentType: args?.content_type,
+                    dataBase64: args?.data_base64,
+                    caption: args?.caption,
+                    required: args?.required,
+                })
+            );
+        }
         if (name === 'list_curriculum') return text(await get('/api/ingest/curriculum'));
         return text({ error: `Unknown tool: ${name}` }, true);
     } catch (err) {

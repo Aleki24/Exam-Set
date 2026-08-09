@@ -32,6 +32,26 @@ in anything sold.
 |---|---|
 | `list_curriculum` | Subject and grade names the site recognises, plus how many approved and pending questions each pairing already holds. |
 | `submit_questions` | Up to 50 questions, each requiring a marking scheme. Returns what was accepted and, per rejected question, why. |
+| `attach_figure` | A diagram for a question that already exists, sent inline as base64. JPG, PNG or WebP up to 3 MB. Set `required` when the question cannot be answered without it. |
+
+### Figures
+
+A large share of a Kenyan science or maths paper is unanswerable as text — a
+velocity-time graph, a ray diagram, a map extract. The extractor takes the words
+and leaves the picture, so `attach_figure` is how the picture gets put back
+without a person dragging a file into `/admin/review` for every question.
+
+The bytes go inline rather than through a presigned URL. The browser upload does
+use one, because a multipart POST dies at Vercel's ~4.5 MB body limit — but a
+program has the opposite problem: presigning is a second round trip to a second
+host, and a caller allowed to reach this app may well not be allowed to reach
+the storage endpoint. Hence the 3 MB ceiling, which is 4 MB once base64 has
+added its third. A figure is a crop of one diagram; the ones this was built for
+are tens of kilobytes.
+
+`required: true` records that the question *is* the figure. A question flagged
+that way with no image attached is refused by `POST /api/papers`, so it can
+never be sold as a blank space.
 
 ## What it deliberately cannot do
 

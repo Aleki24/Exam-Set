@@ -42,6 +42,8 @@ import {
 } from './paperLayout';
 import type { AnswerStyle } from './subjectPaper';
 import { pdfSafe } from './pdfText';
+import { hasMath, segmentText, type MathNode } from './mathText';
+import { drawNodes, measureNodes, type Box, type MathStyle } from './mathDraw';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -91,6 +93,26 @@ const COVER_GAP = 10;
  * Tracks the cursor and turns the page when it runs out of room, so the drawing
  * code can just write and never think about pagination.
  */
+/** One laid-out line of a mixed prose-and-maths paragraph. */
+interface RichLine {
+    tokens: RichToken[];
+    ascent: number;
+    descent: number;
+    height: number;
+}
+
+interface RichToken {
+    text: string;
+    /** Set when this token is a maths expression rather than a word. */
+    nodes: MathNode[] | null;
+    width: number;
+    ascent: number;
+    descent: number;
+    /** Width of the gap that follows, zeroed at a line end or before a comma. */
+    space: number;
+    breakBefore: boolean;
+}
+
 class Sheet {
     doc: jsPDF;
     y: number;
@@ -197,7 +219,177 @@ class Sheet {
 
     /** Height a wrapped paragraph will occupy, for reserving room up front. */
     measure(value: string, width: number, lineHeight = LINE_HEIGHT): number {
+        if (hasMath(value)) return this.measureRich(value, width, lineHeight);
         return this.wrap(value, width).length * lineHeight;
+    }
+
+    /**
+     * A paragraph that may contain `$…$` maths, wrapped and drawn.
+     *
+     * Text with no maths in it goes straight to `paragraph`, so every paper in
+     * the catalogue today paginates through exactly the code it did before and
+     * this cannot regress them.
+     *
+     * Where there IS maths, jsPDF's own wrapper is no use: `splitTextToSize`
+     * measures a string, and a stacked fraction is not a string. So the line is
+     * broken here instead — prose becomes one token per word, each maths
+     * expression becomes a single unbreakable box, and the two are filled
+     * greedily into the column together.
+     */
+    richParagraph(value: string, x: number, width: number, lineHeight = LINE_HEIGHT): void {
+        if (!hasMath(value)) {
+            this.paragraph(value, x, width, lineHeight);
+            return;
+        }
+
+        const style: MathStyle = { font: SERIF, size: BODY_SIZE };
+
+        for (const line of this.layoutRich(value, width, lineHeight, style)) {
+            /*
+             * `y` is the baseline of the next line, exactly as `paragraph`
+             * treats it — otherwise a question's first line would sit lower
+             * than the number printed beside it, which is what happened.
+             *
+             * A line carrying a fraction reaches higher than an ordinary one,
+             * so it is pushed down by the difference and no further. Pushing
+             * every line down by its full ascent would open a gap under every
+             * question number on the paper.
+             */
+            const extra = Math.max(0, line.ascent - BODY_SIZE * 0.72);
+            this.reserve(line.height + extra);
+            const baseline = this.y + extra;
+
+            let cursor = x;
+            for (const token of line.tokens) {
+                if (token.nodes) {
+                    drawNodes(this.doc, token.nodes, cursor, baseline, style);
+                } else {
+                    this.doc.setFont(SERIF, 'normal');
+                    this.doc.setFontSize(BODY_SIZE);
+                    this.doc.text(token.text, cursor, baseline);
+                }
+                cursor += token.width + token.space;
+            }
+
+            this.y += line.height + extra;
+            this.dirty = true;
+        }
+
+        // Maths leaves the Symbol font selected; everything after this assumes
+        // the body face.
+        this.doc.setFont(SERIF, 'normal');
+        this.doc.setFontSize(BODY_SIZE);
+    }
+
+    private measureRich(value: string, width: number, lineHeight: number): number {
+        const style: MathStyle = { font: SERIF, size: BODY_SIZE };
+        // Must match `richParagraph` line for line, including the extra room a
+        // tall line takes above its baseline.
+        return this.layoutRich(value, width, lineHeight, style).reduce(
+            (sum, l) => sum + l.height + Math.max(0, l.ascent - BODY_SIZE * 0.72),
+            0
+        );
+    }
+
+    /**
+     * Breaks a mixed prose-and-maths string into drawable lines.
+     *
+     * Called by both the measuring and the drawing path, on purpose. The
+     * renderer lays the whole paper out twice before committing, and a
+     * measurement that disagreed with the drawing by even a line would put a
+     * fraction on top of the question above it.
+     */
+    private layoutRich(
+        value: string,
+        width: number,
+        lineHeight: number,
+        style: MathStyle
+    ): RichLine[] {
+        const tokens = this.tokenise(value, style);
+        const lines: RichLine[] = [];
+
+        let current: RichToken[] = [];
+        let used = 0;
+
+        const flush = () => {
+            if (current.length === 0) return;
+            // Trailing space on a wrapped line is not ink and must not count.
+            const last = current[current.length - 1];
+            const ascent = Math.max(...current.map((t) => t.ascent), BODY_SIZE * 0.72);
+            const descent = Math.max(...current.map((t) => t.descent), BODY_SIZE * 0.21);
+            lines.push({
+                tokens: current,
+                ascent,
+                descent,
+                height: Math.max(lineHeight, ascent + descent + 2),
+            });
+            last.space = 0;
+            current = [];
+            used = 0;
+        };
+
+        for (const token of tokens) {
+            if (token.breakBefore && current.length > 0) flush();
+            if (used + token.width > width && current.length > 0) flush();
+            current.push(token);
+            used += token.width + token.space;
+        }
+        flush();
+
+        return lines;
+    }
+
+    /** One token per word, and one per maths expression. */
+    private tokenise(value: string, style: MathStyle): RichToken[] {
+        const out: RichToken[] = [];
+        const spaceWidth = () => {
+            this.doc.setFont(SERIF, 'normal');
+            this.doc.setFontSize(BODY_SIZE);
+            return this.doc.getTextWidth(' ');
+        };
+
+        for (const segment of segmentText(value)) {
+            if (segment.kind === 'math') {
+                const box = measureNodes(this.doc, segment.nodes, style);
+                out.push({
+                    text: '',
+                    nodes: segment.nodes,
+                    width: box.width,
+                    ascent: box.ascent,
+                    descent: box.descent,
+                    space: spaceWidth(),
+                    breakBefore: false,
+                });
+                continue;
+            }
+
+            const lines = segment.text.split('\n');
+            lines.forEach((line, lineIndex) => {
+                for (const word of line.split(/\s+/).filter(Boolean)) {
+                    this.doc.setFont(SERIF, 'normal');
+                    this.doc.setFontSize(BODY_SIZE);
+                    out.push({
+                        text: word,
+                        nodes: null,
+                        width: this.doc.getTextWidth(word),
+                        ascent: BODY_SIZE * 0.72,
+                        descent: BODY_SIZE * 0.21,
+                        space: spaceWidth(),
+                        breakBefore: lineIndex > 0 && out.length > 0,
+                    });
+                }
+            });
+        }
+
+        /*
+         * A maths expression that ends a clause is followed by its punctuation
+         * with no gap — "…in the form $a\sqrt{b}$." must not print as "b ."
+         */
+        for (let i = 1; i < out.length; i++) {
+            if (/^[.,;:?)\]]/.test(out[i].text)) out[i - 1].space = 0;
+        }
+
+        return out;
     }
 
     line(x1: number, y: number, x2: number, weight = 0.5): void {
@@ -794,7 +986,7 @@ function drawQuestion(
     }
 
     sheet.font(SERIF, 'normal', BODY_SIZE);
-    sheet.paragraph(question.text, MARGIN_X + QUESTION_INDENT, TEXT_WIDTH - QUESTION_INDENT);
+    sheet.richParagraph(question.text, MARGIN_X + QUESTION_INDENT, TEXT_WIDTH - QUESTION_INDENT);
 
     drawFigure(sheet, question, figures);
 
@@ -818,7 +1010,7 @@ function drawQuestion(
             sheet.font(SERIF, 'normal', BODY_SIZE);
         }
 
-        sheet.paragraph(part.text, MARGIN_X + PART_INDENT, TEXT_WIDTH - PART_INDENT);
+        sheet.richParagraph(part.text, MARGIN_X + PART_INDENT, TEXT_WIDTH - PART_INDENT);
         drawAnswerSpace(sheet, scaledLines(part.answerLines, scale), MARGIN_X + PART_INDENT, style);
         sheet.y += 2;
     });
@@ -1091,7 +1283,7 @@ export function buildMarkingSchemeDocument(
         // smaller than the answer rather than lighter: a photocopied grey line
         // is a line nobody reads.
         sheet.font(SERIF, 'normal', BODY_SIZE - 1);
-        sheet.paragraph(question.text, MARGIN_X + QUESTION_INDENT, TEXT_WIDTH - QUESTION_INDENT, 12);
+        sheet.richParagraph(question.text, MARGIN_X + QUESTION_INDENT, TEXT_WIDTH - QUESTION_INDENT, 12);
         sheet.y += 3;
 
         sheet.font(SERIF, 'bold', BODY_SIZE);
