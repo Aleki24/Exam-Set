@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { objectInfo, putObject, storageUnavailableReason } from '@/utils/storage';
 import { EXAM_TYPE_BY_SLUG, LEVEL_BY_SLUG } from '@/lib/catalog';
+import { RESOURCE_KIND_BY_SLUG } from '@/lib/resources';
 import { toListing } from '@/lib/paperMapper';
 import { requireAdmin } from '@/utils/auth/guards';
 import {
@@ -159,6 +160,19 @@ export async function POST(req: NextRequest) {
 
         const examType = EXAM_TYPE_BY_SLUG[m.exam_type]?.slug ?? 'past-paper';
         const level = LEVEL_BY_SLUG[m.level_slug]?.slug ?? null;
+
+        /*
+         * What the artefact *is*, as opposed to which sitting it came from.
+         *
+         * This route never set it, so every upload landed on the column default
+         * and the whole shop was past papers — which made fifteen of the sixteen
+         * `/catalog/[kind]` pages unstockable by the only tool that stocks the
+         * shop. A scheme of work uploaded here was sold as a past paper.
+         *
+         * Unknown values fall back rather than reject: a kind this build does
+         * not recognise should not lose somebody a twenty-page upload.
+         */
+        const resourceKind = RESOURCE_KIND_BY_SLUG[String(m.resource_kind || '')]?.slug ?? 'past-paper';
         const stem = slugify(`${m.grade_label || ''} ${m.year || ''} ${m.title}`) || 'paper';
 
         // The sitting this paper belongs to. Resolved before the insert so a
@@ -179,6 +193,7 @@ export async function POST(req: NextRequest) {
             source: 'catalog',
             slug: await uniqueSlug(supabase, stem),
             exam_type: examType,
+            resource_kind: resourceKind,
             level_slug: level,
             grade_label: m.grade_label || null,
             term_slug: m.term_slug || null,

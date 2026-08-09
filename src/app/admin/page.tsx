@@ -16,8 +16,7 @@ import {
     Plus,
     Tags,
     Trash2,
-    Users,
-} from 'lucide-react';
+    Users, Layers} from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { ROLE_LABELS, useRole, type Role } from '@/lib/roles';
 import { examTypeName, formatPrice } from '@/lib/catalog';
@@ -253,9 +252,13 @@ export default function AdminPage() {
                         </p>
                     </div>
                     <div className="flex gap-2">
-                        <Link href="/papers/new" className="btn-buy">
+                        <Link href="/papers/bulk" className="btn-buy">
+                            <Layers className="h-4 w-4" />
+                            Bulk upload
+                        </Link>
+                        <Link href="/papers/new" className="btn-outline">
                             <FileUp className="h-4 w-4" />
-                            Upload a paper
+                            One paper
                         </Link>
                         <Link href="/set" className="btn-outline">
                             <Plus className="h-4 w-4" />
@@ -521,12 +524,19 @@ function CatalogTable({
                 <FileUp className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
                 <h2 className="title-2">No papers listed yet</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                    Upload a PDF, or build one in the setter and publish it.
+                    Drop a folder of PDFs and let the covers be read for you, upload one at a time,
+                    or build a paper in the setter and publish it.
                 </p>
-                <Link href="/papers/new" className="btn-buy mt-5 inline-flex">
-                    <FileUp className="h-4 w-4" />
-                    Upload a paper
-                </Link>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <Link href="/papers/bulk" className="btn-buy inline-flex">
+                        <Layers className="h-4 w-4" />
+                        Bulk upload
+                    </Link>
+                    <Link href="/papers/new" className="btn-outline inline-flex">
+                        <FileUp className="h-4 w-4" />
+                        One paper
+                    </Link>
+                </div>
             </div>
         );
     }
