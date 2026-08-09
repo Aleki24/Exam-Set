@@ -40,74 +40,80 @@ export const maxDuration = 60;
 const MAX_BATCH = 50;
 
 export async function POST(req: NextRequest) {
-    const admin = createAdminClient();
-    if (!admin) {
-        return NextResponse.json({ error: 'Ingest is not configured on this deployment.' }, { status: 503 });
-    }
-
-    const presented = presentedKey(req.headers);
-    if (!presented) {
-        return NextResponse.json(
-            { error: 'Missing ingest key. Send it as `Authorization: Bearer <key>`.' },
-            { status: 401 }
-        );
-    }
-
-    const owner = await resolveKey(admin, presented);
-    if (!owner) {
-        return NextResponse.json({ error: 'That ingest key is not valid or has been revoked.' }, { status: 401 });
-    }
-
-    let body: unknown;
     try {
-        body = await req.json();
-    } catch {
-        return NextResponse.json({ error: 'Body must be JSON.' }, { status: 400 });
-    }
+        const admin = createAdminClient();
+        if (!admin) {
+            return NextResponse.json({ error: 'Ingest is not configured on this deployment.' }, { status: 503 });
+        }
 
-    const raw = (body as { questions?: unknown })?.questions;
-    if (!Array.isArray(raw) || raw.length === 0) {
-        return NextResponse.json({ error: 'Send `questions`: a non-empty array.' }, { status: 400 });
-    }
-    if (raw.length > MAX_BATCH) {
+        const presented = presentedKey(req.headers);
+        if (!presented) {
+            return NextResponse.json(
+                { error: 'Missing ingest key. Send it as `Authorization: Bearer <key>`.' },
+                { status: 401 }
+            );
+        }
+
+        const owner = await resolveKey(admin, presented);
+        if (!owner) {
+            return NextResponse.json({ error: 'That ingest key is not valid or has been revoked.' }, { status: 401 });
+        }
+
+        let body: unknown;
+        try {
+            body = await req.json();
+        } catch {
+            return NextResponse.json({ error: 'Body must be JSON.' }, { status: 400 });
+        }
+
+        const raw = (body as { questions?: unknown })?.questions;
+        if (!Array.isArray(raw) || raw.length === 0) {
+            return NextResponse.json({ error: 'Send `questions`: a non-empty array.' }, { status: 400 });
+        }
+        if (raw.length > MAX_BATCH) {
+            return NextResponse.json(
+                { error: `${MAX_BATCH} questions at a time. Send ${raw.length} in smaller batches.` },
+                { status: 400 }
+            );
+        }
+
+        // Resolve the taxonomy once for the whole batch rather than per question.
+        const [{ data: subjects }, { data: grades }] = await Promise.all([
+            admin.from('subjects').select('id, name'),
+            admin.from('grades').select('id, name'),
+        ]);
+
+        const { rows, rejected } = normaliseIngest(raw as IngestQuestion[], {
+            subjects: subjects ?? [],
+            grades: grades ?? [],
+            createdBy: owner.userId,
+        });
+
+        if (rows.length === 0) {
+            return NextResponse.json(
+                { accepted: 0, rejected, error: 'Nothing in that batch could be accepted.' },
+                { status: 400 }
+            );
+        }
+
+        const { data, error } = await admin.from('questions').insert(rows).select('id');
+        if (error) {
+            console.error('POST /api/ingest/questions insert failed:', error.message);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
         return NextResponse.json(
-            { error: `${MAX_BATCH} questions at a time. Send ${raw.length} in smaller batches.` },
-            { status: 400 }
+            {
+                accepted: data?.length ?? 0,
+                rejected,
+                review_status: 'pending',
+                note: 'Held for review. Approve them in /admin before they can be used in a paper that is sold.',
+            },
+            { status: 201 }
         );
+    } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unexpected error';
+        console.error('POST src/app/api/ingest/questions/route.ts:', message);
+        return NextResponse.json({ error: message }, { status: 500 });
     }
-
-    // Resolve the taxonomy once for the whole batch rather than per question.
-    const [{ data: subjects }, { data: grades }] = await Promise.all([
-        admin.from('subjects').select('id, name'),
-        admin.from('grades').select('id, name'),
-    ]);
-
-    const { rows, rejected } = normaliseIngest(raw as IngestQuestion[], {
-        subjects: subjects ?? [],
-        grades: grades ?? [],
-        createdBy: owner.userId,
-    });
-
-    if (rows.length === 0) {
-        return NextResponse.json(
-            { accepted: 0, rejected, error: 'Nothing in that batch could be accepted.' },
-            { status: 400 }
-        );
-    }
-
-    const { data, error } = await admin.from('questions').insert(rows).select('id');
-    if (error) {
-        console.error('POST /api/ingest/questions insert failed:', error.message);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json(
-        {
-            accepted: data?.length ?? 0,
-            rejected,
-            review_status: 'pending',
-            note: 'Held for review. Approve them in /admin before they can be used in a paper that is sold.',
-        },
-        { status: 201 }
-    );
 }
