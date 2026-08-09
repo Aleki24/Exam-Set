@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         const { data, error, count } = await supabase
             .from('questions')
             .select(
-                'id, text, marks, marking_scheme, topic, subtopic, type, difficulty, options, is_ai_generated, created_at, review_status, subject_id, grade_id',
+                'id, text, marks, marking_scheme, topic, subtopic, type, difficulty, options, is_ai_generated, created_at, review_status, subject_id, grade_id, image_path, image_caption, image_required',
                 { count: 'exact' }
             )
             .eq('review_status', status)

@@ -359,18 +359,6 @@ function layoutFigure(q: QuestionSource): LaidOutFigure | null {
     };
 }
 
-/**
- * Questions that cannot be printed without a picture nobody has.
- *
- * `image_required` marks a question whose figure is the question — "use the
- * graph above", "measure angle BAC". Selecting one into a paper that cannot
- * render figures produces an unanswerable item, so callers check this before
- * building rather than discovering it in a buyer's hands.
- */
-export function unrenderableQuestions(questions: LaidOutQuestion[]): LaidOutQuestion[] {
-    return questions.filter((q) => q.figure?.required && !q.figure.key);
-}
-
 /** Sub-parts carry their own marks when they have them; otherwise the parent's. */
 function questionMarks(q: QuestionSource, parts: LaidOutPart[]): number {
     const partTotal = parts.reduce((sum, p) => sum + p.marks, 0);
