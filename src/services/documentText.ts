@@ -261,3 +261,84 @@ export async function extractWordText(buffer: Buffer): Promise<string> {
     const result = await mammoth.extractRawText({ buffer });
     return result.value || '';
 }
+
+/**
+ * The pages of a scanned PDF, as images a model can look at.
+ *
+ * A scan has no text layer, so `extractPdfText` returns an empty string and
+ * every caller that trusts it concludes the document is empty. That is not a
+ * rare shape in this market: a Kenyan past paper is very often a photograph or
+ * a photocopy, and the Grade 9 Mathematics paper that prompted this returned
+ * exactly zero characters while being perfectly legible to a person.
+ *
+ * The provider can already read images — `supportedImageType` and the `image`
+ * content block in `services/claude.ts` have been there all along, reachable
+ * only when somebody uploaded a JPEG directly. This makes the same path
+ * reachable for a PDF.
+ *
+ * Images are lifted out of the file rather than rendered from it. A scanned
+ * page *is* a JPEG that somebody wrapped in a PDF, so pulling the stream back
+ * out is exact and costs no headless browser. Rendering would mean shipping
+ * one, and would re-encode a photograph that is already lossy.
+ */
+export interface PdfPageImage {
+    /** Raw JPEG bytes, ready to base64 into an image content block. */
+    data: Buffer;
+    mediaType: 'image/jpeg';
+    width: number;
+    height: number;
+}
+
+/** Below this a "page" is a logo or a signature, not something worth reading. */
+const MIN_SCAN_PIXELS = 200_000;
+
+export async function extractPdfPageImages(buffer: Buffer, limit = 8): Promise<PdfPageImage[]> {
+    const { inflateSync } = await import('zlib');
+    const haystack = buffer.toString('latin1');
+    const out: PdfPageImage[] = [];
+
+    // Image XObjects, in the order they appear — which for a scan is page order.
+    const re = /<<([^>]*?\/Subtype\s*\/Image[\s\S]*?)>>\s*stream\r?\n/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = re.exec(haystack)) !== null && out.length < limit) {
+        const dict = match[1];
+        if (!/\/DCTDecode/.test(dict)) continue; // Only JPEG-backed scans.
+
+        const end = haystack.indexOf('endstream', match.index + match[0].length);
+        if (end === -1) continue;
+
+        let bytes = buffer.subarray(match.index + match[0].length, end);
+        // Trim the newline the writer puts before `endstream`.
+        while (bytes.length && (bytes[bytes.length - 1] === 0x0a || bytes[bytes.length - 1] === 0x0d)) {
+            bytes = bytes.subarray(0, bytes.length - 1);
+        }
+
+        /*
+         * Filters apply in order, so `[/FlateDecode /DCTDecode]` is a JPEG
+         * that was then deflated — undo the deflate and the JPEG is underneath.
+         * Writers differ on whether they bother, so this is decided by looking
+         * at the bytes rather than by trusting the dictionary.
+         */
+        if (!isJpeg(bytes)) {
+            try {
+                bytes = inflateSync(bytes);
+            } catch {
+                continue; // Some filter chain we do not handle. Skip the page.
+            }
+        }
+        if (!isJpeg(bytes)) continue;
+
+        const width = Number(/\/Width\s+(\d+)/.exec(dict)?.[1] ?? 0);
+        const height = Number(/\/Height\s+(\d+)/.exec(dict)?.[1] ?? 0);
+        if (width * height < MIN_SCAN_PIXELS) continue;
+
+        out.push({ data: bytes, mediaType: 'image/jpeg', width, height });
+    }
+
+    return out;
+}
+
+function isJpeg(b: Buffer): boolean {
+    return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+}

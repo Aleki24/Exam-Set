@@ -124,6 +124,22 @@ console.log('\nA scan with no text layer is not sent to the model');
     check('whitespace is not', hasReadableText('   \\n\\n\\t  '), false);
 }
 
+console.log('\nA scanned page is recognised as a scan, not as an empty file');
+{
+    const { extractPdfPageImages } = await jiti.import('../src/services/documentText.ts');
+    const { readFileSync, existsSync } = await import('fs');
+
+    // A text-layer PDF must not be mistaken for a scan, or every upload would
+    // be sent to the model as a photograph at many times the cost.
+    const textPdf = new URL('../.verify-sample.pdf', import.meta.url).pathname;
+    if (existsSync(textPdf)) {
+        const imgs = await extractPdfPageImages(readFileSync(textPdf));
+        check('a text PDF yields no page images', imgs.length, 0);
+    } else {
+        console.log('  skip  no sample PDF present (run verify:pdf --out first)');
+    }
+}
+
 console.log(
     failures === 0
         ? `\nAll ${checks} bulk-listing checks passed.\n`
