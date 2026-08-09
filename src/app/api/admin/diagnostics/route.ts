@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
 import { r2Missing, r2PartiallyConfigured, storageBackend } from '@/utils/storage';
 import { collectionMode, getMpesaConfig } from '@/lib/mpesa';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { createAdminClient, adminClientMissing } from '@/utils/supabase/admin';
 
 /**
  * GET /api/admin/diagnostics — is this deployment configured?
@@ -48,6 +48,29 @@ export async function GET() {
         const paybill = process.env.NEXT_PUBLIC_MPESA_PAYBILL || process.env.NEXT_PUBLIC_MPESA_TILL || null;
 
         const checks = [
+            {
+                /*
+                 * The service-role key is the quietest thing that can be
+                 * missing. Nothing on a page fails: browsing works, the setter
+                 * works, the shop renders. What breaks is every privileged
+                 * path — the M-Pesa callback that records a payment, the signed
+                 * download that delivers what was paid for, approving a
+                 * question, minting a key — and each one fails on its own with
+                 * its own message, so the shared cause is invisible.
+                 */
+                id: 'service-role',
+                label: 'Server credentials',
+                ok: adminClientMissing() === null,
+                detail:
+                    adminClientMissing() === null
+                        ? 'Configured'
+                        : `${adminClientMissing()} is not set. Payment confirmation, paid downloads, ` +
+                          'question review and ingest keys all fail without it.',
+                fix:
+                    adminClientMissing() === null
+                        ? null
+                        : 'Supabase → Project Settings → API → service_role, then add SUPABASE_SERVICE_ROLE_KEY in Vercel and redeploy.',
+            },
             {
                 id: 'storage',
                 label: 'Paper storage',
