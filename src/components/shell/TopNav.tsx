@@ -200,7 +200,12 @@ export default function TopNav() {
                 </Link>
 
                 {/* Primary nav */}
-                <nav className="ml-4 hidden items-center gap-1 md:flex">
+                {/* `lg`, not `md`. At 768px the brand, four links, the cart, the
+                    library, the theme toggle and two auth buttons do not fit on
+                    one 64px row, and the first thing to give was "Set an exam",
+                    which wrapped to three lines. A tablet gets the sheet, which
+                    carries everything this row does and more. */}
+                <nav className="ml-4 hidden items-center gap-1 lg:flex">
                     {PRIMARY_LINKS.map(({ href, label, icon: Icon, match }) => {
                         const active = match(pathname);
                         return (
@@ -208,7 +213,7 @@ export default function TopNav() {
                                 key={href}
                                 href={href}
                                 aria-current={active ? 'page' : undefined}
-                                className={`relative flex min-h-11 items-center gap-2 px-3.5 text-sm font-semibold transition-colors ${
+                                className={`relative flex min-h-11 items-center gap-2 whitespace-nowrap px-3.5 text-sm font-semibold transition-colors ${
                                     active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                                 }`}
                             >
@@ -333,7 +338,7 @@ export default function TopNav() {
                 <button
                     type="button"
                     onClick={() => setMobileOpen((v) => !v)}
-                    className="btn-icon md:hidden"
+                    className="btn-icon lg:hidden"
                     aria-label="Menu"
                     aria-expanded={mobileOpen}
                 >
@@ -366,7 +371,7 @@ export default function TopNav() {
 
             {/* Mobile sheet */}
             {mobileOpen && (
-                <div className="border-t bg-card md:hidden">
+                <div className="border-t bg-card lg:hidden">
                     <nav className="shell-width flex flex-col gap-1 py-3">
                         {/* Which account this is. The desktop bar shows initials
                             with the address in a tooltip; on a phone there was
