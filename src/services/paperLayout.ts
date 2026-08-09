@@ -32,6 +32,8 @@ import { examTypeName } from '@/lib/catalog';
  * cheaper and safer than an adapter on each caller, which is where the last set
  * of mismatches came from.
  */
+import { subjectProfile, type AnswerStyle, type SubjectProfile } from './subjectPaper';
+
 export interface PaperSource {
     title?: string | null;
     subject?: string | null;
@@ -153,6 +155,13 @@ export interface PaperIdentity {
 
 export interface PaperLayout {
     identity: PaperIdentity;
+    /**
+     * The conventions this subject's papers follow — where the answer goes and
+     * what the rubric says. See `services/subjectPaper.ts`.
+     */
+    profile: SubjectProfile;
+    /** Shorthand for `profile.answerStyle`; the renderer reads it on every question. */
+    answerStyle: AnswerStyle;
     instructions: string[];
     sections: PaperSection[];
     questions: LaidOutQuestion[];
@@ -168,7 +177,8 @@ export interface PaperLayout {
 // ============================================================================
 
 export function layoutPaper(paper: PaperSource, source: QuestionSource[]): PaperLayout {
-    const questions = (source ?? []).map((q, i) => layoutQuestion(q, i + 1));
+    const profile = subjectProfile(paper.subject);
+    const questions = (source ?? []).map((q, i) => layoutQuestion(q, i + 1, profile));
     return assemble(paper, questions, splitIntoSections(questions), 'en');
 }
 
@@ -207,10 +217,12 @@ export function layoutSectionedPaper(
 ): PaperLayout {
     const filled = (declared ?? []).filter((s) => (s.questions ?? []).length > 0);
 
+    const profile = subjectProfile(paper.subject);
+
     let number = 0;
     const laidOut = filled.map((s) => ({
         declared: s,
-        questions: s.questions.map((q) => layoutQuestion(q, ++number)),
+        questions: s.questions.map((q) => layoutQuestion(q, ++number, profile)),
     }));
 
     const questions = laidOut.flatMap((s) => s.questions);
@@ -275,9 +287,13 @@ function assemble(
     const counted = questions.reduce((sum, q) => sum + q.marks, 0);
     const totalMarks = counted > 0 ? counted : Number(paper.total_marks) || 0;
 
+    const profile = subjectProfile(paper.subject);
+
     return {
         identity: layoutIdentity(paper),
-        instructions: buildInstructions(paper, questions, totalMarks, sections, language),
+        profile,
+        answerStyle: profile.answerStyle,
+        instructions: buildInstructions(paper, questions, totalMarks, sections, language, profile),
         sections,
         questions,
         totalMarks,
@@ -311,7 +327,7 @@ function layoutIdentity(paper: PaperSource): PaperIdentity {
     };
 }
 
-function layoutQuestion(q: QuestionSource, number: number): LaidOutQuestion {
+function layoutQuestion(q: QuestionSource, number: number, profile: SubjectProfile): LaidOutQuestion {
     const options = normaliseOptions(q.options);
     const rawParts = q.sub_parts ?? q.subParts;
     const parts: LaidOutPart[] = (Array.isArray(rawParts) ? rawParts : [])
@@ -321,7 +337,9 @@ function layoutQuestion(q: QuestionSource, number: number): LaidOutQuestion {
                 label: `(${part?.label ? String(part.label).replace(/[()]/g, '') : String.fromCharCode(97 + i)})`,
                 text: cleanText(part?.text ?? ''),
                 marks,
-                answerLines: Number(part?.answer_lines ?? part?.answerLines) || defaultAnswerLines(marks, q.type),
+                answerLines:
+                    Number(part?.answer_lines ?? part?.answerLines) ||
+                    defaultAnswerLines(marks, q.type, profile),
             };
         })
         .filter((part) => part.text.length > 0);
@@ -344,7 +362,7 @@ function layoutQuestion(q: QuestionSource, number: number): LaidOutQuestion {
         options,
         optionsFitTwoColumns: options.length >= 2 && options.every((o) => o.length <= 28),
         parts,
-        answerLines: needsOwnLines ? declaredLines || defaultAnswerLines(marks, type) : 0,
+        answerLines: needsOwnLines ? declaredLines || defaultAnswerLines(marks, type, profile) : 0,
         figure: layoutFigure(q),
     };
 }
@@ -432,7 +450,8 @@ function buildInstructions(
     questions: LaidOutQuestion[],
     totalMarks: number,
     sections: PaperSection[],
-    language: 'en' | 'sw' = 'en'
+    language: 'en' | 'sw' = 'en',
+    profile: SubjectProfile = subjectProfile(paper.subject)
 ): string[] {
     const typed = (paper.instructions ?? '')
         .split('\n')
@@ -456,6 +475,10 @@ function buildInstructions(
         if (totalMarks > 0) lines.push(`Karatasi hii ina jumla ya alama ${totalMarks}.`);
         if (paper.time_limit) lines.push(`Umepewa muda wa ${clean(paper.time_limit)} kukamilisha karatasi hii.`);
         lines.push('Andika majibu yako katika nafasi ulizoachiwa kwa kutumia kalamu ya wino wa buluu au mweusi.');
+        // Only the Kiswahili profile's lines are in Kiswahili; anything else
+        // would put an English sentence on a Kiswahili paper, which is the
+        // thing this branch exists to prevent.
+        if (profile.family === 'kiswahili') lines.push(...profile.instructions);
         return lines;
     }
 
@@ -464,7 +487,6 @@ function buildInstructions(
         sections.length > 1
             ? 'Answer ALL the questions in BOTH sections in the spaces provided.'
             : 'Answer ALL the questions in the spaces provided.',
-        'All working must be clearly shown where necessary.',
     ];
 
     if (totalMarks > 0) {
@@ -474,7 +496,22 @@ function buildInstructions(
         lines.push(`You are allowed ${clean(paper.time_limit)} to complete this paper.`);
     }
 
-    lines.push('Write your answers in the spaces provided using a blue or black pen.');
+    /*
+     * The subject's own rules come last, which is where a real paper prints
+     * them — after the housekeeping and immediately above the questions. A
+     * Mathematics paper says what may be used and that working earns marks; a
+     * Chemistry paper mentions the Periodic Table; a History paper says answer
+     * in English. That line-up is the whole difference between a paper a
+     * teacher recognises and one that was clearly generated.
+     */
+    lines.push(...profile.instructions);
+
+    // Only for papers that rule lines. On a maths paper the pen colour is the
+    // least of it, and the rubric above has already said where working goes.
+    if (profile.answerStyle === 'ruled') {
+        lines.push('Write your answers in the spaces provided using a blue or black pen.');
+    }
+
     return lines;
 }
 
@@ -603,9 +640,33 @@ export function normaliseOptions(options: any): string[] {
  * Kept tight on purpose. Two lines for a ten-mark essay is useless, but so is a
  * paper that runs to twelve pages because every one-mark question was given
  * half of one — this gets photocopied for a whole class.
+ *
+ * Measured in line-units whichever way it is drawn, so a ruled paper and a
+ * blank-space paper paginate through exactly the same arithmetic. The subject
+ * scales it: working needs more room than a sentence, because a candidate sets
+ * out four steps down the page where a prose answer runs across it.
  */
-export function defaultAnswerLines(marks: number, type?: string | null): number {
+export function defaultAnswerLines(
+    marks: number,
+    type?: string | null,
+    profile?: SubjectProfile
+): number {
     if (type === 'Multiple Choice' || type === 'True/False') return 0;
+
+    const base = essayOrShort(marks, type);
+    const scale = profile?.spaceScale ?? 1;
+    if (scale === 1) return base;
+
+    /*
+     * The cap rises with the scale rather than staying put. Clamping a maths
+     * paper to the prose ceiling is what would make a twelve-mark construction
+     * question print with the same room as a four-mark one, which is the exact
+     * complaint this is here to fix.
+     */
+    return Math.min(Math.round(20 * scale), Math.max(2, Math.round(base * scale)));
+}
+
+function essayOrShort(marks: number, type?: string | null): number {
     if (type === 'Essay') return Math.min(16, Math.max(8, Math.ceil(marks * 1.2)));
     if (marks <= 1) return 2;
     if (marks <= 3) return 3;

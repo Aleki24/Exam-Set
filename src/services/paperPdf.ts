@@ -40,6 +40,8 @@ import {
     type QuestionSource,
     type SectionDeclaration,
 } from './paperLayout';
+import type { AnswerStyle } from './subjectPaper';
+import { pdfSafe } from './pdfText';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -78,6 +80,9 @@ const PART_INDENT = 40;
 const SERIF = 'times';
 const SANS = 'helvetica';
 
+/** Breathing room between the blocks on the cover, which has a page to itself. */
+const COVER_GAP = 10;
+
 // ---------------------------------------------------------------------------
 // THE SHEET
 // ---------------------------------------------------------------------------
@@ -97,6 +102,31 @@ class Sheet {
         this.doc.setTextColor(0, 0, 0);
         this.doc.setDrawColor(0, 0, 0);
         this.y = CONTENT_TOP;
+        this.guardEncoding();
+    }
+
+    /**
+     * Every string this document will ever print, made printable, once.
+     *
+     * Done here rather than at each call site because there are twenty-seven of
+     * them — questions, options, captions, rubrics, institution names, the
+     * running header — and the cost of missing one is not a wrong glyph but a
+     * whole line set in broken letter-spaced type, plus every line after it
+     * wrapped against the wrong widths. See `pdfText.ts` for why jsPDF does
+     * that.
+     *
+     * All three are patched, not just `text`: `splitTextToSize` decides where
+     * lines break and `getTextWidth` decides whether a heading fits, so
+     * measuring the original while printing the replacement would lay the paper
+     * out for text it is not going to show. This wraps the instance this class
+     * owns — jsPDF's prototype is untouched.
+     */
+    private guardEncoding(): void {
+        const doc = this.doc as any;
+        for (const method of ['text', 'splitTextToSize', 'getTextWidth'] as const) {
+            const original = doc[method].bind(doc);
+            doc[method] = (value: unknown, ...rest: unknown[]) => original(pdfSafe(value), ...rest);
+        }
     }
 
     /** How much vertical room is left on this page. */
@@ -536,6 +566,32 @@ function drawRubric(sheet: Sheet, layout: PaperLayout): void {
 // ---------------------------------------------------------------------------
 
 /** How tall a section heading is, so it can be kept with its first question. */
+/**
+ * The line at the foot of the cover that sends the candidate to page two.
+ *
+ * Without it a cover page is ambiguous — a candidate who has read the rubric
+ * and sees white space below it has no confirmation that the paper continues.
+ * The running footer says "Turn over" in 7.5pt at the very bottom of every
+ * page; this says it once, in the body, where the eye actually stops.
+ *
+ * Pushed to the bottom of the page rather than left under the last block, so
+ * it reads as the end of the cover and not as another instruction.
+ */
+function drawCoverFoot(sheet: Sheet, layout: PaperLayout): void {
+    const label = layout.sections.some((s) => s.label)
+        ? 'TURN OVER FOR SECTION A'
+        : 'TURN OVER FOR QUESTION 1';
+
+    // Only if there is real room left. On a cover that has already filled the
+    // page this would start a page of its own, which is the opposite of the
+    // point.
+    if (sheet.room < 46) return;
+
+    sheet.y = CONTENT_BOTTOM - 16;
+    sheet.font(SANS, 'bold', 9);
+    sheet.text(label, PAGE_WIDTH / 2, { align: 'center' });
+}
+
 function measureSectionHeading(sheet: Sheet, section: PaperSection): number {
     const instruction = section.instruction
         ? sheet.measure(section.instruction, CONTENT_WIDTH, 12.5)
@@ -702,7 +758,13 @@ function drawFigure(sheet: Sheet, question: LaidOutQuestion, figures?: FigureMap
     sheet.y += 6;
 }
 
-function drawQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number, figures?: FigureMap): void {
+function drawQuestion(
+    sheet: Sheet,
+    question: LaidOutQuestion,
+    scale: number,
+    style: AnswerStyle,
+    figures?: FigureMap
+): void {
     const { doc } = sheet;
 
     sheet.font(SERIF, 'normal', BODY_SIZE);
@@ -757,11 +819,11 @@ function drawQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number, fi
         }
 
         sheet.paragraph(part.text, MARGIN_X + PART_INDENT, TEXT_WIDTH - PART_INDENT);
-        drawAnswerLines(sheet, scaledLines(part.answerLines, scale), MARGIN_X + PART_INDENT);
+        drawAnswerSpace(sheet, scaledLines(part.answerLines, scale), MARGIN_X + PART_INDENT, style);
         sheet.y += 2;
     });
 
-    drawAnswerLines(sheet, scaledLines(question.answerLines, scale), MARGIN_X + QUESTION_INDENT);
+    drawAnswerSpace(sheet, scaledLines(question.answerLines, scale), MARGIN_X + QUESTION_INDENT, style);
     sheet.y += 8;
 }
 
@@ -804,8 +866,37 @@ function drawOptions(sheet: Sheet, question: LaidOutQuestion): void {
     sheet.y += 3;
 }
 
-function drawAnswerLines(sheet: Sheet, count: number, x: number): void {
+/**
+ * Room to answer in — ruled for prose, clear for working.
+ *
+ * `count` is in line-units either way, so both styles paginate through the same
+ * arithmetic and `measureQuestion` does not need to know which is in force.
+ *
+ * The blank case is not an omission. A calculation is worked down the page — a
+ * fraction over a fraction, a long division, a free-body diagram off to one
+ * side — and a ruled line cuts across all of that. Every KCSE Mathematics,
+ * Physics and Chemistry paper leaves the space under a question clear for
+ * exactly this reason, and a candidate given lines writes smaller and shows
+ * less working. Working is where the method marks are.
+ */
+function drawAnswerSpace(sheet: Sheet, count: number, x: number, style: AnswerStyle): void {
     if (count <= 0) return;
+
+    if (style === 'blank') {
+        /*
+         * Reserved a line at a time rather than in one block. Asking for the
+         * whole height at once would push a question with a page and a half of
+         * working onto a fresh page and leave the previous one half empty —
+         * and blank space, unlike a paragraph, reads identically either side of
+         * a fold.
+         */
+        for (let i = 0; i < count; i++) {
+            sheet.reserve(ANSWER_LINE_GAP);
+            sheet.y += ANSWER_LINE_GAP;
+        }
+        sheet.y += 3;
+        return;
+    }
 
     for (let i = 0; i < count; i++) {
         sheet.reserve(ANSWER_LINE_GAP);
@@ -823,12 +914,39 @@ function drawAnswerLines(sheet: Sheet, count: number, x: number): void {
 function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1, figures?: FigureMap): Sheet {
     const sheet = new Sheet();
 
+    /*
+     * THE COVER.
+     *
+     * Page one carries no question. Every real Kenyan paper works this way and
+     * it is not a formality: the candidate box, the rubric, the time and the
+     * examiner's table are what an invigilator checks before the paper is
+     * turned over, and a question crowded in beneath them gets started before
+     * the instructions have been read. It also gives the school somewhere to
+     * write, and a marker one page to add up on.
+     *
+     * The blocks are spaced more generously than they were, because they used
+     * to be competing with question one for the same page and now they are not.
+     */
     drawMasthead(sheet, layout);
+    sheet.y += COVER_GAP;
     drawCandidateBox(sheet);
+    sheet.y += COVER_GAP;
     drawTimeAndMarks(sheet, layout);
     drawInstructions(sheet, layout, pageCountHint);
+    sheet.y += COVER_GAP;
     drawExaminerTable(sheet, layout);
     drawRubric(sheet, layout);
+
+    /*
+     * Only when there is something to turn over to. A paper with no questions
+     * would otherwise end on a blank sheet — `dropTrailingBlank` would remove
+     * it, but not before the page count printed in the instructions had already
+     * counted it.
+     */
+    if (layout.questions.length > 0) {
+        drawCoverFoot(sheet, layout);
+        sheet.newPage();
+    }
 
     layout.sections.forEach((section) => {
         if (section.label) {
@@ -841,7 +959,9 @@ function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1, figu
             );
             drawSectionHeading(sheet, section.label, section.title, section.marks, section.instruction);
         }
-        section.questions.forEach((question) => drawQuestion(sheet, question, scale, figures));
+        section.questions.forEach((question) =>
+            drawQuestion(sheet, question, scale, layout.answerStyle, figures)
+        );
     });
 
     // The closing line is printed in the footer, not here — see Sheet.finish.
@@ -889,7 +1009,12 @@ export function buildPaperDocument(
     const layout = layoutFor(paper, questions, declaration);
     let sheet = renderStable(layout, 1, figures);
 
-    if (sheet.doc.getNumberOfPages() > 1 && sheet.fill < 0.45) {
+    /*
+     * The cover is a fixed page that no amount of tightening can remove, so the
+     * test is whether the QUESTIONS spill — two pages is a cover and one page of
+     * questions, which is already as short as this paper goes.
+     */
+    if (sheet.doc.getNumberOfPages() > 2 && sheet.fill < 0.45) {
         for (const scale of [0.85, 0.7]) {
             const tighter = renderStable(layout, scale, figures);
             if (tighter.doc.getNumberOfPages() < sheet.doc.getNumberOfPages()) {
