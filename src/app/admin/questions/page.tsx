@@ -909,24 +909,31 @@ export default function AdminQuestionsPage() {
             {/* Header */}
             <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                    {/*
+                      * Both halves wrap, and neither may be squeezed narrower
+                      * than its own words. Without this the title column was
+                      * compressed to about eighty pixels on a phone and
+                      * "Question Bank" broke across two lines that then
+                      * overlapped the row above it.
+                      */}
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                        <div className="flex min-w-0 items-center gap-4">
                             <a
                                 href="/admin"
-                                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                className="shrink-0 whitespace-nowrap text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                             >
                                 ← Admin
                             </a>
-                            <div>
+                            <div className="min-w-0">
                                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                                     Question Bank
                                 </h1>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                <p className="hidden sm:block text-sm text-gray-500 dark:text-gray-400 mt-1">
                                     Manage questions for exam generation
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             {/* Template selector dropdown */}
                             {questionTemplates.length > 0 && (
                                 <div className="relative">
@@ -959,7 +966,7 @@ export default function AdminQuestionsPage() {
                             )}
                             <a
                                 href="/admin/questions/schemes"
-                                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                className="inline-flex shrink-0 whitespace-nowrap items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                 title="Most questions in the bank have no marking scheme — fill them in a batch at a time, with AI proposing and you reviewing"
                             >
                                 <Sparkles className="w-4 h-4" />
@@ -967,7 +974,7 @@ export default function AdminQuestionsPage() {
                             </a>
                             <button
                                 onClick={() => setShowBulkImport(true)}
-                                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                className="inline-flex shrink-0 whitespace-nowrap items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                             >
                                 <Upload className="w-4 h-4" />
                                 Bulk Import
@@ -1099,6 +1106,7 @@ export default function AdminQuestionsPage() {
                                         Review auto-assigned topics. Click on a topic to change it.
                                     </p>
                                     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                        <div className="overflow-x-auto">
                                         <table className="w-full text-sm">
                                             <thead className="bg-gray-50 dark:bg-gray-700/50">
                                                 <tr>
@@ -1142,6 +1150,7 @@ export default function AdminQuestionsPage() {
                                                 ))}
                                             </tbody>
                                         </table>
+                                    </div>
                                     </div>
                                 </div>
                                 <div className="flex justify-between gap-2 p-4 border-t border-gray-200 dark:border-gray-700">

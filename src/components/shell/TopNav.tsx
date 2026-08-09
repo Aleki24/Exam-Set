@@ -195,7 +195,11 @@ export default function TopNav() {
                             suffix="Exams"
                             className="block font-display text-[17px] font-bold leading-none tracking-[-0.02em]"
                         />
-                        <span className="overline mt-1 block">CBE resources for Kenya</span>
+                        {/* Hidden until xl. At exactly 1024 the desktop nav switches on and the
+                            row — brand, four links, cart, library, theme and two auth
+                            buttons — is 65px too wide; the tagline is the one part of it
+                            nobody navigates by. */}
+                        <span className="overline mt-1 hidden xl:block">CBE resources for Kenya</span>
                     </span>
                 </Link>
 
@@ -213,7 +217,7 @@ export default function TopNav() {
                                 key={href}
                                 href={href}
                                 aria-current={active ? 'page' : undefined}
-                                className={`relative flex min-h-11 items-center gap-2 whitespace-nowrap px-3.5 text-sm font-semibold transition-colors ${
+                                className={`relative flex min-h-11 items-center gap-2 whitespace-nowrap px-2.5 text-sm font-semibold transition-colors xl:px-3.5 ${
                                     active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                                 }`}
                             >
@@ -328,8 +332,9 @@ export default function TopNav() {
                         <Link href="/auth/login" className="btn-ghost">
                             Sign in
                         </Link>
-                        <Link href="/auth/signup" className="btn-primary">
-                            Create account
+                        <Link href="/auth/signup" className="btn-primary whitespace-nowrap">
+                            <span className="xl:hidden">Sign up</span>
+                            <span className="hidden xl:inline">Create account</span>
                         </Link>
                     </div>
                 )}
