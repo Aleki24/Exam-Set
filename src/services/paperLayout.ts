@@ -58,6 +58,14 @@ export interface QuestionSource {
     marking_scheme?: string | null;
     markingScheme?: string | null;
     topic?: string | null;
+    /** Storage key of the question's diagram — see lib/figures.ts. */
+    image_path?: string | null;
+    imagePath?: string | null;
+    image_caption?: string | null;
+    imageCaption?: string | null;
+    /** True when the question cannot be answered without seeing the figure. */
+    image_required?: boolean | null;
+    imageRequired?: boolean | null;
 }
 
 // ============================================================================
@@ -85,6 +93,23 @@ export interface LaidOutQuestion {
     parts: LaidOutPart[];
     /** Ruled lines under the question itself; 0 when the parts carry them. */
     answerLines: number;
+    /**
+     * The diagram this question is about, if it has one.
+     *
+     * A third of the questions on a Kenyan paper carry one — a gradient graph,
+     * a net, concentric arcs — and they are often the higher-mark ones. Without
+     * it the question prints as text that cannot be answered, which is worse
+     * than not printing it at all.
+     */
+    figure: LaidOutFigure | null;
+}
+
+export interface LaidOutFigure {
+    /** Storage key, resolved to a URL by the caller that has network access. */
+    key: string;
+    caption: string | null;
+    /** When true, a paper that cannot show the figure should not use the question. */
+    required: boolean;
 }
 
 export interface PaperSection {
@@ -320,7 +345,30 @@ function layoutQuestion(q: QuestionSource, number: number): LaidOutQuestion {
         optionsFitTwoColumns: options.length >= 2 && options.every((o) => o.length <= 28),
         parts,
         answerLines: needsOwnLines ? declaredLines || defaultAnswerLines(marks, type) : 0,
+        figure: layoutFigure(q),
     };
+}
+
+function layoutFigure(q: QuestionSource): LaidOutFigure | null {
+    const key = clean(String(q.image_path ?? q.imagePath ?? ''));
+    if (!key) return null;
+    return {
+        key,
+        caption: clean(String(q.image_caption ?? q.imageCaption ?? '')) || null,
+        required: Boolean(q.image_required ?? q.imageRequired),
+    };
+}
+
+/**
+ * Questions that cannot be printed without a picture nobody has.
+ *
+ * `image_required` marks a question whose figure is the question — "use the
+ * graph above", "measure angle BAC". Selecting one into a paper that cannot
+ * render figures produces an unanswerable item, so callers check this before
+ * building rather than discovering it in a buyer's hands.
+ */
+export function unrenderableQuestions(questions: LaidOutQuestion[]): LaidOutQuestion[] {
+    return questions.filter((q) => q.figure?.required && !q.figure.key);
 }
 
 /** Sub-parts carry their own marks when they have them; otherwise the parent's. */

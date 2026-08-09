@@ -597,8 +597,12 @@ function measureQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number)
  * The part of a question that must not be left behind on its own: the number,
  * what is being asked, and any choices. Ruled answer space may flow.
  */
-function measureStem(sheet: Sheet, question: LaidOutQuestion, scale: number): number {
+function measureStem(sheet: Sheet, question: LaidOutQuestion, scale: number, figures?: FigureMap): number {
     let height = sheet.measure(question.text, TEXT_WIDTH - QUESTION_INDENT) + 4;
+
+    // The diagram is part of the stem: a question number and its graph must not
+    // be separated by a page break.
+    height += measureFigure(question, figures);
 
     if (question.options.length > 0) {
         const rows = question.optionsFitTwoColumns
@@ -618,7 +622,87 @@ function measureStem(sheet: Sheet, question: LaidOutQuestion, scale: number): nu
     return height;
 }
 
-function drawQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number): void {
+/** Half the text column: wide enough to read a graph, narrow enough to leave writing room. */
+const FIGURE_MAX_WIDTH = (TEXT_WIDTH - QUESTION_INDENT) * 0.62;
+
+/** Beyond this a diagram pushes the answer space onto another page. */
+const FIGURE_MAX_HEIGHT = 210;
+
+const CAPTION_SIZE = 8.5;
+const CAPTION_GAP = 5;
+
+/**
+ * How much room the figure will take, at the size it will actually be drawn.
+ *
+ * Measured from the same numbers `drawFigure` uses, because a figure the
+ * pagination did not account for is a figure printed over the next question.
+ */
+function measureFigure(question: LaidOutQuestion, figures?: FigureMap): number {
+    if (!question.figure) return 0;
+    const art = figures?.get(question.figure.key);
+    if (!art) return 0;
+    return figureBox(art).height + (question.figure.caption ? CAPTION_GAP + CAPTION_SIZE : 0) + 10;
+}
+
+/** Fitted inside the box, keeping the aspect ratio — a squashed graph is a wrong graph. */
+function figureBox(art: FigureBytes): { width: number; height: number } {
+    const ratio = art.height / Math.max(1, art.width);
+    let width = Math.min(FIGURE_MAX_WIDTH, art.width);
+    let height = width * ratio;
+    if (height > FIGURE_MAX_HEIGHT) {
+        height = FIGURE_MAX_HEIGHT;
+        width = height / Math.max(0.01, ratio);
+    }
+    return { width, height };
+}
+
+/**
+ * The diagram a question is about.
+ *
+ * Silence when the bytes are absent is deliberate. A figure can be missing for
+ * dull reasons — storage down, a key that no longer resolves — and a paper that
+ * prints a broken-image box, or the words "figure missing", is worse than one
+ * that prints the question plainly. `image_required` is how a question says it
+ * cannot survive that, and the builder is expected to have filtered those out
+ * before anything reached this function.
+ */
+function drawFigure(sheet: Sheet, question: LaidOutQuestion, figures?: FigureMap): void {
+    if (!question.figure) return;
+    const art = figures?.get(question.figure.key);
+    if (!art) return;
+
+    const { width, height } = figureBox(art);
+
+    // Keep the whole diagram on one page. Splitting a graph across a fold makes
+    // it unreadable in a way splitting a paragraph does not.
+    sheet.keepTogether(height + (question.figure.caption ? CAPTION_GAP + CAPTION_SIZE : 0));
+
+    sheet.y += 4;
+    try {
+        sheet.doc.addImage(art.dataUrl, 'JPEG', MARGIN_X + QUESTION_INDENT, sheet.y, width, height);
+    } catch {
+        // A corrupt or unsupported image must not take the whole paper down.
+        return;
+    }
+    sheet.y += height;
+
+    if (question.figure.caption) {
+        /*
+         * `text` draws at the baseline, not the top, so advancing by the gap
+         * alone puts the ascenders back inside the image. The line height has
+         * to be crossed before the caption is placed or it sits on the bottom
+         * edge of the diagram.
+         */
+        sheet.y += CAPTION_GAP + CAPTION_SIZE;
+        sheet.font(SERIF, 'italic', CAPTION_SIZE);
+        sheet.doc.text(question.figure.caption, MARGIN_X + QUESTION_INDENT, sheet.y);
+        sheet.font(SERIF, 'normal', BODY_SIZE);
+    }
+
+    sheet.y += 6;
+}
+
+function drawQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number, figures?: FigureMap): void {
     const { doc } = sheet;
 
     sheet.font(SERIF, 'normal', BODY_SIZE);
@@ -629,8 +713,8 @@ function drawQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number): v
     // page does not. Moving whole questions over instead would leave a third of
     // a page white every time one straddled the join, and that is a sheet of
     // paper per pupil in a class of forty.
-    const full = measureQuestion(sheet, question, scale);
-    if (full > sheet.room) sheet.keepTogether(measureStem(sheet, question, scale));
+    const full = measureQuestion(sheet, question, scale) + measureFigure(question, figures);
+    if (full > sheet.room) sheet.keepTogether(measureStem(sheet, question, scale, figures));
 
     const top = sheet.y;
 
@@ -649,6 +733,8 @@ function drawQuestion(sheet: Sheet, question: LaidOutQuestion, scale: number): v
 
     sheet.font(SERIF, 'normal', BODY_SIZE);
     sheet.paragraph(question.text, MARGIN_X + QUESTION_INDENT, TEXT_WIDTH - QUESTION_INDENT);
+
+    drawFigure(sheet, question, figures);
 
     drawOptions(sheet, question);
 
@@ -734,7 +820,7 @@ function drawAnswerLines(sheet: Sheet, count: number, x: number): void {
 // THE DOCUMENTS
 // ---------------------------------------------------------------------------
 
-function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1): Sheet {
+function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1, figures?: FigureMap): Sheet {
     const sheet = new Sheet();
 
     drawMasthead(sheet, layout);
@@ -751,11 +837,11 @@ function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1): She
             const first = section.questions[0];
             sheet.keepTogether(
                 measureSectionHeading(sheet, section) +
-                    (first ? measureStem(sheet, first, scale) : 0)
+                    (first ? measureStem(sheet, first, scale, figures) : 0)
             );
             drawSectionHeading(sheet, section.label, section.title, section.marks, section.instruction);
         }
-        section.questions.forEach((question) => drawQuestion(sheet, question, scale));
+        section.questions.forEach((question) => drawQuestion(sheet, question, scale, figures));
     });
 
     // The closing line is printed in the footer, not here — see Sheet.finish.
@@ -771,12 +857,12 @@ function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1): She
  * whatever N is, so this settles on the second pass in practice; the loop is
  * only there so a pathological paper cannot print a number it disproves.
  */
-function renderStable(layout: PaperLayout, scale: number): Sheet {
-    let sheet = renderPaper(layout, 1, scale);
+function renderStable(layout: PaperLayout, scale: number, figures?: FigureMap): Sheet {
+    let sheet = renderPaper(layout, 1, scale, figures);
 
     for (let attempt = 0; attempt < 3; attempt++) {
         const pages = sheet.doc.getNumberOfPages();
-        const next = renderPaper(layout, pages, scale);
+        const next = renderPaper(layout, pages, scale, figures);
         if (next.doc.getNumberOfPages() === pages) return next;
         sheet = next;
     }
@@ -797,14 +883,15 @@ function renderStable(layout: PaperLayout, scale: number): Sheet {
 export function buildPaperDocument(
     paper: PaperSource,
     questions: QuestionSource[],
-    declaration?: SectionDeclaration
+    declaration?: SectionDeclaration,
+    figures?: FigureMap
 ): jsPDF {
     const layout = layoutFor(paper, questions, declaration);
-    let sheet = renderStable(layout, 1);
+    let sheet = renderStable(layout, 1, figures);
 
     if (sheet.doc.getNumberOfPages() > 1 && sheet.fill < 0.45) {
         for (const scale of [0.85, 0.7]) {
-            const tighter = renderStable(layout, scale);
+            const tighter = renderStable(layout, scale, figures);
             if (tighter.doc.getNumberOfPages() < sheet.doc.getNumberOfPages()) {
                 sheet = tighter;
                 break;
@@ -920,12 +1007,31 @@ export function buildMarkingSchemeDocument(
 // ---------------------------------------------------------------------------
 
 /** Bytes, for storing and streaming. Server only — `Buffer` is a Node type. */
+/**
+ * The figures a render may draw, keyed by storage key.
+ *
+ * Passed in rather than fetched here, because rendering is synchronous and must
+ * stay that way — every caller returns its Buffer straight into a response, and
+ * a render that reaches the network is a render that can hang a request. The
+ * route fetches first and hands the bytes over; this function stays pure and
+ * testable with no storage behind it.
+ */
+export interface FigureBytes {
+    /** A `data:image/…;base64,…` URL, which is what jsPDF's addImage wants. */
+    dataUrl: string;
+    width: number;
+    height: number;
+}
+
+export type FigureMap = Map<string, FigureBytes>;
+
 export function renderPaperPdf(
     paper: PaperSource,
     questions: QuestionSource[],
-    declaration?: SectionDeclaration
+    declaration?: SectionDeclaration,
+    figures?: FigureMap
 ): Buffer {
-    return Buffer.from(buildPaperDocument(paper, questions, declaration).output('arraybuffer'));
+    return Buffer.from(buildPaperDocument(paper, questions, declaration, figures).output('arraybuffer'));
 }
 
 /** Bytes, for storing and streaming. Server only — `Buffer` is a Node type. */
