@@ -347,17 +347,20 @@ export default function TopicsPage() {
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
             {/* Header */}
             <header className="sticky top-0 z-50 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                {/* `min-h-16`, not `h-16`. A fixed height cannot hold a wrapped title
+                    and two buttons at 390px, so it clipped "Topics & Strands" off the
+                    top of its own header. Let the bar grow instead. */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                     <div className="flex items-center gap-4">
                         <Link href="/admin" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         </Link>
                         <div>
                             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Topics & Strands</h1>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Manage subject-specific topics</p>
+                            <p className="hidden sm:block text-xs text-gray-500 dark:text-gray-400">Manage subject-specific topics</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <button
                             onClick={() => {
                                 if (!selectedSubject) {
@@ -367,14 +370,14 @@ export default function TopicsPage() {
                                 setBulkStep('input');
                                 setShowBulkForm(true);
                             }}
-                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                            className="flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
                         >
                             <Upload className="w-4 h-4" />
                             Bulk Add
                         </button>
                         <button
                             onClick={handleNewTopic}
-                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                            className="flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
                         >
                             <Plus className="w-4 h-4" />
                             Add Topic
@@ -400,12 +403,15 @@ export default function TopicsPage() {
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Level Tabs */}
-                <div className="flex gap-2 mb-6">
+                {/* Scrolls sideways rather than wrapping: three pills that rewrap
+                    into two rows shift every time you pick one, and the row is
+                    short enough that a swipe reaches the end. */}
+                <div className="flex gap-2 mb-6 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {Object.entries(LEVEL_LABELS).map(([value, label]) => (
                         <button
                             key={value}
                             onClick={() => handleLevelChange(value)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${selectedLevel === value
+                            className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-lg font-medium transition-colors ${selectedLevel === value
                                 ? 'bg-teal-600 text-white'
                                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
                                 }`}
