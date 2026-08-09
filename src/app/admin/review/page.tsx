@@ -7,6 +7,7 @@ import {
     ArrowLeft, Check, CheckCheck, Loader2, Pencil, Sparkles, X,
 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
+import FigureControl from '@/components/admin/FigureControl';
 import { useRole } from '@/lib/roles';
 
 /**
@@ -37,6 +38,9 @@ interface Q {
     grade: string | null;
     is_ai_generated: boolean;
     review_status: Status;
+    image_path: string | null;
+    image_caption: string | null;
+    image_required: boolean;
 }
 
 export default function ReviewPage() {
@@ -108,6 +112,20 @@ export default function ReviewPage() {
             toast.error(err instanceof Error ? err.message : 'Could not save');
         }
     };
+
+    /**
+     * Fold a change the card already saved back into the list.
+     *
+     * `FigureControl` talks to its own endpoint, so by the time this runs the
+     * write has happened. This only keeps the copy on screen honest — without
+     * it, attaching a figure and then approving would render the row from stale
+     * state and the thumbnail would vanish.
+     */
+    const applyPatch = useCallback(
+        (id: string, patch: Partial<Q>) =>
+            setQuestions((qs) => qs.map((q) => (q.id === id ? { ...q, ...patch } : q))),
+        []
+    );
 
     const toggle = (id: string) =>
         setSelected((s) => {
@@ -233,6 +251,7 @@ export default function ReviewPage() {
                             onEdit={() => setEditing(editing === q.id ? null : q.id)}
                             onSave={(patch) => saveEdit(q.id, patch)}
                             onDecide={(d) => decide([q.id], d)}
+                            onPatch={(patch) => applyPatch(q.id, patch)}
                             busy={busy}
                         />
                     ))}
@@ -243,7 +262,7 @@ export default function ReviewPage() {
 }
 
 function QuestionCard({
-    q, selected, onToggle, editing, onEdit, onSave, onDecide, busy,
+    q, selected, onToggle, editing, onEdit, onSave, onDecide, onPatch, busy,
 }: {
     q: Q;
     selected: boolean;
@@ -252,6 +271,7 @@ function QuestionCard({
     onEdit: () => void;
     onSave: (patch: Partial<Q>) => void;
     onDecide: (d: Status) => void;
+    onPatch: (patch: Partial<Q>) => void;
     busy: boolean;
 }) {
     const [text, setText] = useState(q.text);
@@ -325,6 +345,14 @@ function QuestionCard({
                                     </p>
                                 )}
                             </div>
+
+                            <FigureControl
+                                questionId={q.id}
+                                imagePath={q.image_path}
+                                imageCaption={q.image_caption}
+                                imageRequired={q.image_required}
+                                onChange={onPatch}
+                            />
                         </>
                     )}
                 </div>

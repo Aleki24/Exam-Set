@@ -46,3 +46,4 @@ local-browser/
 
 # MCP server dependencies
 mcp/node_modules/
+.verify-sample*.pdf

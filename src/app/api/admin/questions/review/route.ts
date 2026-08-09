@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { adminClientMissingMessage, createAdminClient } from '@/utils/supabase/admin';
 import { requireAdmin } from '@/utils/auth/guards';
 
 /**
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         const { data, error, count } = await supabase
             .from('questions')
             .select(
-                'id, text, marks, marking_scheme, topic, subtopic, type, difficulty, options, is_ai_generated, created_at, review_status, subject_id, grade_id',
+                'id, text, marks, marking_scheme, topic, subtopic, type, difficulty, options, is_ai_generated, created_at, review_status, subject_id, grade_id, image_path, image_caption, image_required',
                 { count: 'exact' }
             )
             .eq('review_status', status)
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         const admin = createAdminClient();
-        if (!admin) return NextResponse.json({ error: 'Server is not configured for this.' }, { status: 503 });
+        if (!admin) return NextResponse.json({ error: adminClientMissingMessage() }, { status: 503 });
 
         const body = await req.json().catch(() => ({}));
         const ids: string[] = Array.isArray(body?.ids) ? body.ids.map(String) : [];
@@ -142,7 +142,7 @@ export async function PATCH(req: NextRequest) {
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         const admin = createAdminClient();
-        if (!admin) return NextResponse.json({ error: 'Server is not configured for this.' }, { status: 503 });
+        if (!admin) return NextResponse.json({ error: adminClientMissingMessage() }, { status: 503 });
 
         const body = await req.json().catch(() => ({}));
         const id = String(body?.id || '');
