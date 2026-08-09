@@ -43,3 +43,6 @@ next-env.d.ts
 *.sln
 *.sw?
 local-browser/
+
+# MCP server dependencies
+mcp/node_modules/
