@@ -33,12 +33,21 @@ function check(label, actual, expected) {
     );
 }
 
+const CBC = 'cur-cbc';
+
 const ctx = {
     subjects: [
         { id: 'sub-math', name: 'Mathematics' },
         { id: 'sub-sci', name: 'Integrated Science / Health Education' },
     ],
-    grades: [{ id: 'g9', name: 'Grade 9' }],
+    // Two rows named "Grade 9", exactly as the live database holds them: one
+    // CBC and configured, one IGCSE with no level. Picking the wrong one writes
+    // a question that exists and can never be found.
+    grades: [
+        { id: 'g9-igcse', name: 'Grade 9', curriculumId: 'cur-igcse', level: null },
+        { id: 'g9-cbc', name: 'Grade 9', curriculumId: CBC, level: 'junior' },
+    ],
+    curriculumId: CBC,
     createdBy: 'user-1',
 };
 
@@ -62,7 +71,8 @@ console.log('\nA complete question is accepted and tagged');
     check('marked as machine-written', rows[0].is_ai_generated, true);
     check('attributed to the key owner', rows[0].created_by, 'user-1');
     check('subject resolved', rows[0].subject_id, 'sub-math');
-    check('grade resolved', rows[0].grade_id, 'g9');
+    check('grade resolved to the CBC row, not IGCSE', rows[0].grade_id, 'g9-cbc');
+    check('curriculum written, or the setter cannot see it', rows[0].curriculum_id, CBC);
 }
 
 console.log('\nA question with no answer never gets in');
@@ -131,6 +141,25 @@ console.log('\nOne bad question does not lose the batch');
     const { rows, rejected } = run([good, { ...good, text: 'no', marking_scheme: 'x' }, { ...good, text: 'A different question entirely, worth four marks.' }]);
     check('the good ones land', rows.length, 2);
     check('the bad one is reported by position', rejected[0].index, 1);
+}
+
+console.log('\nA duplicated grade name resolves on evidence, not on order');
+{
+    // The curriculum breaks the tie.
+    const igcse = normaliseIngest([good], { ...ctx, curriculumId: 'cur-igcse' });
+    check('asking for IGCSE gets the IGCSE row', igcse.rows[0].grade_id, 'g9-igcse');
+
+    // With no curriculum to go on, prefer a row the level filter can reach
+    // over one with no level at all.
+    const blind = normaliseIngest([good], { ...ctx, curriculumId: null });
+    check('no curriculum given falls back to the configured row', blind.rows[0].grade_id, 'g9-cbc');
+
+    // Order in the array must not decide it.
+    const reversed = normaliseIngest([good], { ...ctx, grades: [...ctx.grades].reverse() });
+    check('array order does not decide', reversed.rows[0].grade_id, 'g9-cbc');
+
+    const unknown = normaliseIngest([{ ...good, grade: 'Grade 42' }], ctx);
+    check('an unknown grade is null, not a wrong guess', unknown.rows[0].grade_id, null);
 }
 
 console.log('\nKeys are unguessable, and never stored in the clear');
