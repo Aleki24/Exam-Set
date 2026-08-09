@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
-import { storageBackend } from '@/utils/storage';
+import { r2Missing, r2PartiallyConfigured, storageBackend } from '@/utils/storage';
 import { collectionMode, getMpesaConfig } from '@/lib/mpesa';
 import { createAdminClient } from '@/utils/supabase/admin';
 
@@ -51,13 +51,22 @@ export async function GET() {
             {
                 id: 'storage',
                 label: 'Paper storage',
-                ok: storage !== 'none',
-                detail:
-                    storage === 'r2'
-                        ? 'Cloudflare R2'
-                        : storage === 'supabase'
-                          ? 'Supabase Storage'
-                          : 'Not configured — uploads and paid downloads will fail',
+                /*
+                 * Half-configured R2 is a failure even though a backend is
+                 * technically available. Falling back to Supabase silently
+                 * splits the catalogue across two stores — new files in one,
+                 * old files in the other — and every download from the wrong
+                 * half 404s with nothing to explain it.
+                 */
+                ok: storage !== 'none' && !r2PartiallyConfigured(),
+                detail: r2PartiallyConfigured()
+                    ? `R2 is half configured — missing ${r2Missing().join(', ')}. ` +
+                      'Storage has fallen back to Supabase, so new uploads will not go where the existing files are.'
+                    : storage === 'r2'
+                      ? 'Cloudflare R2'
+                      : storage === 'supabase'
+                        ? 'Supabase Storage'
+                        : 'Not configured — uploads and paid downloads will fail',
                 fix: storage === 'none' ? 'Set SUPABASE_SERVICE_ROLE_KEY, or all four R2_* variables.' : null,
             },
             {
