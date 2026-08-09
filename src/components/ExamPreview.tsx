@@ -9,6 +9,7 @@ import {
     type SectionDeclaration,
 } from '@/services/paperLayout';
 import type { AnswerStyle } from '@/services/subjectPaper';
+import LatexRenderer from '@/components/LatexRenderer';
 
 interface ExamPreviewProps {
     paper: PaperSource;
@@ -41,6 +42,12 @@ interface ExamPreviewProps {
  *
  *   Answer space is drawn the way the subject will print it — ruled for prose,
  *   clear for working. See services/subjectPaper.
+ *
+ *   Maths is rendered, not shown as its source. The setter already accepts
+ *   `$…$` and KaTeX is already a dependency; the PDF sets the same notation
+ *   with its own typesetter (services/mathDraw). The two are not
+ *   glyph-for-glyph identical, but both give a stacked fraction and a real
+ *   radical, which is the part a teacher is approving.
  */
 export default function ExamPreview({ paper, questions, declaration }: ExamPreviewProps) {
     const layout = useMemo(() => layoutFor(paper, questions, declaration), [paper, questions, declaration]);
@@ -142,7 +149,9 @@ export default function ExamPreview({ paper, questions, declaration }: ExamPrevi
                                 <li key={question.number} className="break-inside-avoid font-serif text-[11.5px]">
                                     <div className="flex items-baseline gap-2">
                                         <span className="w-5 shrink-0 font-bold">{question.number}.</span>
-                                        <p className="flex-1 whitespace-pre-wrap">{question.text}</p>
+                                        <p className="flex-1 whitespace-pre-wrap">
+                                            <LatexRenderer content={question.text} />
+                                        </p>
                                         {question.marks > 0 && (
                                             <span className="shrink-0 text-[10.5px]">
                                                 ({question.marks} mark{question.marks === 1 ? '' : 's'})
@@ -168,7 +177,9 @@ export default function ExamPreview({ paper, questions, declaration }: ExamPrevi
                                         <div key={i} className="ml-5 mt-1.5">
                                             <div className="flex items-baseline gap-2">
                                                 <span className="w-6 shrink-0">{part.label}</span>
-                                                <p className="flex-1 whitespace-pre-wrap">{part.text}</p>
+                                                <p className="flex-1 whitespace-pre-wrap">
+                                                    <LatexRenderer content={part.text} />
+                                                </p>
                                                 {part.marks > 0 && (
                                                     <span className="shrink-0 text-[10.5px]">
                                                         ({part.marks} mark{part.marks === 1 ? '' : 's'})
