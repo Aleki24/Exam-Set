@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { marksLookWrong } from '@/services/examShape';
 import { LEVEL_BY_SLUG } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
 import { requireAdmin } from '@/utils/auth/guards';
@@ -213,6 +214,18 @@ export async function POST(req: NextRequest) {
         const levelDef = body.level_slug ? LEVEL_BY_SLUG[body.level_slug] : undefined;
         const priceCents = Math.max(0, Math.round(Number(body.price_cents) || 0));
 
+        /*
+         * A total that does not fit the kind of paper this claims to be.
+         *
+         * Advisory, and returned alongside the created paper rather than
+         * refusing it — a teacher setting a ninety-mark CAT has a reason and
+         * this does not get to overrule them. But the commonest cause is the
+         * exam type left on its default while the questions were chosen for
+         * something else, and a paper mislabelled in the shop is discovered by
+         * a buyer after they have paid.
+         */
+        const marksNotice = marksLookWrong(body.exam_type ?? 'end-term', Number(body.total_marks) || 0);
+
         const row = {
             title: String(body.title).slice(0, 255),
             subject: String(body.subject).slice(0, 100),
@@ -256,7 +269,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json({ paper: toListing(data) }, { status: 201 });
+        return NextResponse.json(
+            { paper: toListing(data), ...(marksNotice ? { notice: marksNotice } : {}) },
+            { status: 201 }
+        );
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
         console.error('POST /api/papers error:', message);

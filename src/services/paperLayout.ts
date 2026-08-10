@@ -33,6 +33,7 @@ import { examTypeName } from '@/lib/catalog';
  * of mismatches came from.
  */
 import { subjectProfile, type AnswerStyle, type SubjectProfile } from './subjectPaper';
+import { examShape, type ExamShape } from './examShape';
 
 export interface PaperSource {
     title?: string | null;
@@ -162,6 +163,11 @@ export interface PaperLayout {
     profile: SubjectProfile;
     /** Shorthand for `profile.answerStyle`; the renderer reads it on every question. */
     answerStyle: AnswerStyle;
+    /**
+     * How big and how formal this kind of paper is. A CAT is not an end-of-term
+     * paper and should not be laid out as one. See `services/examShape.ts`.
+     */
+    shape: ExamShape;
     instructions: string[];
     sections: PaperSection[];
     questions: LaidOutQuestion[];
@@ -179,7 +185,8 @@ export interface PaperLayout {
 export function layoutPaper(paper: PaperSource, source: QuestionSource[]): PaperLayout {
     const profile = subjectProfile(paper.subject);
     const questions = (source ?? []).map((q, i) => layoutQuestion(q, i + 1, profile));
-    return assemble(paper, questions, splitIntoSections(questions), 'en');
+    const sections = withDefaultInstructions(splitIntoSections(questions), profile);
+    return assemble(paper, questions, sections, 'en');
 }
 
 /**
@@ -229,13 +236,16 @@ export function layoutSectionedPaper(
 
     const sections: PaperSection[] =
         laidOut.length > 1
-            ? laidOut.map((s) => ({
-                  label: s.declared.label,
-                  title: s.declared.title ?? null,
-                  instruction: s.declared.instruction ?? null,
-                  marks: sumMarks(s.questions),
-                  questions: s.questions,
-              }))
+            ? withDefaultInstructions(
+                  laidOut.map((s) => ({
+                      label: s.declared.label,
+                      title: s.declared.title ?? null,
+                      instruction: s.declared.instruction ?? null,
+                      marks: sumMarks(s.questions),
+                      questions: s.questions,
+                  })),
+                  profile
+              )
             : [
                   {
                       label: null,
@@ -288,11 +298,13 @@ function assemble(
     const totalMarks = counted > 0 ? counted : Number(paper.total_marks) || 0;
 
     const profile = subjectProfile(paper.subject);
+    const shape = examShape(paper.exam_type);
 
     return {
         identity: layoutIdentity(paper),
         profile,
         answerStyle: profile.answerStyle,
+        shape,
         instructions: buildInstructions(paper, questions, totalMarks, sections, language, profile),
         sections,
         questions,
@@ -437,6 +449,16 @@ function splitIntoSections(questions: LaidOutQuestion[]): PaperSection[] {
 
 const sumMarks = (questions: LaidOutQuestion[]) => questions.reduce((sum, q) => sum + q.marks, 0);
 
+/** Fills in a section rubric where the paper's format did not supply one. */
+function withDefaultInstructions(sections: PaperSection[], profile: SubjectProfile): PaperSection[] {
+    return sections.map((section, i) => ({
+        ...section,
+        instruction:
+            section.instruction ??
+            defaultSectionInstruction(profile, i, sections.length, section.questions.length),
+    }));
+}
+
 /**
  * Instructions to candidates.
  *
@@ -548,6 +570,43 @@ function buildExaminerRows(sections: PaperSection[], questions: LaidOutQuestion[
         });
     }
     return rows;
+}
+
+/**
+ * What a section tells the candidate, when its format did not say.
+ *
+ * A real paper's sections are not interchangeable. Mathematics Section I is
+ * answered in full and Section II offers a choice of five out of eight — that
+ * choice IS the section, and a heading with no instruction under it leaves a
+ * candidate to guess how many to attempt. Chemistry and the sciences split the
+ * same way; a two-section prose paper usually wants both answered.
+ *
+ * Only ever a default. A declared instruction always wins, because a format
+ * that bothered to say knows better than this does.
+ */
+export function defaultSectionInstruction(
+    profile: SubjectProfile,
+    index: number,
+    count: number,
+    questionCount: number
+): string | null {
+    if (count < 2) return null;
+
+    const first = index === 0;
+
+    /*
+     * The choice convention belongs to the subjects that use it. Offering "any
+     * five" on a History paper whose Section B has three questions would be a
+     * paper nobody can complete.
+     */
+    const offersChoice =
+        !first &&
+        (profile.family === 'mathematics' || profile.family === 'physical-science') &&
+        questionCount > 5;
+
+    if (offersChoice) return 'Answer ANY FIVE questions from this section.';
+    if (first) return 'Answer ALL the questions in this section.';
+    return 'Answer ALL the questions in this section.';
 }
 
 /** CBC grades are "PP1", "PP2", "Grade 1"… Forms are 8-4-4 and have no rubric. */

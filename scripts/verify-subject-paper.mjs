@@ -37,6 +37,7 @@ const { renderPaperPdf } = await jiti.import('../src/services/paperPdf.ts');
 const { layoutPaper, defaultAnswerLines } = await jiti.import('../src/services/paperLayout.ts');
 const { subjectProfile } = await jiti.import('../src/services/subjectPaper.ts');
 const { pdfSafe, needsTransliteration } = await jiti.import('../src/services/pdfText.ts');
+const { examShape, marksLookWrong } = await jiti.import('../src/services/examShape.ts');
 
 let failures = 0;
 let checks = 0;
@@ -298,6 +299,90 @@ console.log('\nThe encoding guard reaches the printed page, not just the helper'
         !contentStreams(buf).some((s) => /\(\x00/.test(s) || /\x00[A-Za-z]\x00[A-Za-z]/.test(s)),
         ''
     );
+}
+
+console.log('\nA class test is not an end-of-term paper');
+{
+    check('an end-of-term paper is full and formal',
+        [examShape('end-term').scale, examShape('end-term').formal], ['full', true]);
+    check('a mock is too', [examShape('mock').scale, examShape('mock').formal], ['full', true]);
+    check('a CAT is short and informal',
+        [examShape('cat').scale, examShape('cat').formal], ['short', false]);
+    check('so is a topical test', examShape('topical').formal, false);
+    check('an unknown type is treated as a full paper', examShape('wibble').scale, 'full');
+    check('a missing type too', examShape(null).scale, 'full');
+
+    // The teacher chooses the total; these are the ones they actually choose.
+    assert('a CAT admits 30, 40, 50 and 60 marks',
+        [30, 40, 50, 60].every((m) => marksLookWrong('cat', m) === null), '');
+    assert('and a full paper admits 100', marksLookWrong('end-term', 100) === null, '');
+
+    // Advisory, never a refusal — but it must actually notice.
+    assert('a 100-mark CAT is queried', marksLookWrong('cat', 100) !== null, '');
+    assert('a 6-mark end-of-term paper is queried', marksLookWrong('end-term', 6) !== null, '');
+    check('zero marks says nothing', marksLookWrong('cat', 0), null);
+    assert('the message names the exam type',
+        (marksLookWrong('cat', 200) || '').includes('CAT'), marksLookWrong('cat', 200) || '');
+}
+
+console.log('\nA short test spends no page on a cover');
+{
+    const base = { title: 'CLASS TEST', subject: 'Mathematics', grade_label: 'Form 2', year: 2026 };
+    const qs = [{ text: 'Question one.', marks: 3, type: 'Structured' }];
+
+    const cat = pages(renderPaperPdf({ ...base, exam_type: 'cat' }, qs));
+    const term = pages(renderPaperPdf({ ...base, exam_type: 'end-term' }, qs));
+
+    assert('a CAT starts its questions on page one', cat[0].includes('Question one'), `${cat.length} pages`);
+    assert('and carries no turn-over line', !cat[0].includes('TURN OVER FOR'), '');
+    assert('an end-of-term paper still gets its cover',
+        !term[0].includes('Question one') && term[1].includes('Question one'), `${term.length} pages`);
+    assert('so the CAT is the shorter document', cat.length < term.length, `${cat.length} vs ${term.length}`);
+}
+
+console.log('\nSections say how many to answer');
+{
+    const { layoutSectionedPaper } = await jiti.import('../src/services/paperLayout.ts');
+    const many = (n) => Array.from({ length: n }, (_, i) => ({ text: `Q${i + 1}`, marks: 5, type: 'Structured' }));
+
+    const maths = layoutSectionedPaper({ ...BASE, subject: 'Mathematics' }, [
+        { label: 'SECTION I', questions: many(8) },
+        { label: 'SECTION II', questions: many(8) },
+    ]);
+    check('maths Section I is answered in full',
+        maths.sections[0].instruction, 'Answer ALL the questions in this section.');
+    check('maths Section II offers the choice',
+        maths.sections[1].instruction, 'Answer ANY FIVE questions from this section.');
+
+    // Offering "any five" where there are three would be unanswerable.
+    const small = layoutSectionedPaper({ ...BASE, subject: 'Mathematics' }, [
+        { label: 'SECTION I', questions: many(4) },
+        { label: 'SECTION II', questions: many(3) },
+    ]);
+    check('but not when the section has fewer than five',
+        small.sections[1].instruction, 'Answer ALL the questions in this section.');
+
+    // The choice convention is not universal.
+    const history = layoutSectionedPaper({ ...BASE, subject: 'History and Government' }, [
+        { label: 'SECTION A', questions: many(8) },
+        { label: 'SECTION B', questions: many(8) },
+    ]);
+    check('a prose paper answers both sections in full',
+        history.sections[1].instruction, 'Answer ALL the questions in this section.');
+
+    // A declared instruction always wins.
+    const declared = layoutSectionedPaper({ ...BASE, subject: 'Mathematics' }, [
+        { label: 'SECTION I', instruction: 'Answer any three.', questions: many(8) },
+        { label: 'SECTION II', questions: many(8) },
+    ]);
+    check("the format's own instruction is not overwritten",
+        declared.sections[0].instruction, 'Answer any three.');
+
+    // One section is a plain run of questions and needs no rubric.
+    const single = layoutSectionedPaper({ ...BASE, subject: 'Mathematics' }, [
+        { label: 'SECTION A', questions: many(5) },
+    ]);
+    check('a single-section paper gets none', single.sections[0].instruction, null);
 }
 
 console.log(
