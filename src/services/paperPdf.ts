@@ -1130,12 +1130,19 @@ function renderPaper(layout: PaperLayout, pageCountHint: number, scale = 1, figu
     drawRubric(sheet, layout);
 
     /*
-     * Only when there is something to turn over to. A paper with no questions
-     * would otherwise end on a blank sheet — `dropTrailingBlank` would remove
-     * it, but not before the page count printed in the instructions had already
-     * counted it.
+     * A cover page is for a paper that warrants one.
+     *
+     * An end-of-term paper, a mock, a national past paper: yes — an invigilator
+     * checks the rubric and the candidate box before the paper is turned over.
+     * A CAT handed out on a Tuesday: no. Giving a thirty-mark class test its own
+     * cover sheet costs a page per pupil, forty times over, to carry nine words
+     * that would have fitted above question one.
+     *
+     * The condition on `questions` is separate and always applies: a paper with
+     * none would otherwise end on a blank sheet, and `dropTrailingBlank` would
+     * remove it only after the page count in the instructions had counted it.
      */
-    if (layout.questions.length > 0) {
+    if (layout.shape.formal && layout.questions.length > 0) {
         drawCoverFoot(sheet, layout);
         sheet.newPage();
     }
@@ -1202,11 +1209,13 @@ export function buildPaperDocument(
     let sheet = renderStable(layout, 1, figures);
 
     /*
-     * The cover is a fixed page that no amount of tightening can remove, so the
-     * test is whether the QUESTIONS spill — two pages is a cover and one page of
-     * questions, which is already as short as this paper goes.
+     * A formal paper's cover is a fixed page no amount of tightening can
+     * remove, so for those the test is whether the QUESTIONS spill — two pages
+     * is a cover plus one page of questions, already as short as it goes. A
+     * short test has no cover, so one page is its floor.
      */
-    if (sheet.doc.getNumberOfPages() > 2 && sheet.fill < 0.45) {
+    const floor = layout.shape.formal ? 2 : 1;
+    if (sheet.doc.getNumberOfPages() > floor && sheet.fill < 0.45) {
         for (const scale of [0.85, 0.7]) {
             const tighter = renderStable(layout, scale, figures);
             if (tighter.doc.getNumberOfPages() < sheet.doc.getNumberOfPages()) {
