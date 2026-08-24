@@ -70,6 +70,13 @@ export default function AdminPage() {
     const [diagnostics, setDiagnostics] = useState<DiagnosticCheck[] | null>(null);
     const [mpesaTest, setMpesaTest] = useState<{ ok: boolean; detail: string; fix?: string | null } | null>(null);
     const [testingMpesa, setTestingMpesa] = useState(false);
+    const [storageTest, setStorageTest] = useState<{
+        ok: boolean;
+        detail: string;
+        fix?: string | null;
+        cors?: { ok: boolean; detail: string; fix?: string | null } | null;
+    } | null>(null);
+    const [testingStorage, setTestingStorage] = useState(false);
     const [loading, setLoading] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -142,6 +149,27 @@ export default function AdminPage() {
             setMpesaTest({ ok: false, detail: err instanceof Error ? err.message : 'Could not reach Safaricom' });
         } finally {
             setTestingMpesa(false);
+        }
+    };
+
+    const testStorage = async () => {
+        setTestingStorage(true);
+        try {
+            const res = await fetch('/api/admin/storage/test', { method: 'POST' });
+            const data = await res.json();
+            setStorageTest({
+                ok: Boolean(data.ok),
+                detail: data.detail || data.error || 'No answer',
+                fix: data.fix,
+                cors: data.cors,
+            });
+        } catch (err) {
+            setStorageTest({
+                ok: false,
+                detail: err instanceof Error ? err.message : 'Could not reach storage',
+            });
+        } finally {
+            setTestingStorage(false);
         }
     };
 
@@ -350,6 +378,61 @@ export default function AdminPage() {
                                 </span>
                             )}
                         </p>
+                    )}
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={testStorage}
+                            disabled={testingStorage}
+                            className="btn-outline"
+                        >
+                            {testingStorage ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Test paper storage
+                        </button>
+                        <span className="meta">
+                            Writes a few bytes to the bucket, reads them back and deletes them. No paper is
+                            touched.
+                        </span>
+                    </div>
+                    {storageTest && (
+                        <div className="mt-3 space-y-1">
+                            <p
+                                className={
+                                    storageTest.ok
+                                        ? 'text-sm text-emerald-700 dark:text-emerald-400'
+                                        : 'text-sm text-accent'
+                                }
+                            >
+                                {storageTest.detail}
+                            </p>
+                            {storageTest.fix && (
+                                <p className="figure text-[11px] text-muted-foreground">{storageTest.fix}</p>
+                            )}
+                            {/*
+                             * The CORS verdict is reported separately because it fails
+                             * separately: the round trip above can pass completely while
+                             * every browser upload is still refused.
+                             */}
+                            {storageTest.cors && (
+                                <>
+                                    <p
+                                        className={
+                                            storageTest.cors.ok
+                                                ? 'text-sm text-emerald-700 dark:text-emerald-400'
+                                                : 'text-sm text-accent'
+                                        }
+                                    >
+                                        {storageTest.cors.detail}
+                                    </p>
+                                    {storageTest.cors.fix && (
+                                        <pre className="figure overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                                            {storageTest.cors.fix}
+                                        </pre>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     )}
                 </section>
 

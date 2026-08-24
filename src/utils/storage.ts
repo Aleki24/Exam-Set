@@ -261,3 +261,248 @@ export async function deleteObject(key: string): Promise<void> {
     const { error } = await supabaseStorage().remove([key]);
     if (error) throw new Error(`Delete failed: ${error.message}`);
 }
+
+// ============================================================================
+// SELF TEST
+// ============================================================================
+
+/**
+ * THE CORS TRAP, AND WHY THIS EXISTS
+ *
+ * Uploads go browser → bucket now, as a cross-origin `fetch` PUT carrying a
+ * `Content-Type: application/pdf` header. That is not a simple request, so the
+ * browser sends an OPTIONS preflight first and refuses to send the file unless
+ * the bucket answers it.
+ *
+ * Supabase Storage answers it out of the box. **An R2 bucket does not** — CORS
+ * on a new bucket is empty, and Cloudflare's own documentation is explicit that
+ * browser uploads through a presigned URL fail without a policy "even though the
+ * presigned URL itself is valid". So the four R2_* variables can all be correct,
+ * every server-side call can succeed, and admin uploads still break — with a
+ * browser-side error the server never sees and this app cannot report.
+ *
+ * Downloads are unaffected: the library hands the signed URL to `window.open`,
+ * a top-level navigation, which CORS does not govern. Uploads are the whole
+ * exposure.
+ */
+export interface CorsVerdict {
+    ok: boolean;
+    detail: string;
+    fix: string | null;
+}
+
+/** The policy a bucket needs, ready to paste. Shown whenever the check fails. */
+export function corsPolicyFor(origin: string): string {
+    return JSON.stringify(
+        [
+            {
+                AllowedOrigins: [origin],
+                AllowedMethods: ['PUT'],
+                AllowedHeaders: ['Content-Type'],
+                ExposeHeaders: ['ETag'],
+                MaxAgeSeconds: 3600,
+            },
+        ],
+        null,
+        2
+    );
+}
+
+/**
+ * What a preflight response means.
+ *
+ * Pure, and separate from the request that produces it, so `verify:storage` can
+ * cover every verdict without a bucket or a network.
+ */
+export function readCorsPreflight(
+    origin: string,
+    response: {
+        status: number;
+        allowOrigin: string | null;
+        allowMethods: string | null;
+        allowHeaders: string | null;
+    }
+): CorsVerdict {
+    const fix =
+        `Add this to the bucket's CORS policy (Cloudflare dashboard → R2 → your bucket → Settings → CORS Policy):\n` +
+        corsPolicyFor(origin);
+
+    if (!response.allowOrigin) {
+        return {
+            ok: false,
+            detail:
+                `The bucket refused a preflight from ${origin} (HTTP ${response.status}, no ` +
+                `Access-Control-Allow-Origin). Browser uploads will fail even though the server-side ` +
+                `round trip passed.`,
+            fix,
+        };
+    }
+
+    if (response.allowOrigin !== '*' && response.allowOrigin !== origin) {
+        return {
+            ok: false,
+            detail: `The bucket allows ${response.allowOrigin}, but this deployment uploads from ${origin}.`,
+            fix,
+        };
+    }
+
+    // R2 echoes these on a preflight. Absent means there is nothing to
+    // contradict the allowed origin, so it is not treated as a failure.
+    const methods = response.allowMethods?.toUpperCase();
+    if (methods && !methods.split(',').some((m) => m.trim() === 'PUT')) {
+        return {
+            ok: false,
+            detail: `${origin} is allowed, but not for PUT (the policy permits ${response.allowMethods}).`,
+            fix,
+        };
+    }
+
+    const headers = response.allowHeaders?.toLowerCase();
+    if (headers && headers !== '*' && !headers.split(',').some((h) => h.trim() === 'content-type')) {
+        return {
+            ok: false,
+            detail:
+                `PUT from ${origin} is allowed, but the Content-Type header is not — and the presigned ` +
+                `URL signs that header, so the browser has to send it.`,
+            fix,
+        };
+    }
+
+    return { ok: true, detail: `Browser uploads from ${origin} are allowed.`, fix: null };
+}
+
+/** Asks the bucket the same question the browser asks before it sends a file. */
+async function checkCors(origin: string): Promise<CorsVerdict> {
+    const endpoint = process.env.R2_ENDPOINT!.replace(/\/+$/, '');
+    const url = `${endpoint}/${process.env.R2_BUCKET_NAME!}/cors-preflight-probe`;
+
+    const res = await fetch(url, {
+        method: 'OPTIONS',
+        headers: {
+            Origin: origin,
+            'Access-Control-Request-Method': 'PUT',
+            'Access-Control-Request-Headers': 'content-type',
+        },
+    });
+
+    return readCorsPreflight(origin, {
+        status: res.status,
+        allowOrigin: res.headers.get('access-control-allow-origin'),
+        allowMethods: res.headers.get('access-control-allow-methods'),
+        allowHeaders: res.headers.get('access-control-allow-headers'),
+    });
+}
+
+export interface StorageSelfTest {
+    ok: boolean;
+    backend: StorageBackend;
+    detail: string;
+    fix: string | null;
+    /** Only meaningful on R2; null when there was nothing to ask. */
+    cors: CorsVerdict | null;
+}
+
+/**
+ * Does storage actually work, right now, with these credentials?
+ *
+ * The same shape of proof the M-Pesa test gives: the environment can only say a
+ * variable is present, not that it is correct. This writes a few bytes, reads
+ * them back, signs a link for them and deletes them — the exact four operations
+ * selling a paper depends on — and then asks the bucket whether it would accept
+ * an upload from a browser.
+ *
+ * The probe lands under `diagnostics/`, outside the `papers/` prefix the
+ * finalising step trusts, and is deleted in a `finally` so a failure halfway
+ * through does not leave litter in a bucket somebody pays for.
+ */
+export async function storageSelfTest(): Promise<StorageSelfTest> {
+    const backend = storageBackend();
+
+    if (backend === 'none') {
+        return { ok: false, backend, detail: storageUnavailableReason()!, fix: null, cors: null };
+    }
+
+    const where = backend === 'r2' ? `Cloudflare R2 (${process.env.R2_BUCKET_NAME})` : 'Supabase Storage';
+    const key = `diagnostics/storage-probe-${Date.now()}.pdf`;
+    // A real, if empty, PDF: the Supabase bucket restricts uploads to
+    // application/pdf, so a text probe would be refused by the bucket rather
+    // than by anything this test is trying to measure.
+    const probe = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
+    let wrote = false;
+
+    try {
+        await putObject(key, probe, 'application/pdf');
+        wrote = true;
+
+        const info = await objectInfo(key);
+        if (!info) {
+            return {
+                ok: false,
+                backend,
+                detail: `${where} accepted the upload but the object was not there afterwards.`,
+                fix: 'Check that the credentials point at the bucket you think they do.',
+                cors: null,
+            };
+        }
+
+        const url = await signedDownloadUrl(key, 60);
+        if (!url.startsWith('http')) {
+            return {
+                ok: false,
+                backend,
+                detail: `${where} stored the file but could not sign a download link for it.`,
+                fix: null,
+                cors: null,
+            };
+        }
+
+        const cors = backend === 'r2' ? await corsVerdict() : null;
+
+        return {
+            ok: cors ? cors.ok : true,
+            backend,
+            detail: `${where}: wrote ${info.size} bytes, read them back, signed a link and cleaned up.`,
+            fix: null,
+            cors,
+        };
+    } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return {
+            ok: false,
+            backend,
+            detail: `${where} rejected the round trip: ${message}`,
+            fix:
+                backend === 'r2'
+                    ? 'Check R2_ENDPOINT is https://<account-id>.r2.cloudflarestorage.com, that R2_BUCKET_NAME exists, and that the API token has Object Read & Write on it.'
+                    : 'Check SUPABASE_SERVICE_ROLE_KEY, and that migration 014 created the exam-papers bucket.',
+            cors: null,
+        };
+    } finally {
+        if (wrote) {
+            // Never let cleanup failure mask the result the admin asked for.
+            await deleteObject(key).catch(() => undefined);
+        }
+    }
+}
+
+/** The CORS check, or an explanation of why it could not be run. */
+async function corsVerdict(): Promise<CorsVerdict> {
+    const base = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!base) {
+        return {
+            ok: true,
+            detail: 'Browser uploads were not checked: NEXT_PUBLIC_BASE_URL is not set, so there is no origin to ask about.',
+            fix: 'Set NEXT_PUBLIC_BASE_URL to the site’s public URL and run this again.',
+        };
+    }
+
+    try {
+        return await checkCors(new URL(base).origin);
+    } catch (err) {
+        return {
+            ok: false,
+            detail: `Could not reach the bucket to check CORS: ${err instanceof Error ? err.message : 'unknown error'}`,
+            fix: null,
+        };
+    }
+}

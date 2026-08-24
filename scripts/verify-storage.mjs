@@ -64,9 +64,79 @@ for (const [name, env, expected] of cases) {
     console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name.padEnd(28)} -> ${backend} (expected ${expected})`);
 }
 
+// ============================================================================
+// CORS PREFLIGHT VERDICTS
+// ============================================================================
+//
+// The bug this guards against is silent and one-sided: an R2 bucket with no
+// CORS policy passes every server-side check and refuses every browser upload.
+// The reading of the preflight is pure, so all of it is covered here without a
+// bucket, a token or a network.
+
+Object.assign(process.env, R2);
+const storage = await jiti.import(`${root}src/utils/storage.ts`, { force: true });
+const { readCorsPreflight } = storage;
+
+const ORIGIN = 'https://skulbase.example';
+const ok200 = (extra) => ({ status: 200, allowOrigin: null, allowMethods: null, allowHeaders: null, ...extra });
+
+const corsCases = [
+    [
+        'no policy at all — the default on a new bucket',
+        ok200({ status: 403 }),
+        false,
+    ],
+    [
+        'policy for this origin, PUT and Content-Type',
+        ok200({ allowOrigin: ORIGIN, allowMethods: 'PUT', allowHeaders: 'content-type' }),
+        true,
+    ],
+    ['wildcard origin', ok200({ allowOrigin: '*', allowMethods: 'PUT', allowHeaders: 'content-type' }), true],
+    [
+        'policy for a different origin',
+        ok200({ allowOrigin: 'https://somewhere-else.example', allowMethods: 'PUT', allowHeaders: 'content-type' }),
+        false,
+    ],
+    [
+        'origin allowed but not for PUT',
+        ok200({ allowOrigin: ORIGIN, allowMethods: 'GET, HEAD', allowHeaders: 'content-type' }),
+        false,
+    ],
+    [
+        'PUT allowed but Content-Type is not — the signature requires it',
+        ok200({ allowOrigin: ORIGIN, allowMethods: 'PUT', allowHeaders: 'x-amz-meta-foo' }),
+        false,
+    ],
+    ['header wildcard', ok200({ allowOrigin: ORIGIN, allowMethods: 'PUT', allowHeaders: '*' }), true],
+    [
+        'case and spacing as a server may actually send them',
+        ok200({ allowOrigin: ORIGIN, allowMethods: 'put, get', allowHeaders: 'Content-Type, ETag' }),
+        true,
+    ],
+    [
+        // Nothing to contradict an allowed origin is not a failure — refusing
+        // here would tell an admin to fix a policy that is already correct.
+        'origin allowed, nothing echoed back',
+        ok200({ allowOrigin: ORIGIN }),
+        true,
+    ],
+];
+
+for (const [name, response, expected] of corsCases) {
+    const verdict = readCorsPreflight(ORIGIN, response);
+
+    // A failure must always carry the policy to paste, or the admin is told
+    // something is wrong and not what to do about it.
+    const fixCorrect = expected ? verdict.fix === null : /AllowedOrigins/.test(verdict.fix ?? '');
+    const passed = verdict.ok === expected && fixCorrect;
+    if (!passed) failures++;
+
+    console.log(`  ${passed ? 'ok  ' : 'FAIL'} cors: ${name.padEnd(52)} -> ${verdict.ok} (expected ${expected})`);
+}
+
 console.log(
     failures === 0
-        ? '\nStorage backend selection correct in all cases.\n'
+        ? '\nStorage backend selection and CORS verdicts correct in all cases.\n'
         : `\n${failures} case(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);
