@@ -16,6 +16,7 @@ import { useCart } from '@/lib/cart';
 import { LEVELS, examTypeName } from '@/lib/catalog';
 import { RESOURCE_KIND_BY_SLUG } from '@/lib/resources';
 import type { PaperFilters, PaperListing, PaperListResponse } from '@/types/shop';
+import { usePresence } from '@/lib/usePresence';
 
 const PAGE_SIZE = 24;
 
@@ -73,6 +74,8 @@ function Catalog() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [offset, setOffset] = useState(0);
     const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+    // 180ms is what `.drawer-out` takes; see the motion utilities in globals.css.
+    const filtersMounted = usePresence(showFiltersMobile, 180);
 
     // Debounce the search box so typing does not hammer the API.
     useEffect(() => {
@@ -383,15 +386,24 @@ function Catalog() {
                 </main>
             </div>
 
-            {/* Mobile filter sheet */}
-            {showFiltersMobile && (
+            {/* Mobile filter sheet.
+                Slides on PANEL and slides back out again: it used to be torn off
+                the screen on the frame the flag flipped, which on a phone — where
+                this drawer is the only way to filter at all — read as the page
+                having jumped rather than as a panel having closed. `usePresence`
+                holds it mounted just long enough to leave. */}
+            {filtersMounted && (
                 <div className="fixed inset-0 z-50 lg:hidden">
                     <div
-                        className="absolute inset-0 bg-foreground/40"
+                        className={`absolute inset-0 bg-foreground/40 ${showFiltersMobile ? 'scrim-in' : 'scrim-out'}`}
                         onClick={() => setShowFiltersMobile(false)}
                         aria-hidden
                     />
-                    <div className="absolute inset-y-0 right-0 flex w-[85%] max-w-sm flex-col bg-card shadow-xl">
+                    <div
+                        className={`absolute inset-y-0 right-0 flex w-[85%] max-w-sm flex-col bg-card shadow-xl ${
+                            showFiltersMobile ? 'drawer-in' : 'drawer-out'
+                        }`}
+                    >
                         <div className="flex items-center justify-between border-b border-border p-4">
                             <h2 className="font-bold">Filters</h2>
                             <button
