@@ -1,9 +1,62 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
+import { Inter_Tight, JetBrains_Mono, Lora } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/lib/roles';
+
+/*
+ * THE FACES.
+ *
+ * One family carries the interface. Syne is gone: a display face earns its
+ * keep by saying something the body face cannot, and next to dense metadata
+ * on a phone it mostly said "heading". Hierarchy here comes from size, colour
+ * and spacing instead — which is what the ten rules in the oa-design skill
+ * mean by a weight ceiling.
+ *
+ * That ceiling is structural rather than a convention nobody remembers: only
+ * 300, 400 and 500 are loaded, and `font-synthesis-weight: none` in
+ * globals.css stops the browser faking the rest. The ~279 `font-bold` and
+ * `font-semibold` classes already in the markup therefore resolve to 500
+ * instead of needing a sweep through every file — and any new one does too.
+ *
+ * Two faces survive, both because they do a job Inter Tight cannot:
+ *   JetBrains Mono — figures that must line up in a column: prices, marks,
+ *                    totals, references, and literal code.
+ *   Lora           — the printed exam papers, which should look like a real
+ *                    script rather than like the app. Print only.
+ *
+ * Served by `next/font`, so the woff2 files are self-hosted from our own
+ * origin and hashed into the build. The old <link> to fonts.googleapis.com
+ * was a render-blocking round trip to a third party before any text could
+ * paint — on the Kenyan mobile connection this product is designed for, that
+ * is the most expensive kind of dependency. Only the interface face preloads;
+ * the other two are asked for by the pages that actually use them.
+ */
+const sans = Inter_Tight({
+    subsets: ['latin'],
+    weight: ['300', '400', '500'],
+    variable: '--font-sans-face',
+    display: 'swap',
+});
+
+const mono = JetBrains_Mono({
+    subsets: ['latin'],
+    weight: ['400', '500'],
+    variable: '--font-mono-face',
+    display: 'swap',
+    preload: false,
+});
+
+const serif = Lora({
+    subsets: ['latin'],
+    weight: ['400', '500', '600', '700'],
+    style: ['normal', 'italic'],
+    variable: '--font-serif-face',
+    display: 'swap',
+    preload: false,
+});
 
 export const metadata: Metadata = {
     title: 'Skulbase Exams — CBE exam papers & marking schemes',
@@ -17,25 +70,11 @@ export default function RootLayout({
     children: React.ReactNode;
 }) {
     return (
-        <html lang="en" suppressHydrationWarning>
-            <head>
-                <link rel="preconnect" href="https://fonts.googleapis.com" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                {/*
-                 * The same three faces Skulbase uses, so the two products read as
-                 * one family:
-                 *   Syne           — display headings. Geometric and confident.
-                 *   Inter          — UI and body copy.
-                 *   JetBrains Mono — overlines, prices, references, tabular figures.
-                 * Plus one of our own:
-                 *   Lora           — the printed exam papers, which should look like
-                 *                    a real script rather than like the app.
-                 */}
-                <link
-                    href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@300..800&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400..700;1,400..700&display=swap"
-                    rel="stylesheet"
-                />
-            </head>
+        <html
+            lang="en"
+            className={`${sans.variable} ${mono.variable} ${serif.variable}`}
+            suppressHydrationWarning
+        >
             <body className="bg-background text-foreground min-h-screen">
                 <ThemeProvider
                     attribute="class"
