@@ -18,6 +18,7 @@ const jiti = createJiti(import.meta.url, {
 
 const { normaliseIngest } = await jiti.import('../src/lib/ingestQuestions.ts');
 const { mintKey, hashKey, looksLikeKey } = await jiti.import('../src/lib/ingestKeys.ts');
+const { summariseCoverage } = await jiti.import('../src/lib/ingestCoverage.ts');
 
 let failures = 0;
 let checks = 0;
@@ -147,6 +148,75 @@ console.log('\nKeys are unguessable, and never stored in the clear');
     check('and rejects junk', looksLikeKey('hunter2'), false);
     check('and rejects the prefix alone', looksLikeKey('skb_ingest_'), false);
     check('and rejects null', looksLikeKey(null), false);
+}
+
+
+// ---------------------------------------------------------------------------
+// WHERE THE GAPS ARE
+//
+// 201 of the first 253 questions landed on one subject at one level, because
+// nothing ever told the model what was already covered. Reporting coverage only
+// per subject-and-grade did not fix that: "Grade 9 Mathematics: 30 pending"
+// names no part of the syllabus to write toward. These cover the strand-level
+// answer that replaced it.
+
+console.log('\nCoverage is reported at strand level, thinnest first');
+{
+    const subjects = new Map([['s1', 'Mathematics'], ['s2', 'Social Studies']]);
+    const grades = new Map([['g9', 'Grade 9'], ['g4', 'Grade 4']]);
+
+    const rows = [
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: 'Algebra' },
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: 'Algebra' },
+        { subject_id: 's1', grade_id: 'g9', review_status: 'pending',  topic: 'Geometry' },
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: 'Measurement' },
+        { subject_id: 's2', grade_id: 'g4', review_status: 'approved', topic: 'Natural Resources' },
+    ];
+
+    const { coverage, topicsInUse } = summariseCoverage(rows, subjects, grades);
+
+    check('pairings are ranked by what is stocked', coverage.map((c) => `${c.subject} ${c.grade}`),
+        ['Mathematics Grade 9', 'Social Studies Grade 4']);
+    check('the pairing total is unchanged', [coverage[0].approved, coverage[0].pending], [3, 1]);
+
+    // The whole point: the emptiest strand is the first thing read.
+    check('thinnest strand first', coverage[0].topics.map((t) => t.topic),
+        ['Geometry', 'Measurement', 'Algebra']);
+    check('with its own counts', coverage[0].topics[0], { topic: 'Geometry', approved: 0, pending: 1 });
+
+    // Spelling: the shop filters on the literal string, so the vocabulary in use
+    // has to be published or every run coins a synonym.
+    check('every spelling in use is published', topicsInUse,
+        ['Algebra', 'Geometry', 'Measurement', 'Natural Resources']);
+}
+
+console.log('\nCoverage counting handles the awkward rows');
+{
+    const subjects = new Map([['s1', 'English']]);
+    const grades = new Map([['g9', 'Grade 9']]);
+
+    const rows = [
+        // Whitespace must not split a strand in two.
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: '  Reading  ' },
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: 'Reading' },
+        // A blank topic is not a strand called "".
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: '   ' },
+        { subject_id: 's1', grade_id: 'g9', review_status: 'approved', topic: null },
+        // Rejected stock is not stock, but it IS evidence of the spelling.
+        { subject_id: 's1', grade_id: 'g9', review_status: 'rejected', topic: 'Grammar' },
+    ];
+
+    const { coverage, topicsInUse } = summariseCoverage(rows, subjects, grades);
+    const topics = coverage[0].topics;
+
+    check('whitespace does not fork a strand', topics.find((t) => t.topic === 'Reading')?.approved, 2);
+    check('a blank topic is not a strand', topics.some((t) => !t.topic.trim()), false);
+    check('rejected counts as neither approved nor pending',
+        topics.find((t) => t.topic === 'Grammar'), { topic: 'Grammar', approved: 0, pending: 0 });
+    check('but its spelling is still published', topicsInUse.includes('Grammar'), true);
+    check('unknown ids degrade to null, not a crash',
+        summariseCoverage([{ subject_id: 'nope', grade_id: 'nope', review_status: 'approved', topic: 'X' }],
+            subjects, grades).coverage[0].subject, null);
 }
 
 console.log(

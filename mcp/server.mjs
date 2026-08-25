@@ -52,7 +52,13 @@ const QUESTION_SCHEMA = {
                 'The answer, with how the marks are split. Required — a question with no answer cannot be sold, ' +
                 'and it is what the printed marking scheme is made from.',
         },
-        topic: { type: 'string', description: 'The KICD strand, e.g. "Algebra", "Living Things".' },
+        topic: {
+            type: 'string',
+            description:
+                'The KICD strand, e.g. "Algebra", "Living Things". Reuse a spelling from `topics_in_use` in ' +
+                'list_curriculum whenever one fits — the shop filters on this exact string, so a synonym ' +
+                'silently creates a second strand nothing will match.',
+        },
         subtopic: { type: 'string' },
         subject: { type: 'string', description: 'Learning area, e.g. "Mathematics". Matched loosely against the catalogue.' },
         grade: { type: 'string', description: 'e.g. "Grade 9".' },
@@ -89,9 +95,10 @@ const TOOLS = [
     {
         name: 'list_curriculum',
         description:
-            'The subjects and grades this Skulbase instance knows about, and how many approved questions each ' +
-            'already holds. Call this before writing questions so they are tagged with names the site recognises, ' +
-            'and so you can see where the gaps are.',
+            'The subjects and grades this Skulbase instance knows about, the topics (KICD strands) already in ' +
+            'use, and how many approved questions each subject, grade and topic holds. Call this before writing ' +
+            'questions: it gives the exact subject and grade spellings the site recognises, the topic spellings ' +
+            'the shop filters on, and — per pairing, thinnest first — which strands are short. Write toward those.',
         inputSchema: { type: 'object', properties: {} },
     },
 ];

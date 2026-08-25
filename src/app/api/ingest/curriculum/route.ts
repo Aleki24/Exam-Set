@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { presentedKey, resolveKey } from '@/lib/ingestKeys';
+import { summariseCoverage } from '@/lib/ingestCoverage';
 
 /**
  * GET /api/ingest/curriculum — what to tag questions with, and where the gaps are.
@@ -36,40 +37,28 @@ export async function GET(req: NextRequest) {
         const [{ data: subjects }, { data: grades }, { data: counts }] = await Promise.all([
             admin.from('subjects').select('id, name').order('name'),
             admin.from('grades').select('id, name').order('name'),
-            admin.from('questions').select('subject_id, grade_id, review_status'),
+            admin.from('questions').select('subject_id, grade_id, review_status, topic'),
         ]);
-
-        const tally = new Map<string, { approved: number; pending: number }>();
-        for (const row of counts ?? []) {
-            const key = `${row.subject_id ?? 'none'}|${row.grade_id ?? 'none'}`;
-            const cell = tally.get(key) ?? { approved: 0, pending: 0 };
-            if (row.review_status === 'approved') cell.approved++;
-            else if (row.review_status === 'pending') cell.pending++;
-            tally.set(key, cell);
-        }
 
         const subjectName = new Map((subjects ?? []).map((s) => [s.id, s.name]));
         const gradeName = new Map((grades ?? []).map((g) => [g.id, g.name]));
 
-        const coverage = [...tally.entries()]
-            .map(([key, cell]) => {
-                const [subjectId, gradeId] = key.split('|');
-                return {
-                    subject: subjectName.get(subjectId) ?? null,
-                    grade: gradeName.get(gradeId) ?? null,
-                    approved: cell.approved,
-                    pending: cell.pending,
-                };
-            })
-            .sort((a, b) => b.approved - a.approved);
+        // Kept out of the route so `verify:ingest` can cover the counting rules
+        // without a database. See src/lib/ingestCoverage.ts for why `topic` is
+        // the strand here and `strands`/`strand_id` are not.
+        const { coverage, topicsInUse } = summariseCoverage(counts ?? [], subjectName, gradeName);
 
         return NextResponse.json({
             subjects: (subjects ?? []).map((s) => s.name),
             grades: (grades ?? []).map((g) => g.name),
+            topics_in_use: topicsInUse,
             coverage,
             note:
-                'Tag questions with these exact subject and grade names. `coverage` shows what is already held — ' +
-                'write toward the combinations with the fewest approved questions.',
+                'Tag questions with these exact subject and grade names. `coverage` shows what is already held, ' +
+                'thinnest topic first within each pairing — write toward those. For `topic`, reuse a spelling from ' +
+                '`topics_in_use` whenever one fits: the shop filters on that string, so "Algebra" and "Algebraic ' +
+                'Expressions" are two unrelated strands as far as every query is concerned. Only coin a new topic ' +
+                'when the strand genuinely is not represented yet.',
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
