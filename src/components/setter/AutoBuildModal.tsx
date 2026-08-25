@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Sparkles, X } from 'lucide-react';
 import type { PaperBlueprint } from '@/types/shop';
 import { DEFAULT_BLUEPRINT } from '@/types/shop';
 import type { Deficit, FeasibilityReport, PaperPlan } from '@/types/paperPlan';
+import { usePresence } from '@/lib/usePresence';
 
 interface AutoBuildModalProps {
     open: boolean;
@@ -48,8 +49,11 @@ export default function AutoBuildModal({
     // The official shape is the default path when there is one — a teacher
     // setting a Grade 9 paper wants the Grade 9 paper, not a mark total.
     const [useFormat, setUseFormat] = useState(true);
+    // Held mounted for the length of `.pop-out` so the dialog leaves rather
+    // than being cut. Must sit above the early return: it is a hook.
+    const mounted = usePresence(open, 160);
 
-    if (!open) return null;
+    if (!mounted) return null;
 
     const hasFormat = Boolean(plan && onBuildPlan);
     const onFormat = hasFormat && useFormat;
@@ -60,12 +64,18 @@ export default function AutoBuildModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-            <div className="absolute inset-0 bg-foreground/50" onClick={onClose} aria-hidden />
+            <div
+                className={`absolute inset-0 bg-foreground/50 ${open ? 'scrim-in' : 'scrim-out'}`}
+                onClick={onClose}
+                aria-hidden
+            />
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="autobuild-title"
-                className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-card shadow-2xl sm:rounded-2xl"
+                className={`relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-card shadow-2xl sm:rounded-2xl ${
+                    open ? 'pop-in' : 'pop-out'
+                }`}
             >
                 <div className="flex items-center justify-between border-b border-border p-4">
                     <h2 id="autobuild-title" className="title-2 flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { adminClientMissingMessage, createAdminClient } from '@/utils/supabase/admin';
 import { requireAdmin } from '@/utils/auth/guards';
 import { mintKey } from '@/lib/ingestKeys';
 
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         const admin = createAdminClient();
-        if (!admin) return NextResponse.json({ error: 'Server is not configured for this.' }, { status: 503 });
+        if (!admin) return NextResponse.json({ error: adminClientMissingMessage() }, { status: 503 });
 
         const body = await req.json().catch(() => ({}));
         const name = String(body?.name || '').trim().slice(0, 80);
@@ -78,7 +78,7 @@ export async function DELETE(req: NextRequest) {
         if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         const admin = createAdminClient();
-        if (!admin) return NextResponse.json({ error: 'Server is not configured for this.' }, { status: 503 });
+        if (!admin) return NextResponse.json({ error: adminClientMissingMessage() }, { status: 503 });
 
         const id = new URL(req.url).searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'Which key?' }, { status: 400 });

@@ -899,6 +899,7 @@ function mapRow(row: any): DBQuestion {
         answerSchema: row.answer_schema ?? undefined,
         imagePath: row.image_path ?? undefined,
         imageCaption: row.image_caption ?? undefined,
+        imageRequired: row.image_required ?? false,
         hasLatex: row.has_latex ?? false,
         graphSvg: row.graph_svg ?? undefined,
         subParts: row.sub_parts ?? undefined,

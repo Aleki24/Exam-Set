@@ -77,15 +77,33 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Resolve the taxonomy once for the whole batch rather than per question.
-        const [{ data: subjects }, { data: grades }] = await Promise.all([
+        /*
+         * Resolve the taxonomy once for the whole batch rather than per
+         * question.
+         *
+         * `curriculum_id` and `level` come along because grade names are not
+         * unique: there are two rows called "Grade 9" — one CBC, one IGCSE —
+         * and the IGCSE one has no level for the setter's filter to match.
+         * Choosing blindly between them writes a question that exists in the
+         * table and can never be found in the product.
+         */
+        const [{ data: subjects }, { data: grades }, { data: cbc }] = await Promise.all([
             admin.from('subjects').select('id, name'),
-            admin.from('grades').select('id, name'),
+            admin.from('grades').select('id, name, curriculum_id, level'),
+            admin.from('curriculums').select('id').eq('name', 'CBC').maybeSingle(),
         ]);
 
         const { rows, rejected } = normaliseIngest(raw as IngestQuestion[], {
-            subjects: subjects ?? [],
-            grades: grades ?? [],
+            subjects: (subjects ?? []).map((row) => ({ id: row.id, name: row.name })),
+            grades: (grades ?? []).map((row) => ({
+                id: row.id,
+                name: row.name,
+                curriculumId: row.curriculum_id,
+                level: row.level,
+            })),
+            // CBC unless a caller ever needs otherwise: every question in this
+            // bank is CBC, and an untagged one is invisible to the setter.
+            curriculumId: cbc?.id ?? null,
             createdBy: owner.userId,
         });
 

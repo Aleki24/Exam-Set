@@ -347,7 +347,12 @@ export default function TopNav() {
                     aria-label="Menu"
                     aria-expanded={mobileOpen}
                 >
-                    {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                    {/* The glyph turns into place on FLICK rather than being
+                        replaced between frames — the one spring fast enough to
+                        read as mechanical rather than as animation. */}
+                    <span className="flick block" style={{ transform: mobileOpen ? 'rotate(90deg)' : undefined }}>
+                        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                    </span>
                 </button>
             </div>
 
@@ -374,10 +379,22 @@ export default function TopNav() {
                 </div>
             )}
 
-            {/* Mobile sheet */}
-            {mobileOpen && (
-                <div className="border-t bg-card lg:hidden">
-                    <nav className="shell-width flex flex-col gap-1 py-3">
+            {/* Mobile sheet.
+                Stays mounted and folds on the PANEL spring, because a menu that
+                appears on one frame and is gone on the next reads as a redraw
+                rather than as a panel — and the closing half was the half
+                nobody ever saw. `inert` keeps the links out of the tab order
+                while it is folded away, which the old conditional render got
+                for free by not existing. */}
+            <div
+                className="sheet-collapse lg:hidden"
+                data-state={mobileOpen ? 'open' : 'closed'}
+            >
+                <div className="bg-card">
+                    <nav
+                        className="shell-width flex flex-col gap-1 border-t border-border py-3"
+                        inert={!mobileOpen}
+                    >
                         {/* Which account this is. The desktop bar shows initials
                             with the address in a tooltip; on a phone there was
                             nothing at all, so somebody with two accounts had no
@@ -516,7 +533,7 @@ export default function TopNav() {
                         )}
                     </nav>
                 </div>
-            )}
+            </div>
         </header>
     );
 }

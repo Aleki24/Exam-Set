@@ -49,3 +49,4 @@ mcp/node_modules/
 
 # Screenshots produced by the run-exam-set driver
 .claude/skills/run-exam-set/shots/
+.verify-sample*.pdf

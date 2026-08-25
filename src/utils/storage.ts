@@ -32,13 +32,33 @@ export type StorageBackend = 'r2' | 'supabase' | 'none';
 
 const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'exam-papers';
 
+const R2_VARS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'] as const;
+
+/** Which of the four are missing. Empty means R2 is fully configured. */
+export function r2Missing(): string[] {
+    return R2_VARS.filter((name) => !process.env[name]);
+}
+
 function r2Configured(): boolean {
-    return Boolean(
-        process.env.R2_ENDPOINT &&
-            process.env.R2_ACCESS_KEY_ID &&
-            process.env.R2_SECRET_ACCESS_KEY &&
-            process.env.R2_BUCKET_NAME
-    );
+    return r2Missing().length === 0;
+}
+
+/**
+ * Some of R2 set, but not all of it.
+ *
+ * Nobody configures three of four on purpose, so this is a typo or a deleted
+ * variable — and the consequence is the worst kind of quiet. `storageBackend`
+ * would fall through to Supabase Storage without complaining: new uploads land
+ * in one place, everything already in R2 stays in the other, and downloads
+ * start returning 404 for half the catalogue with nothing to explain it.
+ *
+ * Surfaced so the admin diagnostics can say which variable went missing,
+ * instead of reporting "Supabase Storage" as though that were a choice
+ * somebody made.
+ */
+export function r2PartiallyConfigured(): boolean {
+    const missing = r2Missing();
+    return missing.length > 0 && missing.length < R2_VARS.length;
 }
 
 function supabaseConfigured(): boolean {

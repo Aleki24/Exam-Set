@@ -8,6 +8,8 @@ import {
     type QuestionSource,
     type SectionDeclaration,
 } from '@/services/paperLayout';
+import type { AnswerStyle } from '@/services/subjectPaper';
+import LatexRenderer from '@/components/LatexRenderer';
 
 interface ExamPreviewProps {
     paper: PaperSource;
@@ -31,9 +33,21 @@ interface ExamPreviewProps {
  *   white page, which is grey on white in daylight and near-invisible once the
  *   app is in dark mode — and that faded preview was what people were printing.
  *
- *   There is no separate cover page. A Kenyan end-of-term paper starts with the
- *   masthead and gets to question 1 on the same sheet; a cover with nine words
- *   on it is a page of the class's paper budget.
+ *   The front matter is a cover page, and it is marked as one. The printed
+ *   paper puts question 1 on sheet two — that is what an invigilator expects
+ *   and it is where the candidate box, the rubric and the marker's table
+ *   belong. This is a continuous scroll rather than paginated, so the break is
+ *   drawn explicitly; a preview that hid it would have a teacher approving a
+ *   one-page paper and printing a two-page one.
+ *
+ *   Answer space is drawn the way the subject will print it — ruled for prose,
+ *   clear for working. See services/subjectPaper.
+ *
+ *   Maths is rendered, not shown as its source. The setter already accepts
+ *   `$…$` and KaTeX is already a dependency; the PDF sets the same notation
+ *   with its own typesetter (services/mathDraw). The two are not
+ *   glyph-for-glyph identical, but both give a stacked fraction and a real
+ *   radical, which is the part a teacher is approving.
  */
 export default function ExamPreview({ paper, questions, declaration }: ExamPreviewProps) {
     const layout = useMemo(() => layoutFor(paper, questions, declaration), [paper, questions, declaration]);
@@ -99,6 +113,17 @@ export default function ExamPreview({ paper, questions, declaration }: ExamPrevi
 
                 {layout.rubric && <Rubric bands={layout.rubric} />}
 
+                {/* Where the printed paper turns over. */}
+                {layout.questionCount > 0 && (
+                    <div className="my-4 flex items-center gap-3">
+                        <span className="h-px flex-1 border-t border-dashed border-black" />
+                        <span className="text-[8.5px] font-bold uppercase tracking-wide">
+                            End of cover · Page 2 begins here
+                        </span>
+                        <span className="h-px flex-1 border-t border-dashed border-black" />
+                    </div>
+                )}
+
                 {/* Questions */}
                 {layout.sections.map((section, i) => (
                     <section key={section.label ?? i} className="mt-3">
@@ -124,7 +149,9 @@ export default function ExamPreview({ paper, questions, declaration }: ExamPrevi
                                 <li key={question.number} className="break-inside-avoid font-serif text-[11.5px]">
                                     <div className="flex items-baseline gap-2">
                                         <span className="w-5 shrink-0 font-bold">{question.number}.</span>
-                                        <p className="flex-1 whitespace-pre-wrap">{question.text}</p>
+                                        <p className="flex-1 whitespace-pre-wrap">
+                                            <LatexRenderer content={question.text} />
+                                        </p>
                                         {question.marks > 0 && (
                                             <span className="shrink-0 text-[10.5px]">
                                                 ({question.marks} mark{question.marks === 1 ? '' : 's'})
@@ -150,18 +177,28 @@ export default function ExamPreview({ paper, questions, declaration }: ExamPrevi
                                         <div key={i} className="ml-5 mt-1.5">
                                             <div className="flex items-baseline gap-2">
                                                 <span className="w-6 shrink-0">{part.label}</span>
-                                                <p className="flex-1 whitespace-pre-wrap">{part.text}</p>
+                                                <p className="flex-1 whitespace-pre-wrap">
+                                                    <LatexRenderer content={part.text} />
+                                                </p>
                                                 {part.marks > 0 && (
                                                     <span className="shrink-0 text-[10.5px]">
                                                         ({part.marks} mark{part.marks === 1 ? '' : 's'})
                                                     </span>
                                                 )}
                                             </div>
-                                            <AnswerLines count={part.answerLines} indent="ml-8" />
+                                            <AnswerLines
+                                                count={part.answerLines}
+                                                indent="ml-8"
+                                                style={layout.answerStyle}
+                                            />
                                         </div>
                                     ))}
 
-                                    <AnswerLines count={question.answerLines} indent="ml-7" />
+                                    <AnswerLines
+                                        count={question.answerLines}
+                                        indent="ml-7"
+                                        style={layout.answerStyle}
+                                    />
                                 </li>
                             ))}
                         </ol>
@@ -179,12 +216,31 @@ export default function ExamPreview({ paper, questions, declaration }: ExamPrevi
 }
 
 /** Ruled writing space, at the same rhythm the PDF uses. */
-function AnswerLines({ count, indent }: { count: number; indent: string }) {
+/**
+ * Room to answer in, drawn the way the PDF will draw it.
+ *
+ * The preview exists so that what a teacher approves is what prints, and a
+ * maths paper that shows ruled lines here and clear working space in the
+ * download breaks exactly that promise. `19px` is `ANSWER_LINE_GAP` from the
+ * renderer — the same unit either way, so the two stay the same height.
+ */
+function AnswerLines({
+    count,
+    indent,
+    style,
+}: {
+    count: number;
+    indent: string;
+    style: AnswerStyle;
+}) {
     if (count <= 0) return null;
     return (
         <div className={`${indent} mt-1.5`}>
             {Array.from({ length: count }).map((_, i) => (
-                <div key={i} className="h-[19px] border-b border-black" />
+                <div
+                    key={i}
+                    className={style === 'blank' ? 'h-[19px]' : 'h-[19px] border-b border-black'}
+                />
             ))}
         </div>
     );

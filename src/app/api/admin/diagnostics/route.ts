@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
-import { storageBackend } from '@/utils/storage';
+import { r2Missing, r2PartiallyConfigured, storageBackend } from '@/utils/storage';
 import { collectionMode, getMpesaConfig } from '@/lib/mpesa';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { createAdminClient, adminClientMissing } from '@/utils/supabase/admin';
 
 /**
  * GET /api/admin/diagnostics — is this deployment configured?
@@ -49,15 +49,47 @@ export async function GET() {
 
         const checks = [
             {
+                /*
+                 * The service-role key is the quietest thing that can be
+                 * missing. Nothing on a page fails: browsing works, the setter
+                 * works, the shop renders. What breaks is every privileged
+                 * path — the M-Pesa callback that records a payment, the signed
+                 * download that delivers what was paid for, approving a
+                 * question, minting a key — and each one fails on its own with
+                 * its own message, so the shared cause is invisible.
+                 */
+                id: 'service-role',
+                label: 'Server credentials',
+                ok: adminClientMissing() === null,
+                detail:
+                    adminClientMissing() === null
+                        ? 'Configured'
+                        : `${adminClientMissing()} is not set. Payment confirmation, paid downloads, ` +
+                          'question review and ingest keys all fail without it.',
+                fix:
+                    adminClientMissing() === null
+                        ? null
+                        : 'Supabase → Project Settings → API → service_role, then add SUPABASE_SERVICE_ROLE_KEY in Vercel and redeploy.',
+            },
+            {
                 id: 'storage',
                 label: 'Paper storage',
-                ok: storage !== 'none',
-                detail:
-                    storage === 'r2'
-                        ? 'Cloudflare R2'
-                        : storage === 'supabase'
-                          ? 'Supabase Storage'
-                          : 'Not configured — uploads and paid downloads will fail',
+                /*
+                 * Half-configured R2 is a failure even though a backend is
+                 * technically available. Falling back to Supabase silently
+                 * splits the catalogue across two stores — new files in one,
+                 * old files in the other — and every download from the wrong
+                 * half 404s with nothing to explain it.
+                 */
+                ok: storage !== 'none' && !r2PartiallyConfigured(),
+                detail: r2PartiallyConfigured()
+                    ? `R2 is half configured — missing ${r2Missing().join(', ')}. ` +
+                      'Storage has fallen back to Supabase, so new uploads will not go where the existing files are.'
+                    : storage === 'r2'
+                      ? 'Cloudflare R2'
+                      : storage === 'supabase'
+                        ? 'Supabase Storage'
+                        : 'Not configured — uploads and paid downloads will fail',
                 fix: storage === 'none' ? 'Set SUPABASE_SERVICE_ROLE_KEY, or all four R2_* variables.' : null,
             },
             {

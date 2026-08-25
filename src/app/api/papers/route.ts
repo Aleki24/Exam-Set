@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { marksLookWrong } from '@/services/examShape';
 import { LEVEL_BY_SLUG } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
 import { requireAdmin } from '@/utils/auth/guards';
@@ -170,8 +171,60 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'A title and subject are required' }, { status: 400 });
         }
 
+        /*
+         * A question whose figure IS the question cannot be sold without it.
+         *
+         * "Measure angle BAC in the figure below" prints as a complete sentence
+         * and an empty space. Nothing downstream can detect that — the renderer
+         * sees text and marks and lays them out correctly — so the only place
+         * to catch it is here, at the moment the paper becomes something
+         * somebody can pay for. A buyer discovering it is a refund and a
+         * reputation, both of which cost more than this query.
+         *
+         * The check is `image_required AND image_path IS NULL`, which is
+         * exactly the partial index added in migration 043.
+         */
+        const questionIds: string[] = Array.isArray(body.question_ids) ? body.question_ids : [];
+        if (questionIds.length > 0) {
+            const { data: missing, error: figureError } = await supabase
+                .from('questions')
+                .select('id, text')
+                .in('id', questionIds)
+                .eq('image_required', true)
+                .is('image_path', null);
+
+            if (figureError) {
+                return NextResponse.json({ error: figureError.message }, { status: 500 });
+            }
+
+            if (missing && missing.length > 0) {
+                return NextResponse.json(
+                    {
+                        error:
+                            `${missing.length} of these questions need a diagram that has not been ` +
+                            'attached, so they would print unanswerable. Add the figures in the ' +
+                            'review queue, or take those questions out.',
+                        blocked: missing.map((q) => ({ id: q.id, text: String(q.text).slice(0, 120) })),
+                    },
+                    { status: 422 }
+                );
+            }
+        }
+
         const levelDef = body.level_slug ? LEVEL_BY_SLUG[body.level_slug] : undefined;
         const priceCents = Math.max(0, Math.round(Number(body.price_cents) || 0));
+
+        /*
+         * A total that does not fit the kind of paper this claims to be.
+         *
+         * Advisory, and returned alongside the created paper rather than
+         * refusing it — a teacher setting a ninety-mark CAT has a reason and
+         * this does not get to overrule them. But the commonest cause is the
+         * exam type left on its default while the questions were chosen for
+         * something else, and a paper mislabelled in the shop is discovered by
+         * a buyer after they have paid.
+         */
+        const marksNotice = marksLookWrong(body.exam_type ?? 'end-term', Number(body.total_marks) || 0);
 
         const row = {
             title: String(body.title).slice(0, 255),
@@ -216,7 +269,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json({ paper: toListing(data) }, { status: 201 });
+        return NextResponse.json(
+            { paper: toListing(data), ...(marksNotice ? { notice: marksNotice } : {}) },
+            { status: 201 }
+        );
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
         console.error('POST /api/papers error:', message);

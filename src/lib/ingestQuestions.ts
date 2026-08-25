@@ -44,25 +44,67 @@ const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 const oneOf = <T extends readonly string[]>(v: unknown, allowed: T, fallback: T[number]): T[number] =>
     (allowed as readonly string[]).includes(str(v)) ? (str(v) as T[number]) : fallback;
 
+export interface TaxonomyRow {
+    id: string;
+    name: string;
+    /** Set on grades. Two rows can share a name across curricula. */
+    curriculumId?: string | null;
+    /**
+     * Set on grades. A row with no level cannot be reached by the level filter
+     * the setter uses, so it is a worse answer than one that has it — even
+     * when both names match exactly.
+     */
+    level?: string | null;
+}
+
 export interface NormaliseContext {
-    subjects: { id: string; name: string }[];
-    grades: { id: string; name: string }[];
+    subjects: TaxonomyRow[];
+    grades: TaxonomyRow[];
+    /** The curriculum these questions belong to. Breaks name ties. */
+    curriculumId?: string | null;
     createdBy: string;
 }
 
-/** Loose match, so "Grade 9" finds "Grade 9" and "grade9" does too. */
-function findId(list: { id: string; name: string }[], wanted: string): string | null {
+const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * The taxonomy row a name means, when a name does not uniquely mean one.
+ *
+ * `grades` holds two rows called "Grade 9" — one CBC, one IGCSE — and the same
+ * for Grade 10 and Grade 11. A name-only lookup picks whichever comes back
+ * first, and picking wrong is silent: the question is written, it looks correct
+ * in the table, and it never appears in the setter because the row it landed on
+ * has no `level` for the level filter to match. That happened to the first
+ * twenty-seven questions loaded this way.
+ *
+ * So ties break on evidence, in order: the right curriculum, then a row that is
+ * actually configured, then whatever matched.
+ */
+function findId(list: TaxonomyRow[], wanted: string, curriculumId?: string | null): string | null {
     if (!wanted) return null;
-    const key = wanted.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const hit = list.find((r) => r.name.toLowerCase().replace(/[^a-z0-9]/g, '') === key);
-    if (hit) return hit.id;
-    // Then a containment match, which catches "Maths" against
-    // "Mathematics" and "Integrated Science" against the combined
-    // "Integrated Science / Health Education" the CBE rationalisation created.
-    const loose = list.find(
-        (r) => r.name.toLowerCase().includes(wanted.toLowerCase()) || wanted.toLowerCase().includes(r.name.toLowerCase())
-    );
-    return loose?.id ?? null;
+    const want = key(wanted);
+
+    let candidates = list.filter((r) => key(r.name) === want);
+
+    if (candidates.length === 0) {
+        // Containment, which catches "Maths" against "Mathematics" and
+        // "Integrated Science" against the combined "Integrated Science /
+        // Health Education" the CBE rationalisation created.
+        const lower = wanted.toLowerCase();
+        candidates = list.filter(
+            (r) => r.name.toLowerCase().includes(lower) || lower.includes(r.name.toLowerCase())
+        );
+    }
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0].id;
+
+    const sameCurriculum = candidates.filter((r) => curriculumId && r.curriculumId === curriculumId);
+    if (sameCurriculum.length === 1) return sameCurriculum[0].id;
+    if (sameCurriculum.length > 1) candidates = sameCurriculum;
+
+    // Prefer a row the filters can actually reach.
+    const configured = candidates.filter((r) => r.level);
+    return (configured[0] ?? candidates[0]).id;
 }
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -127,7 +169,11 @@ export function normaliseIngest(
             options: options.length > 0 ? options : null,
             blooms_level: oneOf(q.blooms_level, BLOOMS, 'Understanding'),
             subject_id: findId(ctx.subjects, str(q.subject)),
-            grade_id: findId(ctx.grades, str(q.grade)),
+            grade_id: findId(ctx.grades, str(q.grade), ctx.curriculumId),
+            // Written explicitly: the setter's primary query filters on it, so a
+            // question with no curriculum is invisible there no matter how well
+            // its grade and subject are tagged.
+            curriculum_id: ctx.curriculumId ?? null,
             answer_lines: Number.isFinite(Number(q.answer_lines)) ? Math.round(Number(q.answer_lines)) : null,
             is_ai_generated: true,
             created_by: ctx.createdBy,

@@ -6,7 +6,7 @@ import {
     errorDetail,
     sanitiseExtractedBatch,
 } from '@/services/questionExtraction';
-import { extractPdfText, extractWordText } from '@/services/documentText';
+import { extractPdfPageImages, extractPdfText, extractWordText } from '@/services/documentText';
 import { aiAvailable, aiJson, supportedImageType, type AiContent } from '@/services/claude';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -53,6 +53,15 @@ const MAX_OUTPUT_TOKENS = 16_000;
 
 /** Beyond this the source is truncated — see the note where it is applied. */
 const MAX_INPUT_CHARS = 100_000;
+
+/**
+ * How many pages of a scan to send.
+ *
+ * Each page is a full-resolution photograph, so this is the cost ceiling as
+ * much as the token one. Eight covers a typical Kenyan paper; a longer one is
+ * better split and uploaded in parts than silently truncated.
+ */
+const MAX_SCAN_PAGES = 8;
 
 /** See services/documentText for why the actual reading is not done here. */
 async function parsePDF(buffer: Buffer): Promise<string> {
@@ -168,7 +177,7 @@ export async function POST(request: NextRequest) {
         }
 
         let contentToProcess = text || '';
-        let image: AiContent | null = null;
+        let images: AiContent[] = [];
 
         if (file) {
             const mimeType = file.type;
@@ -187,10 +196,43 @@ export async function POST(request: NextRequest) {
                         { status: 400 }
                     );
                 }
-                image = { type: 'image', source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') } };
+                images = [{ type: 'image', source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') } }];
             } else if (mimeType === 'application/pdf') {
                 try {
                     contentToProcess = await parsePDF(buffer);
+
+                    /*
+                     * A scan has no text layer, so `parsePDF` returns nothing
+                     * and the request used to die on "no content" while the
+                     * document was perfectly legible to a person. Most Kenyan
+                     * past papers are photographs or photocopies, so this is
+                     * the common case and not the edge one.
+                     *
+                     * The provider could always read images; only a JPEG
+                     * uploaded directly could reach that path. A PDF can now
+                     * take it too, by handing over the pages it is made of.
+                     */
+                    if (contentToProcess.trim().length < 40) {
+                        const pages = await extractPdfPageImages(buffer, MAX_SCAN_PAGES);
+                        images = pages.map((page) => ({
+                            type: 'image' as const,
+                            source: {
+                                type: 'base64' as const,
+                                media_type: page.mediaType,
+                                data: page.data.toString('base64'),
+                            },
+                        }));
+                        if (images.length === 0) {
+                            return NextResponse.json(
+                                {
+                                    error: 'That PDF has no readable text and no readable page images.',
+                                    suggestion:
+                                        'It may be an unusual scan format. Export the pages as JPEG or PNG and upload one of those, or paste the text.',
+                                },
+                                { status: 400 }
+                            );
+                        }
+                    }
                 } catch (err) {
                     return NextResponse.json(
                         {
@@ -236,21 +278,32 @@ export async function POST(request: NextRequest) {
         // MAX_QUESTIONS. This is only here so a pathological upload cannot bill
         // an unbounded amount.
         let truncatedInput = false;
-        if (!image && contentToProcess.length > MAX_INPUT_CHARS) {
+        if (images.length === 0 && contentToProcess.length > MAX_INPUT_CHARS) {
             contentToProcess = contentToProcess.slice(0, MAX_INPUT_CHARS);
             truncatedInput = true;
         }
 
-        if (!image && !contentToProcess.trim()) {
+        if (images.length === 0 && !contentToProcess.trim()) {
             return NextResponse.json(
                 { error: 'Could not extract any text from the file. Please paste text directly.' },
                 { status: 400 }
             );
         }
 
-        const content: AiContent[] = image
-            ? [{ type: 'text', text: 'Extract every exam question visible in this image.' }, image]
-            : [{ type: 'text', text: `Extract every exam question from the following content:\n\n${contentToProcess}` }];
+        const content: AiContent[] =
+            images.length > 0
+                ? [
+                      {
+                          type: 'text',
+                          text:
+                              images.length === 1
+                                  ? 'Extract every exam question visible in this image.'
+                                  : `Extract every exam question visible across these ${images.length} pages of one paper. ` +
+                                    'Keep the paper\u2019s own numbering, and do not repeat a question that spans a page break.',
+                      },
+                      ...images,
+                  ]
+                : [{ type: 'text', text: `Extract every exam question from the following content:\n\n${contentToProcess}` }];
 
         const result = await aiJson<ExtractionReply>({
             system: SYSTEM_PROMPT,

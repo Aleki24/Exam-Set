@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
 import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
-import { extractPdfText } from '@/services/documentText';
-import { aiJson, aiAvailable } from '@/services/claude';
+import { extractPdfPageImages, extractPdfText } from '@/services/documentText';
+import { aiJson, aiAvailable, type AiContent } from '@/services/claude';
 import { EXAM_TYPES, LEVELS, TERMS } from '@/lib/catalog';
 import { RESOURCE_KINDS } from '@/lib/resources';
 import { hasReadableText, pairSchemes, sensibleYear, type Classified } from '@/lib/bulkClassify';
@@ -131,33 +131,55 @@ async function classifyOne(file: { key: string; filename: string }): Promise<Cla
     const base: Classified = { key: file.key, filename: file.filename, ok: false };
 
     let text: string;
+    let buffer: Buffer;
     try {
         // Read it back out of the bucket rather than adding a backend-specific
         // getter: `signedDownloadUrl` already works for both Supabase and R2.
         const url = await signedDownloadUrl(file.key, 300);
         const res = await fetch(url);
         if (!res.ok) return { ...base, error: `Could not read the file back (${res.status})` };
-        text = await extractPdfText(Buffer.from(await res.arrayBuffer()));
+        buffer = Buffer.from(await res.arrayBuffer());
+        text = await extractPdfText(buffer);
     } catch (err) {
         return { ...base, error: err instanceof Error ? err.message : 'Could not read the PDF' };
     }
 
     const trimmed = text.replace(/\s+\n/g, '\n').trim().slice(0, TEXT_BUDGET);
-    if (!hasReadableText(trimmed)) {
-        /*
-         * Almost certainly a scan with no text layer. Say so rather than send
-         * an empty page to the model and present its invention as a reading —
-         * the row is still usable, it just has to be filled in by hand.
-         */
-        return {
-            ...base,
-            error: 'No readable text — this looks like a scan. Fill this row in by hand, or OCR the file first.',
-        };
+
+    /*
+     * No text layer means a scan, and a scan is not an unreadable file — it is
+     * a photograph of a perfectly readable one. Most Kenyan past papers arrive
+     * this way, so falling back to the cover image is the common path rather
+     * than the exceptional one.
+     *
+     * Only the first page is sent: everything this asks for is printed on the
+     * cover, and a stack of fifty papers should not cost fifty full documents.
+     */
+    let content: string | AiContent[];
+    if (hasReadableText(trimmed)) {
+        content = `Filename: ${file.filename}\n\n--- FIRST PAGES ---\n${trimmed}`;
+    } else {
+        let cover;
+        try {
+            [cover] = await extractPdfPageImages(buffer, 1);
+        } catch {
+            cover = undefined;
+        }
+        if (!cover) {
+            return {
+                ...base,
+                error: 'No readable text and no readable cover image. Fill this row in by hand.',
+            };
+        }
+        content = [
+            { type: 'text', text: `Filename: ${file.filename}\n\nThis is the cover of a scanned paper. Read it.` },
+            { type: 'image', source: { type: 'base64', media_type: cover.mediaType, data: cover.data.toString('base64') } },
+        ];
     }
 
     const result = await aiJson<Omit<Classified, 'key' | 'filename' | 'ok'>>({
         system: SYSTEM,
-        content: `Filename: ${file.filename}\n\n--- FIRST PAGES ---\n${trimmed}`,
+        content,
         schema: schema as unknown as Record<string, unknown>,
         maxTokens: 700,
         effort: 'low',

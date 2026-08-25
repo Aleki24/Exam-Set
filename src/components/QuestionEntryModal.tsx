@@ -6,6 +6,7 @@ import { Question, QuestionType, Difficulty, BloomsLevel, DBCurriculum, DBGrade,
 import { getCurriculums, getGrades, getSubjects } from '@/services/questionService';
 import { Button } from '@/components/ui/button';
 import { X, Plus, Trash2 } from 'lucide-react';
+import { usePresence } from '@/lib/usePresence';
 
 interface QuestionEntryModalProps {
     isOpen: boolean;
@@ -135,27 +136,53 @@ export default function QuestionEntryModal({
             }
 
             const result = await response.json();
-            toast.success('Question saved successfully!');
+            toast.success('Question saved');
             onSave(result.questions[0]);
             onClose();
         } catch (error) {
             console.error('Failed to save question:', error);
-            toast.error('Failed to save question');
+            toast.error('The question did not save. Check the required fields and try again.');
         } finally {
             setIsSaving(false);
         }
     };
 
-    if (!isOpen) return null;
+    // Held mounted for the length of `.pop-out`, so the dialog leaves instead
+    // of being cut on the frame the flag flips.
+    const mounted = usePresence(isOpen, 160);
+
+    if (!mounted) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-600 to-indigo-600 text-white shrink-0">
-                    <h2 className="text-xl font-bold">Add New Question</h2>
-                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition">
-                        <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+                className={`absolute inset-0 bg-foreground/50 ${isOpen ? 'scrim-in' : 'scrim-out'}`}
+                onClick={onClose}
+                aria-hidden
+            />
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="question-entry-title"
+                className={`relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl ${
+                    isOpen ? 'pop-in' : 'pop-out'
+                }`}
+            >
+                {/* Header.
+                    Was a purple-to-indigo gradient, which is the one thing the
+                    palette does not have: blue is the action, amber is the money
+                    path and red is the examiner's. A third accent invented for a
+                    single dialog reads as another product's component — and the
+                    white-on-gradient bar ignored the dark theme entirely. */}
+                <div className="flex shrink-0 items-center justify-between border-b border-border p-4">
+                    <h2 id="question-entry-title" className="title-2">Add a question</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-secondary"
+                        aria-label="Close"
+                    >
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
@@ -163,13 +190,13 @@ export default function QuestionEntryModal({
                 <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-4" style={{ overflowY: 'auto' }}>
                     {/* Question Text */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Question Text *</label>
+                        <label className="label">Question text *</label>
                         <textarea
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                             rows={3}
-                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            placeholder="Enter the question text..."
+                            className="field"
+                            placeholder="Enter the question text…"
                             required
                         />
                     </div>
@@ -177,11 +204,11 @@ export default function QuestionEntryModal({
                     {/* Row: Type, Marks, Difficulty */}
                     <div className="grid grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                            <label className="label">Type</label>
                             <select
                                 value={type}
                                 onChange={(e) => setType(e.target.value as QuestionType)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                             >
                                 {QUESTION_TYPES.map(t => (
                                     <option key={t} value={t}>{t}</option>
@@ -189,21 +216,21 @@ export default function QuestionEntryModal({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Marks</label>
+                            <label className="label">Marks</label>
                             <input
                                 type="number"
                                 min={1}
                                 value={marks}
                                 onChange={(e) => setMarks(parseInt(e.target.value) || 1)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
+                            <label className="label">Difficulty</label>
                             <select
                                 value={difficulty}
                                 onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                             >
                                 {DIFFICULTIES.map(d => (
                                     <option key={d} value={d}>{d}</option>
@@ -215,10 +242,10 @@ export default function QuestionEntryModal({
                     {/* MCQ Options */}
                     {type === 'Multiple Choice' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+                            <label className="label">Options</label>
                             {options.map((opt, idx) => (
                                 <div key={idx} className="flex gap-2 mb-2">
-                                    <span className="w-6 h-9 flex items-center justify-center text-sm font-medium text-gray-500">
+                                    <span className="flex h-9 w-6 items-center justify-center text-sm font-medium text-muted-foreground">
                                         {String.fromCharCode(65 + idx)}.
                                     </span>
                                     <input
@@ -229,7 +256,7 @@ export default function QuestionEntryModal({
                                             newOpts[idx] = e.target.value;
                                             setOptions(newOpts);
                                         }}
-                                        className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="field flex-1"
                                         placeholder={`Option ${String.fromCharCode(65 + idx)}`}
                                     />
                                 </div>
@@ -241,7 +268,7 @@ export default function QuestionEntryModal({
                                     size="sm"
                                     onClick={() => setOptions([...options, ''])}
                                 >
-                                    <Plus className="w-4 h-4 mr-1" /> Add Option
+                                    <Plus className="w-4 h-4 mr-1" /> Add option
                                 </Button>
                             )}
                         </div>
@@ -250,7 +277,7 @@ export default function QuestionEntryModal({
                     {/* Matching Pairs */}
                     {type === 'Matching' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Matching Pairs</label>
+                            <label className="label">Matching pairs</label>
                             {matchingPairs.map((pair, idx) => (
                                 <div key={idx} className="flex gap-2 mb-2 items-center">
                                     <input
@@ -261,10 +288,10 @@ export default function QuestionEntryModal({
                                             newPairs[idx].left = e.target.value;
                                             setMatchingPairs(newPairs);
                                         }}
-                                        className="flex-1 p-2 border border-gray-300 rounded-lg"
+                                        className="field flex-1"
                                         placeholder="Left item"
                                     />
-                                    <span className="text-gray-400">→</span>
+                                    <span className="text-muted-foreground" aria-hidden>→</span>
                                     <input
                                         type="text"
                                         value={pair.right}
@@ -273,14 +300,14 @@ export default function QuestionEntryModal({
                                             newPairs[idx].right = e.target.value;
                                             setMatchingPairs(newPairs);
                                         }}
-                                        className="flex-1 p-2 border border-gray-300 rounded-lg"
+                                        className="field flex-1"
                                         placeholder="Right item"
                                     />
                                     {matchingPairs.length > 1 && (
                                         <button
                                             type="button"
                                             onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))}
-                                            className="p-2 text-red-500 hover:bg-red-50 rounded"
+                                            className="rounded p-2 text-destructive transition-colors hover:bg-destructive/10"
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -293,7 +320,7 @@ export default function QuestionEntryModal({
                                 size="sm"
                                 onClick={() => setMatchingPairs([...matchingPairs, { left: '', right: '' }])}
                             >
-                                <Plus className="w-4 h-4 mr-1" /> Add Pair
+                                <Plus className="w-4 h-4 mr-1" /> Add pair
                             </Button>
                         </div>
                     )}
@@ -301,40 +328,40 @@ export default function QuestionEntryModal({
                     {/* Hierarchy: Curriculum, Grade, Subject */}
                     <div className="grid grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Curriculum</label>
+                            <label className="label">Curriculum</label>
                             <select
                                 value={selectedCurriculum}
                                 onChange={(e) => setSelectedCurriculum(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                             >
-                                <option value="">Select...</option>
+                                <option value="">Select…</option>
                                 {curriculums.map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
+                            <label className="label">Grade</label>
                             <select
                                 value={selectedGrade}
                                 onChange={(e) => setSelectedGrade(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                                 disabled={!selectedCurriculum}
                             >
-                                <option value="">Select...</option>
+                                <option value="">Select…</option>
                                 {grades.map(g => (
                                     <option key={g.id} value={g.id}>{g.name}</option>
                                 ))}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                            <label className="label">Subject</label>
                             <select
                                 value={selectedSubject}
                                 onChange={(e) => setSelectedSubject(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                             >
-                                <option value="">Select...</option>
+                                <option value="">Select…</option>
                                 {subjects.map(s => (
                                     <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
@@ -345,23 +372,23 @@ export default function QuestionEntryModal({
                     {/* Topic & Subtopic */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Topic *</label>
+                            <label className="label">Topic *</label>
                             <input
                                 type="text"
                                 value={topic}
                                 onChange={(e) => setTopic(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                                 placeholder="e.g., Kinematics"
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Subtopic</label>
+                            <label className="label">Subtopic</label>
                             <input
                                 type="text"
                                 value={subtopic}
                                 onChange={(e) => setSubtopic(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="field"
                                 placeholder="e.g., Speed and Velocity"
                             />
                         </div>
@@ -369,11 +396,11 @@ export default function QuestionEntryModal({
 
                     {/* Bloom's Level */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Bloom's Level</label>
+                        <label className="label">Bloom's level</label>
                         <select
                             value={bloomsLevel}
                             onChange={(e) => setBloomsLevel(e.target.value as BloomsLevel)}
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                            className="field"
                         >
                             {BLOOMS_LEVELS.map(b => (
                                 <option key={b} value={b}>{b}</option>
@@ -383,24 +410,24 @@ export default function QuestionEntryModal({
 
                     {/* Marking Scheme */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Marking Scheme</label>
+                        <label className="label">Marking scheme</label>
                         <textarea
                             value={markingScheme}
                             onChange={(e) => setMarkingScheme(e.target.value)}
                             rows={2}
-                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                            placeholder="Enter the marking scheme or correct answer..."
+                            className="field"
+                            placeholder="Enter the marking scheme or correct answer…"
                         />
                     </div>
                 </form>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
+                <div className="flex justify-end gap-3 border-t border-border bg-secondary/40 p-4">
                     <Button variant="outline" onClick={onClose} disabled={isSaving}>
                         Cancel
                     </Button>
                     <Button onClick={handleSubmit} disabled={isSaving}>
-                        {isSaving ? 'Saving...' : 'Save Question'}
+                        {isSaving ? 'Saving…' : 'Save question'}
                     </Button>
                 </div>
             </div>

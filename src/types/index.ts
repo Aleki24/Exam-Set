@@ -91,6 +91,15 @@ export interface Question {
     // Media/Image Support
     imagePath?: string;
     imageCaption?: string;
+    /**
+     * The question cannot be answered without its figure.
+     *
+     * Distinct from simply having one. "State two uses of a transformer" reads
+     * fine with the diagram missing; "measure angle BAC in the figure below"
+     * does not, and selecting it into a paper with no figure sells somebody an
+     * unanswerable item. `POST /api/papers` refuses to publish one.
+     */
+    imageRequired?: boolean;
     // Layout & Spacing
     customSpacing?: string;
     // Tracking for duplication

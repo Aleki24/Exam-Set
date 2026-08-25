@@ -69,13 +69,54 @@
         --sidebar-border: oklch(0.923 0.013 255.508);
         --sidebar-ring: oklch(0.546 0.245 262.881);
 
-        /* Skulbase's faces, plus a book serif for the printed papers. */
-        --font-display: Syne, ui-sans-serif, system-ui, sans-serif;
-        --font-sans: Inter, system-ui, -apple-system, sans-serif;
-        --font-serif: Lora, ui-serif, serif;
-        --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+        /* One family carries the interface; see the note in layout.tsx for why
+           the display face is gone. `--font-display` survives as an alias
+           because seven components ask for it by name, and a heading asking
+           for the display face and getting the interface face is the correct
+           answer now rather than a thing to go and rewrite.
+
+           The faces themselves are self-hosted by next/font, which hands us
+           these `*-face` variables. Each keeps a real fallback stack: if a
+           woff2 has not arrived yet, `display: swap` paints in the system
+           face rather than leaving the page blank. */
+        --font-display: var(--font-sans-face), system-ui, -apple-system, sans-serif;
+        --font-sans: var(--font-sans-face), system-ui, -apple-system, sans-serif;
+        --font-serif: var(--font-serif-face), ui-serif, Georgia, serif;
+        --font-mono: var(--font-mono-face), ui-monospace, monospace;
 
         --radius: 0.625rem;
+
+        /* ------------------------------------------------------------------
+           THE SPRING VOCABULARY
+           Ported from the oa-design skill (.claude/skills/oa-design/_motion.md).
+           Seven springs cover the entire product and there is no eighth: when a
+           new component appears it borrows from this table, and that inheritance
+           is why a menu, a modal and a sheet built months apart feel like
+           siblings.
+
+           Each easing is an exact sampling of that spring's unit step response
+           (mass 1, the stated stiffness and damping), so CSS moves on the same
+           curve the framer-motion constants in `src/lib/motion.ts` describe. A
+           panel that opens in CSS and a panel that opens under framer-motion are
+           the same panel — which is the point, because the global chrome cannot
+           afford the library and the exam room already pays for it.
+
+           Values above 1 are the overshoot; it is meant to be there.
+           ------------------------------------------------------------------ */
+        --spring-panel: linear(0 0.0%, 0.0542 5.6%, 0.1777 11.1%, 0.3274 16.7%, 0.4769 22.2%, 0.6115 27.8%, 0.7246 33.3%, 0.8145 38.9%, 0.8827 44.4%, 0.9322 50.0%, 0.9663 55.6%, 0.9886 61.1%, 1.0021 66.7%, 1.0093 72.2%, 1.0125 77.8%, 1.013 83.3%, 1.012 88.9%, 1.0102 94.4%, 1 100.0%);
+        --spring-panel-ms: 279ms;   /* ζ=0.810 */
+        --spring-layout: linear(0 0.0%, 0.049 5.6%, 0.161 11.1%, 0.298 16.7%, 0.4367 22.2%, 0.5639 27.8%, 0.6733 33.3%, 0.7633 38.9%, 0.8343 44.4%, 0.8885 50.0%, 0.9285 55.6%, 0.9571 61.1%, 0.9768 66.7%, 0.9898 72.2%, 0.9979 77.8%, 1.0026 83.3%, 1.005 88.9%, 1.0058 94.4%, 1 100.0%);
+        --spring-layout-ms: 265ms;   /* ζ=0.853 */
+        --spring-pop: linear(0 0.0%, 0.0837 5.6%, 0.2699 11.1%, 0.4845 16.7%, 0.6822 22.2%, 0.8404 27.8%, 0.9525 33.3%, 1.0219 38.9%, 1.0571 44.4%, 1.068 50.0%, 1.0636 55.6%, 1.0515 61.1%, 1.0369 66.7%, 1.0232 72.2%, 1.0121 77.8%, 1.004 83.3%, 0.999 88.9%, 0.9963 94.4%, 1 100.0%);
+        --spring-pop-ms: 408ms;   /* ζ=0.650 */
+        --spring-pop-exit: linear(0 0.0%, 0.0688 5.6%, 0.2236 11.1%, 0.4068 16.7%, 0.5828 22.2%, 0.7327 27.8%, 0.8494 33.3%, 0.933 38.9%, 0.9878 44.4%, 1.0197 50.0%, 1.035 55.6%, 1.0391 61.1%, 1.0364 66.7%, 1.0304 72.2%, 1.0233 77.8%, 1.0164 83.3%, 1.0105 88.9%, 1.0059 94.4%, 1 100.0%);
+        --spring-pop-exit-ms: 379ms;   /* ζ=0.718 */
+        --spring-banner: linear(0 0.0%, 0.0631 5.6%, 0.2059 11.1%, 0.3765 16.7%, 0.5428 22.2%, 0.6877 27.8%, 0.8041 33.3%, 0.8911 38.9%, 0.952 44.4%, 0.9913 50.0%, 1.0141 55.6%, 1.0251 61.1%, 1.0284 66.7%, 1.0269 72.2%, 1.023 77.8%, 1.0182 83.3%, 1.0134 88.9%, 1.0092 94.4%, 1 100.0%);
+        --spring-banner-ms: 353ms;   /* ζ=0.750 */
+        --spring-flick: linear(0 0.0%, 0.0513 5.6%, 0.1683 11.1%, 0.3109 16.7%, 0.4544 22.2%, 0.585 27.8%, 0.6962 33.3%, 0.7863 38.9%, 0.8562 44.4%, 0.9085 50.0%, 0.946 55.6%, 0.9719 61.1%, 0.9889 66.7%, 0.9993 72.2%, 1.0052 77.8%, 1.008 83.3%, 1.0088 88.9%, 1.0084 94.4%, 1 100.0%);
+        --spring-flick-ms: 212ms;   /* ζ=0.833 */
+        --spring-chart: linear(0 0.0%, 0.0545 5.6%, 0.1785 11.1%, 0.3288 16.7%, 0.4788 22.2%, 0.6137 27.8%, 0.7269 33.3%, 0.8168 38.9%, 0.8849 44.4%, 0.9341 50.0%, 0.9679 55.6%, 0.9899 61.1%, 1.0031 66.7%, 1.0101 72.2%, 1.013 77.8%, 1.0133 83.3%, 1.0122 88.9%, 1.0103 94.4%, 1 100.0%);
+        --spring-chart-ms: 379ms;   /* ζ=0.808 */
 
         --shadow-2xs: 0px 1px 2px 0px oklch(0.208 0.042 265.755 / 0.035);
         --shadow-xs: 0px 2px 4px -1px oklch(0.208 0.042 265.755 / 0.045);
@@ -216,6 +257,11 @@
         background: var(--background);
         color: var(--foreground);
         font-family: var(--font-sans);
+        /* The weight ceiling. Only 300-500 are loaded, and this stops the
+           browser inventing the rest: without it Chrome fakes a bold by
+           smearing the 500, which looks worse than either real weight. With
+           it, every `font-bold` already in the markup lands on 500. */
+        font-synthesis-weight: none;
         font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
@@ -223,16 +269,16 @@
     }
 
     /*
-     * Headings are the design. Every h1-h4 gets the display serif with tight
-     * tracking by default, so a component never has to remember to ask.
-     * Fraunces is an optical-size face: SOFT and WONK give it warmth at large
-     * sizes without turning cartoonish.
+     * Headings are the design, and they are now the same face as everything
+     * else — tighter tracking and a bigger size are what makes them headings.
+     * (The comment that used to sit here described Fraunces, a face this
+     * project stopped using two display faces ago.)
      */
     :where(h1, h2, h3, h4) {
         font-family: var(--font-display);
         letter-spacing: -0.02em;
         line-height: 1.15;
-        font-weight: 700;
+        font-weight: 500;
     }
 
     /* Figures line up in columns everywhere: prices, marks, counts, totals. */
@@ -270,41 +316,46 @@
 
     /* ------------------------------------------------------------------------
        TYPE SCALE
-       Fixed steps only — no invented sizes. Display steps carry the serif;
-       overlines and figures carry the mono for editorial contrast.
+       Fixed steps only — no invented sizes. Every step is Inter Tight at 500
+       or below; the display steps separate themselves by size and by tracking
+       that tightens as they grow, which is what stops a 60px heading reading
+       as a wall. Figures keep the mono, because columns of numbers have to
+       line up.
        ------------------------------------------------------------------------ */
 
     :where(.display-1) {
         font-family: var(--font-display);
-        @apply text-4xl font-extrabold leading-[1.05] tracking-[-0.035em] sm:text-5xl lg:text-6xl;
+        @apply text-4xl font-medium leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-6xl;
     }
 
     :where(.display-2) {
         font-family: var(--font-display);
-        @apply text-3xl font-bold leading-[1.1] tracking-[-0.03em] sm:text-4xl;
+        @apply text-3xl font-medium leading-[1.1] tracking-[-0.035em] sm:text-4xl;
     }
 
     :where(.title-1) {
         font-family: var(--font-display);
-        @apply text-2xl font-bold leading-snug tracking-[-0.02em];
+        @apply text-2xl font-medium leading-snug tracking-[-0.025em];
     }
 
     :where(.title-2) {
         font-family: var(--font-display);
-        @apply text-lg font-bold leading-snug tracking-[-0.015em];
+        @apply text-lg font-medium leading-snug tracking-[-0.018em];
     }
 
     /* Card and list headings stay in the UI face: they sit next to dense
        metadata and need to hold up at 15px. */
     :where(.heading-ui) {
-        @apply text-base font-semibold leading-snug tracking-[-0.01em];
+        @apply text-base font-medium leading-snug tracking-[-0.012em];
     }
 
-    /* The editorial signature: mono, uppercase, widely tracked. Used for every
-       section label, eyebrow and kicker in the product. */
+    /* The editorial signature: uppercase and widely tracked. It used to be set
+       in the mono, which gave it contrast but also gave the page a third face
+       to hold; at 11px the wide tracking is what does the work, and Inter
+       Tight carries it without the mono's uneven rhythm. */
     :where(.overline) {
-        font-family: var(--font-mono);
-        @apply text-[11px] font-medium uppercase leading-none tracking-[0.14em] text-muted-foreground;
+        font-family: var(--font-sans);
+        @apply text-[11px] font-medium uppercase leading-none tracking-[0.16em] text-muted-foreground;
     }
 
     /*
@@ -336,7 +387,8 @@
         @apply text-[13.5px] leading-relaxed text-muted-foreground;
     }
 
-    /* Prices, marks, totals, references. */
+    /* Prices, marks, totals, references — the one job the mono is kept for:
+       figures that have to line up when stacked. */
     :where(.figure) {
         font-family: var(--font-mono);
         @apply font-medium tabular-nums tracking-tight;
@@ -445,30 +497,32 @@
     }
 
     :where(.badge-soft) {
-        font-family: var(--font-mono);
-        @apply inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em];
+        font-family: var(--font-sans);
+        @apply inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em];
         background: color-mix(in oklab, var(--primary) 9%, transparent);
         color: color-mix(in oklab, var(--primary) 82%, var(--foreground));
     }
 
+    /* Mono: a price sits in a column of prices. */
     :where(.badge-price) {
         font-family: var(--font-mono);
-        @apply inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold tabular-nums;
+        @apply inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium tabular-nums;
         background: color-mix(in oklab, var(--accent) 20%, transparent);
         color: color-mix(in oklab, var(--accent) 60%, var(--foreground));
     }
 
     :where(.badge-free) {
-        font-family: var(--font-mono);
-        @apply inline-flex items-center rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em];
+        font-family: var(--font-sans);
+        @apply inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.1em];
         background: color-mix(in oklab, var(--success) 15%, transparent);
         color: color-mix(in oklab, var(--success) 72%, var(--foreground));
     }
 
-    /* The marks total, set like an examiner's note in the margin. */
+    /* The marks total, set like an examiner's note in the margin. Mono, for
+       the same reason as the price: marks are read down a column. */
     :where(.badge-marks) {
         font-family: var(--font-mono);
-        @apply inline-flex items-center gap-1 text-[11px] font-bold tabular-nums;
+        @apply inline-flex items-center gap-1 text-[11px] font-medium tabular-nums;
         color: color-mix(in oklab, var(--ink-red) 78%, var(--foreground));
     }
 
@@ -579,9 +633,11 @@
         @apply py-2.5 leading-relaxed;
     }
 
+    /* Same treatment as `.overline`, and the same reasoning: it is a label, not
+       a column of figures. */
     :where(.label) {
-        font-family: var(--font-mono);
-        @apply mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground;
+        font-family: var(--font-sans);
+        @apply mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground;
     }
 
     /* ------------------------------------------------------------------------
@@ -755,6 +811,129 @@
         50% {
             opacity: 0.55;
         }
+    }
+
+    /* ------------------------------------------------------------------------
+       PANELS THAT CLOSE AS WELL AS THEY OPEN
+       Everything above opens things; none of it ever closed one, so every menu,
+       drawer and dialog on the site vanished on the frame the state flipped.
+       The oa-design rule is that nothing blinks out, it exits — and that exits
+       are quicker than entrances, so things arrive with presence and leave
+       without ceremony.
+
+       These carry no library. The chrome is on every page, including the one
+       whose whole argument is that it is HTML and nothing else on a Kenyan
+       mobile connection, and a 50 KB animation runtime in the navigation would
+       spend that argument. `src/lib/motion.ts` holds the same springs for the
+       screens that already pay for framer-motion.
+       ------------------------------------------------------------------------ */
+
+    /* A sheet that grows out of the header: the mobile nav, a disclosure, any
+       run of content that unfolds in place. `0fr → 1fr` on PANEL, so the height
+       is the content's own and nobody has to measure it. */
+    :where(.sheet-collapse) {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows var(--spring-panel-ms) var(--spring-panel);
+    }
+
+    :where(.sheet-collapse) > * {
+        overflow: hidden;
+        min-height: 0;
+    }
+
+    :where(.sheet-collapse)[data-state='open'] {
+        grid-template-rows: 1fr;
+    }
+
+    /* Dialogs: POP in, and out on a short easeOut rather than a spring — the
+       overshoot is invisible once the thing is already fading, and holding a
+       modal on screen for a full settle to watch it leave is the opposite of
+       getting out of the way. */
+    :where(.pop-in) {
+        animation: pop-in var(--spring-pop-ms) var(--spring-pop) both;
+    }
+
+    :where(.pop-out) {
+        animation: pop-out 160ms ease-out both;
+    }
+
+    @keyframes pop-in {
+        from {
+            opacity: 0;
+            transform: scale(0.96) translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @keyframes pop-out {
+        from {
+            opacity: 1;
+            transform: none;
+        }
+
+        to {
+            opacity: 0;
+            transform: scale(0.98) translateY(4px);
+        }
+    }
+
+    /* The scrim behind a dialog or drawer. Fades, never springs. */
+    :where(.scrim-in) {
+        animation: fade-in 160ms ease-out both;
+    }
+
+    :where(.scrim-out) {
+        animation: fade-out 120ms ease-out both;
+    }
+
+    @keyframes fade-out {
+        from {
+            opacity: 1;
+        }
+
+        to {
+            opacity: 0;
+        }
+    }
+
+    /* A drawer off the right edge (the filter sheet) on PANEL, both ways. */
+    :where(.drawer-in) {
+        animation: drawer-in var(--spring-panel-ms) var(--spring-panel) both;
+    }
+
+    :where(.drawer-out) {
+        animation: drawer-out 180ms ease-out both;
+    }
+
+    @keyframes drawer-in {
+        from {
+            transform: translateX(100%);
+        }
+
+        to {
+            transform: none;
+        }
+    }
+
+    @keyframes drawer-out {
+        from {
+            transform: none;
+        }
+
+        to {
+            transform: translateX(100%);
+        }
+    }
+
+    /* An icon answering a state change — a chevron turning, a glyph swapping —
+       on FLICK, the one spring fast enough to feel mechanical. */
+    :where(.flick) {
+        transition: transform var(--spring-flick-ms) var(--spring-flick);
     }
 
     /* Kept for the legacy builder chrome that still references them. */
