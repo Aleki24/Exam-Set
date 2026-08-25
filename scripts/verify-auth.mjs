@@ -277,6 +277,44 @@ section('A failed verification is an answer, not a crash');
     check('a later request is unaffected', (await getSignedInUser(later))?.id, 'u1');
 }
 
+section('An auth server that never answers does not hang the middleware');
+{
+    /*
+     * The failure this guards against is not an error — it is silence. Renewing
+     * a token is a real request, and a request that hangs has no deadline of its
+     * own, so the middleware awaited until Vercel killed the function at 25s.
+     * Because the matcher puts middleware in front of every route, that is a
+     * blank page site-wide, twice in production.
+     */
+    const hangs = {
+        auth: {
+            // Never settles. Exactly what a black-holed connection looks like.
+            getClaims: () => new Promise(() => {}),
+        },
+    };
+
+    const started = Date.now();
+    const result = await readVerifiedClaims(hangs, 150);
+    const waited = Date.now() - started;
+
+    assert('it gives up rather than waiting forever', waited < 2000, `waited ${waited}ms`);
+    check('with no claims', result.claims, null);
+    assert('and an error to explain it', Boolean(result.error), 'reported');
+
+    // The whole point: a timeout must read as "could not ask", never as "the
+    // server said no". Rejected would sign the user out for a slow network.
+    check('the timeout is not a verdict', isSessionRejected(result.error), false);
+
+    // Which is what the middleware keys its fail-open branch on.
+    const unreachable = Boolean(result.error) && !isSessionRejected(result.error);
+    assert('so the request is let through', unreachable, 'fails open');
+
+    // A healthy call must not be penalised by the deadline existing.
+    const quick = await readVerifiedClaims(fakeClient(), 5000);
+    check('a fast answer still succeeds', quick.claims?.sub, 'u1');
+    check('with no error', quick.error, null);
+}
+
 section('Signed out is a clean refusal, not a crash');
 {
     const nobody = fakeClient({ user: null });

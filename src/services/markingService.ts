@@ -298,7 +298,7 @@ export interface ScoredPaper {
  */
 export function scorePaper(marks: Mark[]): ScoredPaper {
     let score = 0;
-    let maxScore = 0;
+    const maxScore = 0;
     let markedCount = 0;
     let unmarkedCount = 0;
 

@@ -388,6 +388,55 @@ minting a 15-minute signed URL. With neither backend configured those routes
 return 503 with a message naming the variables to set — the rest of the site
 (shop, setter, sign-up, admin) works normally.
 
+### Switching to R2
+
+No code changes. Four variables, and one policy that is easy to miss.
+
+1. **Bucket.** Create one in Cloudflare → R2, or use an existing one. Its name is
+   `R2_BUCKET_NAME`. Leave it private; nothing here serves a paper from a public
+   URL.
+2. **Token.** R2 → API → *Create API Token*, with **Object Read & Write** scoped
+   to that bucket. It returns an Access Key ID and a Secret Access Key —
+   `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. The secret is shown once. This
+   step cannot be done from an API or an MCP connector; it is dashboard-only.
+3. **Endpoint.** `R2_ENDPOINT` is `https://<account-id>.r2.cloudflarestorage.com`
+   — the account ID, not the bucket. The bucket name belongs in
+   `R2_BUCKET_NAME` and nowhere else.
+4. **CORS — the one that bites.** Uploads go browser → bucket directly, as a
+   cross-origin `PUT` carrying a `Content-Type` header, so the browser sends a
+   preflight first. Supabase Storage answers it; **a new R2 bucket does not** —
+   its CORS policy is empty by default. Every server-side call will succeed and
+   every admin upload will still fail, in the browser, where this app cannot see
+   it. In R2 → your bucket → Settings → CORS Policy:
+
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://your-site"],
+       "AllowedMethods": ["PUT"],
+       "AllowedHeaders": ["Content-Type"],
+       "ExposeHeaders": ["ETag"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+   Downloads need nothing: the library opens the signed URL with `window.open`,
+   a navigation, which CORS does not govern.
+
+Then set the four variables, redeploy, and press **Test paper storage** in
+`/admin`. It writes a few bytes to the live bucket, reads them back, signs a link
+and deletes them, then asks the bucket the same preflight question a browser
+would — and prints the exact policy to paste if the answer is no. Getting a green
+line there is the proof; anything less and the first person to find out is a
+seller losing a twenty-page scan.
+
+Two things do **not** follow the switch. Question figures live in their own
+Supabase bucket (migration `042`), so they stay put. And the 25 MB upload ceiling
+is enforced by the Supabase bucket itself as well as by
+`/api/papers/upload/sign`; on R2 only the route enforces it, because R2 has no
+equivalent server-side limit.
+
 ## The exam-setting logic
 
 The selection rules live in `src/services/paperBuilder.ts`, split so they can be
@@ -415,7 +464,10 @@ npm run verify:storage  # storage backend selection
 restrictions, duplicate avoidance, sub-part arithmetic and graceful degradation
 against a synthetic bank. `verify:storage` covers which backend is chosen from
 the environment, including a partial R2 config, which must fall back to Supabase
-rather than fail at runtime. Neither needs a database.
+rather than fail at runtime, and every reading of a CORS preflight — no policy,
+a policy for the wrong origin, one that omits `PUT`, one that omits
+`Content-Type` — each of which breaks browser uploads while leaving every
+server-side call working. Neither needs a database.
 
 ## Adding a new exam type or level
 

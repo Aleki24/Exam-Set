@@ -17,7 +17,7 @@ interface LatexRendererProps {
 const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }) => {
     const renderLatex = (text: string): React.ReactNode[] => {
         const parts: React.ReactNode[] = [];
-        let remaining = text;
+        const remaining = text;
         let key = 0;
 
         // Pattern to match both block ($$...$$) and inline ($...$) LaTeX

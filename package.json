@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build && node scripts/verify-deployment-tracing.mjs --soft-missing",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "verify:builder": "node scripts/verify-paper-builder.mjs",
     "verify:storage": "node scripts/verify-storage.mjs",
     "verify": "npm run verify:builder && npm run verify:mpesa && npm run verify:storage && npm run verify:query && npm run verify:sets && npm run verify:whatsapp && npm run verify:extract && npm run verify:claude && npm run verify:documenttext && npm run verify:pdf && npm run verify:delete && npm run verify:auth && npm run verify:progress && npm run verify:discovery && npm run verify:calendar && npm run verify:marking && npm run verify:schemes && npm run verify:cba && npm run verify:curriculum && npm run verify:bulk && npm run verify:ingest && npm run verify:figures && npm run verify:subject && npm run verify:math",
@@ -81,12 +81,14 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@types/node": "^22.14.0",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.23",
     "eslint": "^9.39.2",
+    "eslint-config-next": "^15.5.23",
     "jiti": "^2.6.1",
     "jszip": "^3.10.1",
     "postcss": "^8.5.6",
