@@ -40,15 +40,62 @@ export interface ClaimsResult {
     error: unknown;
 }
 
+/**
+ * How long to wait for the auth server before giving up on it.
+ *
+ * `getClaims` is usually local, but renewing an expired token is a real request
+ * — and a request that hangs rather than fails has no deadline of its own. This
+ * ran without one, and production logs show the consequence: two requests held
+ * until Vercel killed the function with "did not return an initial response
+ * within 25s". A middleware timeout is a blank page on every route, because the
+ * matcher puts this in front of all of them.
+ *
+ * Five seconds is far longer than a healthy renewal and far short of the
+ * platform's ceiling, so the fail-open path below gets to run instead.
+ */
+const CLAIMS_TIMEOUT_MS = 5000;
+
+/** Marker for "nobody answered in time" — deliberately shaped as a non-verdict. */
+class ClaimsTimeoutError extends Error {
+    /*
+     * No `status` and no `code`, so `isSessionRejected` falls through to its
+     * status rule, reads the absent status as 0, and returns false. A timeout
+     * must never be mistaken for the server rejecting the session: that would
+     * turn a slow network into a sign-out.
+     */
+    constructor(ms: number) {
+        super(`Timed out after ${ms}ms waiting to verify the session`);
+        this.name = 'ClaimsTimeoutError';
+    }
+}
+
 /** Verifies the request's access token and returns its claims. Never throws. */
-export async function readVerifiedClaims(supabase: SupabaseClient): Promise<ClaimsResult> {
+export async function readVerifiedClaims(
+    supabase: SupabaseClient,
+    timeoutMs: number = CLAIMS_TIMEOUT_MS
+): Promise<ClaimsResult> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     try {
-        const { data, error } = await supabase.auth.getClaims();
+        const verdict = supabase.auth.getClaims();
+
+        // The losing promise is not cancellable, so swallow its eventual result
+        // rather than leaving an unhandled rejection behind on a slow answer.
+        void Promise.resolve(verdict).catch(() => undefined);
+
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new ClaimsTimeoutError(timeoutMs)), timeoutMs);
+        });
+
+        const { data, error } = await Promise.race([verdict, timeout]);
         return { claims: (data?.claims as VerifiedClaims) ?? null, error: error ?? null };
     } catch (thrown) {
-        // A local verdict: the token is expired, malformed or unsigned. There is
-        // no session here, and no retry will produce one.
+        // Either a local verdict — the token is expired, malformed or unsigned,
+        // and no retry will produce one — or the timeout above. They are returned
+        // the same way and told apart by `isSessionRejected`.
         return { claims: null, error: thrown };
+    } finally {
+        clearTimeout(timer);
     }
 }
 

@@ -161,9 +161,14 @@ Useful only if you can reach the port from a browser. **`next dev` deletes
   compiles on first request; a full `flow` run against dev blew a 400-second
   budget. Against `next start` the same run takes 20s.
 
-- **`npm run lint` is broken** and has been for some time — `Failed to load
-  config "next/core-web-vitals" to extend from`. It fails on a clean checkout
-  too, so it is not your change. Use `npx tsc --noEmit` for type safety.
+- **`npm run lint` reports 123 warnings and exits 0. That is the intended
+  baseline, not a fault.** Linting was broken for months (`eslint-config-next`
+  was never installed, so `next lint` died before reading a file). Turning it
+  back on surfaced 123 pieces of accumulated style debt — 59 `no-explicit-any`,
+  37 unused vars, 9 unescaped entities. Those four rules are set to `warn` in
+  `eslint.config.mjs` so the backlog stays visible without failing the build;
+  every other rule keeps its default severity, so a genuinely new violation is
+  still an error. **If lint exits non-zero, your change introduced it.**
 
 - **Shop pages paint skeletons first.** They server-render `.skeleton`
   placeholders and fetch rows client-side, so `networkidle` alone can capture a
