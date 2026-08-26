@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getActor } from '@/utils/auth/guards';
+import { requireActor } from '@/utils/auth/guards';
 import { deletePaper } from '@/services/paperDeletion';
 import { toListing } from '@/lib/paperMapper';
 
@@ -124,8 +124,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         const { id } = await params;
         const supabase = await createClient();
 
-        const actor = await getActor(supabase);
-        if (!actor) return NextResponse.json({ error: 'Sign in to continue' }, { status: 401 });
+        const { actor, failure } = await requireActor(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
 
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         if (!isUuid) {

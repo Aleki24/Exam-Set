@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { requireUser } from '@/utils/auth/guards';
 import { toListing } from '@/lib/paperMapper';
 
 /**
@@ -9,9 +10,15 @@ import { toListing } from '@/lib/paperMapper';
 export async function GET() {
     try {
         const supabase = await createClient();
-        const { data: auth } = await supabase.auth.getUser();
-        if (!auth?.user) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
-        const userId = auth.user.id;
+
+        // Through the guard rather than its own `getUser`: this is the one call
+        // whose 401 sends the browser to the sign-in page, so it above all must
+        // not answer 401 when what actually happened is that the session could
+        // not be checked. That is a signed-in user bounced out of their own
+        // library by a slow request.
+        const { user, failure } = await requireUser(supabase);
+        if (failure) return NextResponse.json({ error: failure.error }, { status: failure.status });
+        const userId = user.id;
 
         const [{ data: entitlements }, { data: mySets }, { data: orders }] = await Promise.all([
             supabase

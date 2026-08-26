@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { reportRequestFailure } from '@/lib/apiErrors';
 import {
     AlertTriangle,
     BadgeCheck,
@@ -83,8 +84,8 @@ export default function AdminPage() {
     const loadPayments = useCallback(async () => {
         const res = await fetch('/api/admin/orders?status=awaiting_confirmation');
         const data = await res.json();
-        if (data.error) {
-            toast.error(data.error);
+        if (!res.ok || data.error) {
+            reportRequestFailure(res, data, 'Could not load payments');
             return;
         }
         setOrders(data.orders || []);
@@ -94,8 +95,8 @@ export default function AdminPage() {
     const loadCatalog = useCallback(async () => {
         const res = await fetch('/api/admin/papers');
         const data = await res.json();
-        if (data.error) {
-            toast.error(data.error);
+        if (!res.ok || data.error) {
+            reportRequestFailure(res, data, 'Could not load the catalog');
             return;
         }
         setPapers(data.papers || []);
@@ -110,8 +111,8 @@ export default function AdminPage() {
     const loadTeam = useCallback(async () => {
         const res = await fetch('/api/admin/team');
         const data = await res.json();
-        if (data.error) {
-            toast.error(data.error);
+        if (!res.ok || data.error) {
+            reportRequestFailure(res, data, 'Could not load the team');
             return;
         }
         setTeam(data.team || []);
@@ -185,7 +186,7 @@ export default function AdminPage() {
             });
             const data = await res.json();
             if (!res.ok) {
-                toast.error(data.error || 'Could not update the order');
+                reportRequestFailure(res, data, 'Could not update the order');
                 return;
             }
             toast.success(data.message);
@@ -205,7 +206,7 @@ export default function AdminPage() {
             });
             const data = await res.json();
             if (!res.ok) {
-                toast.error(data.error || 'Could not update the paper');
+                reportRequestFailure(res, data, 'Could not update the paper');
                 return;
             }
             setPapers((current) =>
@@ -229,7 +230,7 @@ export default function AdminPage() {
             });
             const data = await res.json();
             if (!res.ok) {
-                toast.error(data.error || 'Could not update the price');
+                reportRequestFailure(res, data, 'Could not update the price');
                 return;
             }
             setPapers((current) => current.map((p) => (p.id === paper.id ? { ...p, price_cents: cents } : p)));
@@ -245,7 +246,7 @@ export default function AdminPage() {
             const res = await fetch(`/api/admin/papers?id=${paper.id}`, { method: 'DELETE' });
             const data = await res.json();
             if (!res.ok) {
-                toast.error(data.error || 'Could not delete the paper');
+                reportRequestFailure(res, data, 'Could not delete the paper');
                 return;
             }
             setPapers((current) => current.filter((p) => p.id !== paper.id));
@@ -773,7 +774,7 @@ function TeamPanel({
             });
             const data = await res.json();
             if (!res.ok) {
-                toast.error(data.error || 'Could not update the role');
+                reportRequestFailure(res, data, 'Could not update the role');
                 return;
             }
             toast.success(data.message);
