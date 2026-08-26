@@ -19,6 +19,7 @@ const jiti = createJiti(import.meta.url, {
 const { normaliseIngest } = await jiti.import('../src/lib/ingestQuestions.ts');
 const { mintKey, hashKey, looksLikeKey } = await jiti.import('../src/lib/ingestKeys.ts');
 const { summariseCoverage } = await jiti.import('../src/lib/ingestCoverage.ts');
+const { stripHtml } = await jiti.import('../src/lib/ingestQuestions.ts');
 
 let failures = 0;
 let checks = 0;
@@ -246,6 +247,64 @@ console.log('\nCoverage counting handles the awkward rows');
     check('unknown ids degrade to null, not a crash',
         summariseCoverage([{ subject_id: 'nope', grade_id: 'nope', review_status: 'approved', topic: 'X' }],
             subjects, grades).coverage[0].subject, null);
+}
+
+
+// ---------------------------------------------------------------------------
+// MARKUP MUST NOT REACH THE BANK
+//
+// 101 questions arrived carrying a rich-text editor's own output, e.g.
+// <ol><li><p>Convert the following masses.</p></li></ol><p>a)0.245 kg</p>.
+// The reviewer was shown the tags verbatim; the paper renderer, which injects
+// question text with dangerouslySetInnerHTML, rendered them instead. Stripping
+// on the way in closes both, and keeps contributor text away from an HTML sink.
+
+console.log('\nHTML is stripped out of submitted text');
+{
+    check('the real case from the bank',
+        stripHtml('<ol><li><p>Convert the following masses in to weight.</p></li></ol><p>a)0.245 kg</p><p></p>'),
+        'Convert the following masses in to weight.\na)0.245 kg');
+
+    // Sub-parts were separate list items; they must not run together.
+    check('block closers become line breaks',
+        stripHtml('<p>Part a</p><p>Part b</p>'), 'Part a\nPart b');
+    check('a br is a line break too', stripHtml('one<br>two'), 'one\ntwo');
+
+    // Empty <p></p> spacers left behind by the editor.
+    check('runs of blank lines collapse',
+        stripHtml('<p>Q</p><p></p><p></p><p></p><p>a)</p>'), 'Q\na)');
+
+    check('entities are decoded', stripHtml('Salt &amp; sand &lt;test&gt;'), 'Salt & sand <test>');
+    check('plain text is untouched', stripHtml('What is 5 + 3?'), 'What is 5 + 3?');
+
+    // Maths must survive: "3x < 5" is not a tag, and neither is "a <= b".
+    check('a less-than in maths is not a tag', stripHtml('Solve 3x < 5'), 'Solve 3x < 5');
+    check('and neither is an inequality', stripHtml('Show that a <= b'), 'Show that a <= b');
+
+    // The sink this is protecting.
+    check('a script tag does not survive',
+        stripHtml('<script>alert(1)</script>Answer'), 'alert(1)Answer');
+    check('nor an event handler on a tag',
+        stripHtml('<img src=x onerror="alert(1)">Diagram'), 'Diagram');
+}
+
+// A stripped question is still measured on what is left of it.
+console.log('\nStripping happens before the question is judged');
+{
+    const ctx = { subjects: [{ id: 's1', name: 'Mathematics' }], grades: [{ id: 'g1', name: 'Grade 9' }] };
+    const { rows, rejected } = normaliseIngest(
+        [
+            // 14 characters of markup, no question at all.
+            { text: '<p></p><p></p>', marks: 2, marking_scheme: 'x', topic: 'Algebra', subject: 'Mathematics', grade: 'Grade 9' },
+            { text: '<p>What is the value of 4 + 5?</p>', marks: 1, marking_scheme: '<p>9 &nbsp;(accept nine)</p>', topic: 'Numbers', subject: 'Mathematics', grade: 'Grade 9' },
+        ],
+        ctx
+    );
+    check('markup alone is rejected, not padded to length', rejected.length, 1);
+    check('and the reason names the text', /text is missing or too short/.test(rejected[0]?.reason ?? ''), true);
+    check('the real question survives', rows.length, 1);
+    check('with its tags gone', rows[0]?.text, 'What is the value of 4 + 5?');
+    check('and the scheme cleaned too', rows[0]?.marking_scheme, '9  (accept nine)');
 }
 
 console.log(
