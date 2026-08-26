@@ -43,6 +43,14 @@ interface Q {
     image_required: boolean;
 }
 
+interface Facets {
+    subjects: { id: string; name: string; count: number }[];
+    grades: { id: string; name: string; count: number }[];
+    topics: { name: string; count: number }[];
+    missingScheme: number;
+    statusTotal: number;
+}
+
 export default function ReviewPage() {
     const { isAdmin, ready } = useRole();
 
@@ -54,21 +62,54 @@ export default function ReviewPage() {
     const [busy, setBusy] = useState(false);
     const [editing, setEditing] = useState<string | null>(null);
 
+    // Narrowing the queue. A reviewer works one subject at a time; the whole
+    // queue in one list is why a queue this size stops getting worked.
+    const [subject, setSubject] = useState('');
+    const [grade, setGrade] = useState('');
+    const [topic, setTopic] = useState('');
+    const [search, setSearch] = useState('');
+    const [onlyMissingScheme, setOnlyMissingScheme] = useState(false);
+    const [facets, setFacets] = useState<Facets | null>(null);
+
+    // Typing in the search box must not fire a request per keystroke.
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search), 350);
+        return () => clearTimeout(t);
+    }, [search]);
+
     const load = useCallback(async () => {
         setLoading(true);
         setSelected(new Set());
         try {
-            const res = await fetch(`/api/admin/questions/review?status=${status}`);
+            const params = new URLSearchParams({ status });
+            if (subject) params.set('subject', subject);
+            if (grade) params.set('grade', grade);
+            if (topic) params.set('topic', topic);
+            if (debouncedSearch) params.set('q', debouncedSearch);
+            if (onlyMissingScheme) params.set('missing_scheme', '1');
+
+            const res = await fetch(`/api/admin/questions/review?${params}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not load the queue');
             setQuestions(data.questions || []);
             setTotal(data.total || 0);
+            setFacets(data.facets ?? null);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Could not load the queue');
         } finally {
             setLoading(false);
         }
-    }, [status]);
+    }, [status, subject, grade, topic, debouncedSearch, onlyMissingScheme]);
+
+    const clearFilters = () => {
+        setSubject('');
+        setGrade('');
+        setTopic('');
+        setSearch('');
+        setOnlyMissingScheme(false);
+    };
+    const filtered = Boolean(subject || grade || topic || search || onlyMissingScheme);
 
     useEffect(() => {
         if (isAdmin) void load();
@@ -188,6 +229,95 @@ export default function ReviewPage() {
                         {status === s && <span className="figure ml-1 text-[11px]">{total}</span>}
                     </button>
                 ))}
+            </div>
+
+            {/*
+              * Filters. Every option carries its own count and the list is built
+              * from what is actually in this queue, so nothing offered here can
+              * return an empty screen.
+              */}
+            <div className="surface mt-4 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <label className="sr-only" htmlFor="review-search">Search the queue</label>
+                    <input
+                        id="review-search"
+                        type="search"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search question text or topic…"
+                        className="input min-w-[13rem] flex-1"
+                    />
+
+                    <label className="sr-only" htmlFor="review-subject">Learning area</label>
+                    <select
+                        id="review-subject"
+                        value={subject}
+                        onChange={(e) => { setSubject(e.target.value); setTopic(''); }}
+                        className="input w-auto"
+                    >
+                        <option value="">All learning areas</option>
+                        {(facets?.subjects ?? []).map((s) => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.count})</option>
+                        ))}
+                    </select>
+
+                    <label className="sr-only" htmlFor="review-grade">Grade</label>
+                    <select
+                        id="review-grade"
+                        value={grade}
+                        onChange={(e) => setGrade(e.target.value)}
+                        className="input w-auto"
+                    >
+                        <option value="">All grades</option>
+                        {(facets?.grades ?? []).map((g) => (
+                            <option key={g.id} value={g.id}>{g.name} ({g.count})</option>
+                        ))}
+                    </select>
+
+                    <label className="sr-only" htmlFor="review-topic">Strand</label>
+                    <select
+                        id="review-topic"
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        className="input w-auto max-w-[16rem]"
+                    >
+                        <option value="">All strands</option>
+                        {(facets?.topics ?? []).map((t) => (
+                            <option key={t.name} value={t.name}>{t.name} ({t.count})</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap items-center gap-3">
+                    {/*
+                      * The 203-question backlog, findable at last. These are the
+                      * cheapest stock in the bank — already written, blocked on
+                      * one field — and until now there was no way to select them.
+                      */}
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={onlyMissingScheme}
+                            onChange={(e) => setOnlyMissingScheme(e.target.checked)}
+                        />
+                        Needs a marking scheme
+                        {facets ? <span className="figure text-[11px] text-muted-foreground">{facets.missingScheme}</span> : null}
+                    </label>
+
+                    <span className="meta">
+                        {loading
+                            ? 'Loading…'
+                            : filtered
+                              ? `${total} of ${facets?.statusTotal ?? total} ${status}`
+                              : `${total} ${status}`}
+                    </span>
+
+                    {filtered && (
+                        <button type="button" onClick={clearFilters} className="btn-ghost btn-sm">
+                            Clear filters
+                        </button>
+                    )}
+                </div>
             </div>
 
             {selected.size > 0 && (

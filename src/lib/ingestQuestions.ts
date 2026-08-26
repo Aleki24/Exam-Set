@@ -41,6 +41,37 @@ const BLOOMS = [
 ] as const;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+
+/**
+ * HTML DOES NOT BELONG IN A QUESTION.
+ *
+ * 101 questions reached the bank carrying markup — `<ol><li><p>Convert the
+ * following masses…</p></li></ol>` — because a rich-text editor wrote its own
+ * output straight into a plain-text column. Two things then went wrong at once.
+ * The review screen prints the text as-is, so a reviewer was asked to approve
+ * tag soup; and the paper renderer passes question text through
+ * `LatexRenderer`, which injects with `dangerouslySetInnerHTML`, so the same
+ * markup rendered silently onto the printed paper instead.
+ *
+ * That second path is the reason this strips rather than escapes: text arriving
+ * from a contributor should never be able to reach an HTML sink at all.
+ *
+ * Block-level closers become newlines first, so a question whose parts were
+ * separate list items does not collapse into one run-on line.
+ */
+export function stripHtml(value: string): string {
+    return value
+        .replace(/<\/(p|li|div|h[1-6]|tr)>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/\n{2,}/g, '\n')
+        .trim();
+}
 const oneOf = <T extends readonly string[]>(v: unknown, allowed: T, fallback: T[number]): T[number] =>
     (allowed as readonly string[]).includes(str(v)) ? (str(v) as T[number]) : fallback;
 
@@ -117,8 +148,10 @@ export function normaliseIngest(
     const seen = new Set<string>();
 
     input.forEach((q, index) => {
-        const text = str(q.text);
-        const scheme = str(q.marking_scheme);
+        // Stripped before the length check, so markup cannot pad a question up
+        // to the minimum: `<p></p><p></p>` is 14 characters and no question.
+        const text = stripHtml(str(q.text));
+        const scheme = stripHtml(str(q.marking_scheme));
         const marks = Number(q.marks);
 
         if (text.length < 10) {

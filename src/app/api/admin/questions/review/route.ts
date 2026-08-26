@@ -24,16 +24,53 @@ export async function GET(req: NextRequest) {
         const status = params.get('status') || 'pending';
         const offset = Math.max(0, Number(params.get('offset')) || 0);
 
+        /*
+         * NARROWING THE QUEUE
+         *
+         * Status alone stopped being a filter once the queue passed a few dozen.
+         * A reviewer is one person with one subject in their head: a maths
+         * teacher clearing maths is fast and accurate, and the same person
+         * bounced between Kiswahili poetry and circle theorems is neither. With
+         * 382 questions and one dropdown, the only workable strategy was to
+         * start at the top and keep going, which is why a queue like this
+         * quietly stops being worked at all.
+         *
+         * `missing_scheme` is here for the specific backlog it names: 203
+         * questions blocked on one field. Nothing could be selected on that
+         * basis before, so the cheapest stock in the bank was also the hardest
+         * to find.
+         */
+        const subjectId = params.get('subject') || '';
+        const gradeId = params.get('grade') || '';
+        const topic = (params.get('topic') || '').trim();
+        const search = (params.get('q') || '').trim();
+        const missingScheme = params.get('missing_scheme') === '1';
+
         // Admins read through their own session, not the service role: the policy
         // added in 041 already lets staff see every row, so borrowing a key that
         // bypasses row level security would buy nothing and lose the audit trail.
-        const { data, error, count } = await supabase
+        let query = supabase
             .from('questions')
             .select(
                 'id, text, marks, marking_scheme, topic, subtopic, type, difficulty, options, is_ai_generated, created_at, review_status, subject_id, grade_id, image_path, image_caption, image_required',
                 { count: 'exact' }
             )
-            .eq('review_status', status)
+            .eq('review_status', status);
+
+        if (subjectId) query = query.eq('subject_id', subjectId);
+        if (gradeId) query = query.eq('grade_id', gradeId);
+        if (topic) query = query.eq('topic', topic);
+        // `is` rather than `eq`, and both cases: a scheme that was saved as an
+        // empty string is just as unapprovable as one that was never written.
+        if (missingScheme) query = query.or('marking_scheme.is.null,marking_scheme.eq.');
+        if (search) {
+            // Escaped so a comma or parenthesis in the search box cannot break
+            // out of PostgREST's filter syntax and change the query.
+            const safe = search.replace(/[,()\\]/g, ' ');
+            query = query.or(`text.ilike.%${safe}%,topic.ilike.%${safe}%,subtopic.ilike.%${safe}%`);
+        }
+
+        const { data, error, count } = await query
             .order('created_at', { ascending: true })
             .range(offset, offset + PAGE - 1);
 
@@ -47,6 +84,40 @@ export async function GET(req: NextRequest) {
         const subjectName = new Map((subjects ?? []).map((s) => [s.id, s.name]));
         const gradeName = new Map((grades ?? []).map((g) => [g.id, g.name]));
 
+        /*
+         * The filter options are built from what is actually in this queue, not
+         * from the whole catalogue. Offering all 60 subjects when 9 of them hold
+         * every pending question makes the reviewer hunt for the ones that
+         * matter, and a dropdown entry that returns nothing is a dead end the
+         * screen invited them to walk into.
+         *
+         * Counted over the status only, so the numbers do not shift as the other
+         * filters are applied — a facet that re-counts itself cannot be used to
+         * navigate.
+         */
+        const { data: facetRows } = await supabase
+            .from('questions')
+            .select('subject_id, grade_id, topic, marking_scheme')
+            .eq('review_status', status);
+
+        const tallyBy = (key: 'subject_id' | 'grade_id' | 'topic') => {
+            const counts = new Map<string, number>();
+            for (const row of facetRows ?? []) {
+                const value = row[key];
+                if (!value) continue;
+                counts.set(String(value), (counts.get(String(value)) ?? 0) + 1);
+            }
+            return counts;
+        };
+
+        const bySubject = tallyBy('subject_id');
+        const byGrade = tallyBy('grade_id');
+        const byTopic = tallyBy('topic');
+
+        const missingSchemeCount = (facetRows ?? []).filter(
+            (r) => !r.marking_scheme || !String(r.marking_scheme).trim()
+        ).length;
+
         return NextResponse.json({
             questions: (data ?? []).map((q) => ({
                 ...q,
@@ -55,6 +126,19 @@ export async function GET(req: NextRequest) {
             })),
             total: count ?? 0,
             hasMore: offset + (data?.length ?? 0) < (count ?? 0),
+            facets: {
+                subjects: [...bySubject.entries()]
+                    .map(([id, n]) => ({ id, name: subjectName.get(id) ?? 'Unknown', count: n }))
+                    .sort((a, b) => b.count - a.count),
+                grades: [...byGrade.entries()]
+                    .map(([id, n]) => ({ id, name: gradeName.get(id) ?? 'Unknown', count: n }))
+                    .sort((a, b) => b.count - a.count),
+                topics: [...byTopic.entries()]
+                    .map(([name, n]) => ({ name, count: n }))
+                    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+                missingScheme: missingSchemeCount,
+                statusTotal: (facetRows ?? []).length,
+            },
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
