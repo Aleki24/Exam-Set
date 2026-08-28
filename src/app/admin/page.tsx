@@ -77,6 +77,10 @@ export default function AdminPage() {
         cors?: { ok: boolean; detail: string; fix?: string | null } | null;
     } | null>(null);
     const [testingStorage, setTestingStorage] = useState(false);
+
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const [reapReport, setReapReport] = useState<any>(null);
+    const [reaping, setReaping] = useState(false);
     const [loading, setLoading] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -149,6 +153,42 @@ export default function AdminPage() {
             setMpesaTest({ ok: false, detail: err instanceof Error ? err.message : 'Could not reach Safaricom' });
         } finally {
             setTestingMpesa(false);
+        }
+    };
+
+    /**
+     * Abandoned uploads, reported before anything is deleted.
+     *
+     * Two presses on purpose. The first reports; the second, which only appears
+     * once there is something to report, deletes. A one-press sweep of a
+     * function whose output is "files to remove permanently" is the wrong
+     * shape, however good the rules behind it are.
+     */
+    const reap = async (dryRun: boolean) => {
+        setReaping(true);
+        try {
+            const res = await fetch('/api/admin/storage/reap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dryRun }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setReapReport({ error: data.error || 'Could not check for abandoned uploads' });
+                return;
+            }
+            setReapReport(data);
+            if (!dryRun) {
+                toast.success(
+                    data.deleted > 0
+                        ? `Cleared ${data.deleted} abandoned file${data.deleted === 1 ? '' : 's'}`
+                        : 'Nothing to clear'
+                );
+            }
+        } catch (err) {
+            setReapReport({ error: err instanceof Error ? err.message : 'Could not reach storage' });
+        } finally {
+            setReaping(false);
         }
     };
 
@@ -395,6 +435,72 @@ export default function AdminPage() {
                             touched.
                         </span>
                     </div>
+
+                    {/* Abandoned uploads.
+
+                        The upload flow puts the file in the bucket as soon as it
+                        is picked, so the cover can be read and the form filled
+                        in — which makes closing the tab before publishing an
+                        ordinary thing to do, and leaves a file nothing points
+                        at. Storage is billed by the gigabyte either way. */}
+                    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+                        <button
+                            type="button"
+                            onClick={() => reap(true)}
+                            disabled={reaping}
+                            className="btn-outline"
+                        >
+                            {reaping ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Check for abandoned uploads
+                        </button>
+                        <span className="meta">
+                            Files uploaded but never listed. Nothing under six hours old, and nothing a paper
+                            points at, is ever touched.
+                        </span>
+                    </div>
+
+                    {reapReport && (
+                        <div className="mt-3 space-y-1">
+                            {reapReport.error ? (
+                                <p className="text-sm text-accent">{reapReport.error}</p>
+                            ) : (
+                                <>
+                                    <p className="text-sm">
+                                        {reapReport.abandoned === 0
+                                            ? `Nothing abandoned — ${reapReport.scanned} file${reapReport.scanned === 1 ? '' : 's'} checked, all accounted for.`
+                                            : reapReport.dryRun === false
+                                              ? `Cleared ${reapReport.deleted} of ${reapReport.abandoned}, freeing ${reapReport.reclaimable}.`
+                                              : `${reapReport.abandoned} abandoned file${reapReport.abandoned === 1 ? '' : 's'}, ${reapReport.reclaimable} to reclaim.`}
+                                    </p>
+                                    <p className="figure text-[11px] text-muted-foreground">
+                                        Kept: {reapReport.kept?.referenced ?? 0} in use,{' '}
+                                        {reapReport.kept?.tooNew ?? 0} still recent.
+                                        {reapReport.truncated ? ' Scan hit its limit — run it again after clearing.' : ''}
+                                    </p>
+                                    {(reapReport.examples ?? []).length > 0 && (
+                                        <ul className="figure text-[11px] text-muted-foreground">
+                                            {reapReport.examples.map((key: string) => (
+                                                <li key={key} className="truncate">
+                                                    {key}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    {reapReport.dryRun && reapReport.abandoned > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => reap(false)}
+                                            disabled={reaping}
+                                            className="btn-danger btn-sm mt-2"
+                                        >
+                                            Delete {reapReport.abandoned} file
+                                            {reapReport.abandoned === 1 ? '' : 's'} permanently
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
                     {storageTest && (
                         <div className="mt-3 space-y-1">
                             <p

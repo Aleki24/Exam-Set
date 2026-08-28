@@ -9,6 +9,7 @@ import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import PaperCard from '@/components/shop/PaperCard';
 import PaperCover from '@/components/shop/PaperCover';
+import DocumentPreview from '@/components/shop/DocumentPreview';
 import { useCart } from '@/lib/cart';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
@@ -324,7 +325,17 @@ export default function PaperDetailPage() {
                     {/* Buy panel */}
                     <aside>
                         <div className="sticky top-24 space-y-4">
-                        <PaperCover paper={paper} />
+                        {/* The real document where one can be read, the
+                            typeset cover where it cannot. A buyer choosing
+                            between four Grade 9 Mathematics papers cannot open
+                            any of them, and the cover — honest as it is — shows
+                            nothing of what is inside. */}
+                        <DocumentPreview
+                            paper={paper}
+                            owned={owned}
+                            onBuy={() => cart.add(paper)}
+                            fallback={<PaperCover paper={paper} />}
+                        />
                         <div className="surface p-5">
                             <div className="flex items-baseline justify-between">
                                 <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>

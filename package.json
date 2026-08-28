@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "verify:builder": "node scripts/verify-paper-builder.mjs",
     "verify:storage": "node scripts/verify-storage.mjs",
-    "verify": "npm run verify:builder && npm run verify:mpesa && npm run verify:storage && npm run verify:query && npm run verify:sets && npm run verify:whatsapp && npm run verify:extract && npm run verify:claude && npm run verify:documenttext && npm run verify:pdf && npm run verify:delete && npm run verify:auth && npm run verify:progress && npm run verify:discovery && npm run verify:calendar && npm run verify:marking && npm run verify:schemes && npm run verify:cba && npm run verify:curriculum && npm run verify:bulk && npm run verify:ingest && npm run verify:figures && npm run verify:subject && npm run verify:math && npm run verify:formats",
+    "verify": "npm run verify:builder && npm run verify:mpesa && npm run verify:storage && npm run verify:query && npm run verify:sets && npm run verify:whatsapp && npm run verify:extract && npm run verify:claude && npm run verify:documenttext && npm run verify:pdf && npm run verify:delete && npm run verify:auth && npm run verify:progress && npm run verify:discovery && npm run verify:calendar && npm run verify:marking && npm run verify:schemes && npm run verify:cba && npm run verify:curriculum && npm run verify:bulk && npm run verify:ingest && npm run verify:figures && npm run verify:subject && npm run verify:math && npm run verify:formats && npm run verify:reaper && npm run verify:preview",
     "verify:query": "node scripts/verify-paper-query.mjs",
     "verify:whatsapp": "node scripts/verify-whatsapp.mjs",
     "verify:pdf": "node scripts/verify-paper-pdf.mjs",
@@ -33,7 +33,9 @@
     "verify:figures": "node scripts/verify-figures.mjs",
     "verify:subject": "node scripts/verify-subject-paper.mjs",
     "verify:math": "node scripts/verify-math-typesetting.mjs",
-    "verify:formats": "node scripts/verify-upload-formats.mjs"
+    "verify:formats": "node scripts/verify-upload-formats.mjs",
+    "verify:reaper": "node scripts/verify-reaper.mjs",
+    "verify:preview": "node scripts/verify-preview.mjs"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",

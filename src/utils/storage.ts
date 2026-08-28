@@ -24,6 +24,7 @@ import {
     GetObjectCommand,
     DeleteObjectCommand,
     HeadObjectCommand,
+    ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createAdminClient } from '@/utils/supabase/admin';
@@ -268,6 +269,105 @@ export async function signedDownloadUrl(key: string, expiresIn = 900): Promise<s
         throw new Error(`Could not sign a download link: ${error?.message ?? 'unknown error'}`);
     }
     return data.signedUrl;
+}
+
+/** One object in the bucket, as much of it as both backends agree on. */
+export interface StoredObject {
+    key: string;
+    size: number;
+    /** When the bucket says it was written. Null when it will not say. */
+    uploadedAt: Date | null;
+}
+
+/**
+ * Everything under a prefix.
+ *
+ * Only the reaper needs this, and it needs it for one reason: an upload that
+ * was abandoned leaves an object nothing points at. The paper flow uploads the
+ * file the moment it is picked — which is what makes the form fill itself in —
+ * so closing the tab before publishing is now an ordinary thing to do, and
+ * every one of those leaves a paid-for object in the bucket forever.
+ *
+ * The two backends page differently and neither returns the whole bucket at
+ * once, so this walks until it is done or until `limit` objects have been seen.
+ * A ceiling rather than an unbounded walk: this runs in a serverless function
+ * with a deadline, and a partial sweep that finishes is worth more than a
+ * complete one that is killed halfway.
+ */
+export async function listObjects(prefix: string, limit = 1000): Promise<StoredObject[]> {
+    const backend = requireStorage();
+    const out: StoredObject[] = [];
+
+    if (backend === 'r2') {
+        let token: string | undefined;
+        do {
+            const page = await r2().send(
+                new ListObjectsV2Command({
+                    Bucket: process.env.R2_BUCKET_NAME!,
+                    Prefix: prefix,
+                    ContinuationToken: token,
+                    MaxKeys: Math.min(1000, limit - out.length),
+                })
+            );
+            for (const item of page.Contents ?? []) {
+                if (!item.Key) continue;
+                out.push({
+                    key: item.Key,
+                    size: Number(item.Size) || 0,
+                    uploadedAt: item.LastModified ? new Date(item.LastModified) : null,
+                });
+            }
+            token = page.IsTruncated ? page.NextContinuationToken : undefined;
+        } while (token && out.length < limit);
+
+        return out;
+    }
+
+    /*
+     * Supabase Storage lists one folder at a time and reports sub-folders as
+     * entries with no metadata, so reaching `papers/<uid>/<file>` means walking
+     * down. Depth is bounded because the prefixes this app writes are: uploads
+     * live at `papers/<uid>/`, figures and generated files elsewhere.
+     */
+    const walk = async (folder: string, depth: number): Promise<void> => {
+        if (out.length >= limit || depth > 3) return;
+
+        for (let offset = 0; out.length < limit; offset += 100) {
+            const { data, error } = await supabaseStorage().list(folder, { limit: 100, offset });
+            if (error) throw new Error(`Could not list ${folder}: ${error.message}`);
+            const entries = data ?? [];
+            if (entries.length === 0) return;
+
+            for (const entry of entries) {
+                if (out.length >= limit) return;
+                const key = folder ? `${folder}/${entry.name}` : entry.name;
+
+                /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                const meta = (entry as any).metadata;
+                // A folder comes back with no metadata and no id. A zero-byte
+                // file has metadata saying so, which is how the two are told
+                // apart — and a zero-byte file is exactly what a failed upload
+                // leaves, so it must not be mistaken for a folder and skipped.
+                if (!meta) {
+                    await walk(key, depth + 1);
+                    continue;
+                }
+
+                out.push({
+                    key,
+                    size: Number(meta.size) || 0,
+                    uploadedAt: entry.created_at ? new Date(entry.created_at) : null,
+                });
+            }
+
+            if (entries.length < 100) return;
+        }
+    };
+
+    // `list('papers/')` and `list('papers')` are the same folder to Supabase;
+    // the trailing slash would otherwise become a doubled one in every key.
+    await walk(prefix.replace(/\/+$/, ''), 0);
+    return out;
 }
 
 export async function deleteObject(key: string): Promise<void> {
