@@ -156,7 +156,7 @@ export default function ContactPage() {
                             <Faq
                                 icon={FilePen}
                                 question="Can I edit what I download?"
-                                answer="The documents are PDFs, so they print as they are. If you want a paper in your school's own format with your own choice of questions, the exam setter builds one from the question bank."
+                                answer="Every listing says what it is — a PDF prints as it stands, and a Word file you can edit first, which is what most schemes of work and lesson plans are. If you want a paper in your school's own format with your own choice of questions, the exam setter builds one from the question bank."
                             />
                         </div>
 

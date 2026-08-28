@@ -543,7 +543,7 @@ function EmptyState({ hasFilters, onReset }: { hasFilters: boolean; onReset: () 
                     {hasFilters
                         ? 'Try a wider level or exam type — or build the paper yourself from the question bank.'
                         : isAdmin
-                          ? 'Upload the PDFs you already have, or build one from your question bank. Either way it appears here for sale straight away.'
+                          ? 'Upload the papers you already have — PDF or Word — or build one from your question bank. Either way it appears here for sale straight away.'
                           : 'The catalog is empty. Check back shortly.'}
                 </p>
                 <div className="mt-8 flex flex-wrap justify-center gap-2">

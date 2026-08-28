@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
 import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
-import { extractPdfPageImages, extractPdfText } from '@/services/documentText';
+import { extractPdfPageImages, extractPdfText, extractWordText } from '@/services/documentText';
 import { aiJson, aiAvailable, type AiContent } from '@/services/claude';
 import { EXAM_TYPES, LEVELS, TERMS } from '@/lib/catalog';
 import { RESOURCE_KINDS } from '@/lib/resources';
 import { hasReadableText, pairSchemes, sensibleYear, type Classified } from '@/lib/bulkClassify';
+import { formatFromKey } from '@/lib/uploadFormats';
 
 /**
- * POST /api/papers/bulk/classify — read a stack of uploaded PDFs and say what
+ * POST /api/papers/bulk/classify — read a stack of uploaded papers and say what
  * each one is.
  *
  * The shop had two items in it, and the reason was not the shop. Listing a
@@ -130,6 +131,11 @@ export async function POST(req: NextRequest) {
 async function classifyOne(file: { key: string; filename: string }): Promise<Classified> {
     const base: Classified = { key: file.key, filename: file.filename, ok: false };
 
+    // The key's extension is the record of what the file is — see
+    // `lib/uploadFormats`. A Word document read as a PDF extracts to nothing and
+    // would be reported as an unreadable scan.
+    const format = formatFromKey(file.key);
+
     let text: string;
     let buffer: Buffer;
     try {
@@ -139,9 +145,21 @@ async function classifyOne(file: { key: string; filename: string }): Promise<Cla
         const res = await fetch(url);
         if (!res.ok) return { ...base, error: `Could not read the file back (${res.status})` };
         buffer = Buffer.from(await res.arrayBuffer());
-        text = await extractPdfText(buffer);
+        text = format.format === 'pdf' ? await extractPdfText(buffer) : await extractWordText(buffer);
     } catch (err) {
-        return { ...base, error: err instanceof Error ? err.message : 'Could not read the PDF' };
+        /*
+         * `mammoth` reads .docx and only .docx — a legacy .doc is a different
+         * format wearing a similar name, and it throws rather than returning
+         * nothing. That is still a file worth selling, so the row survives with
+         * a message that says what to do about it instead of failing the batch.
+         */
+        const reason =
+            format.format === 'doc'
+                ? 'A legacy .doc cannot be read automatically — fill this row in by hand, or save it as .docx.'
+                : err instanceof Error
+                  ? err.message
+                  : `Could not read the ${format.label}`;
+        return { ...base, error: reason };
     }
 
     const trimmed = text.replace(/\s+\n/g, '\n').trim().slice(0, TEXT_BUDGET);
@@ -161,7 +179,9 @@ async function classifyOne(file: { key: string; filename: string }): Promise<Cla
     } else {
         let cover;
         try {
-            [cover] = await extractPdfPageImages(buffer, 1);
+            // Only a PDF can be a scan. A Word document with no text in it is
+            // empty, not photographed, and there is no cover to fall back to.
+            if (format.format === 'pdf') [cover] = await extractPdfPageImages(buffer, 1);
         } catch {
             cover = undefined;
         }
@@ -195,6 +215,6 @@ async function classifyOne(file: { key: string; filename: string }): Promise<Cla
         ok: true,
         ...d,
         year: sensibleYear(d.year),
-        title: (d.title || file.filename.replace(/\.pdf$/i, '')).slice(0, 255),
+        title: (d.title || file.filename.replace(/\.[a-z0-9]+$/i, '')).slice(0, 255),
     };
 }

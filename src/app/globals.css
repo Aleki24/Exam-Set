@@ -846,6 +846,61 @@
         grid-template-rows: 1fr;
     }
 
+    /*
+     * A previewed Word document, set as a page rather than as the app.
+     *
+     * `sanitiseHtml` strips every attribute, so a converted document arrives as
+     * bare tags with no styling of its own — which is the point, and means the
+     * whole look of it is decided here. Serif and tight leading so it reads as a
+     * script; tables ruled, because a scheme of work is mostly table and an
+     * unruled one is unreadable.
+     */
+    :where(.preview-page) h1,
+    :where(.preview-page) h2,
+    :where(.preview-page) h3 {
+        font-weight: 700;
+        margin: 0.9em 0 0.4em;
+        line-height: 1.25;
+    }
+
+    :where(.preview-page) h1 { font-size: 1.35em; }
+    :where(.preview-page) h2 { font-size: 1.15em; }
+    :where(.preview-page) h3 { font-size: 1.02em; }
+
+    :where(.preview-page) p { margin: 0 0 0.65em; }
+
+    :where(.preview-page) ul,
+    :where(.preview-page) ol {
+        margin: 0 0 0.65em 1.2em;
+        list-style: revert;
+    }
+
+    :where(.preview-page) li { margin-bottom: 0.2em; }
+
+    :where(.preview-page) table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0 0 0.8em;
+        font-size: 0.92em;
+    }
+
+    :where(.preview-page) td,
+    :where(.preview-page) th {
+        border: 1px solid var(--border);
+        padding: 0.35em 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    :where(.preview-page) th { font-weight: 700; }
+
+    :where(.preview-page) blockquote {
+        margin: 0 0 0.65em 0.8em;
+        padding-left: 0.8em;
+        border-left: 2px solid var(--border);
+    }
+
+
     /* Dialogs: POP in, and out on a short easeOut rather than a spring — the
        overshoot is invisible once the thing is already fading, and holding a
        modal on screen for a full settle to watch it leave is the opposite of

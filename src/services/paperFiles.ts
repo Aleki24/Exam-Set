@@ -21,6 +21,7 @@
 
 import { putObject, signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
 import { isFigureKey } from '@/lib/figures';
+import { formatFromKey } from '@/lib/uploadFormats';
 import { imageSize } from './imageSize';
 import { renderMarkingSchemePdf, renderPaperPdf, type FigureMap } from './paperPdf';
 
@@ -193,7 +194,16 @@ async function loadFigures(questions: any[]): Promise<FigureMap | undefined> {
     return figures.size > 0 ? figures : undefined;
 }
 
-/** Filename a teacher will recognise in their downloads folder. */
+/**
+ * Filename a teacher will recognise in their downloads folder.
+ *
+ * The extension comes from the stored key, not from an assumption. A Word
+ * document handed over as `.pdf` opens to an error dialog on every device a
+ * teacher owns, and looks like a corrupt file rather than a misnamed one — so
+ * the one place that names the file reads the format from the one place that
+ * records it. A paper with nothing stored yet is about to be rendered from its
+ * questions, and that is always a PDF.
+ */
 export function paperFilename(paper: any, asset: PaperAsset): string {
     const base = [paper.grade_label, paper.subject, paper.year]
         .filter(Boolean)
@@ -201,5 +211,17 @@ export function paperFilename(paper: any, asset: PaperAsset): string {
         .replace(/\s+/g, '-');
 
     const name = (base || paper.title || 'exam-paper').replace(/[^\w-]/g, '');
-    return `${name}${asset === 'scheme' ? '-marking-scheme' : ''}.pdf`.toLowerCase();
+    const key = asset === 'scheme' ? paper.marking_scheme_storage_key : paper.pdf_storage_key;
+    const extension = key ? formatFromKey(key).extension : '.pdf';
+
+    return `${name}${asset === 'scheme' ? '-marking-scheme' : ''}${extension}`.toLowerCase();
+}
+
+/**
+ * The content type to serve a stored asset as. Same reasoning as the filename:
+ * read the format off the key rather than assuming the shop is still PDF-only.
+ */
+export function paperContentType(paper: any, asset: PaperAsset): string {
+    const key = asset === 'scheme' ? paper.marking_scheme_storage_key : paper.pdf_storage_key;
+    return key ? formatFromKey(key).contentType : 'application/pdf';
 }

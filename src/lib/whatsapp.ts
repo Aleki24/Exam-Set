@@ -11,6 +11,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
+import { formatByExtension } from '@/lib/uploadFormats';
 
 const GRAPH_VERSION = 'v21.0';
 
@@ -265,7 +266,13 @@ function truncate(value: string, max: number): string {
     return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
 
-/** Keeps the filename readable in the recipient's downloads folder. */
+/**
+ * Keeps the filename readable in the recipient's downloads folder.
+ *
+ * An extension the shop actually stores is left alone. Forcing `.pdf` onto
+ * everything used to be harmless when everything was a PDF; now it would hand a
+ * teacher a Word document that WhatsApp shows as a PDF and no app will open.
+ */
 function safeFilename(name: string): string {
     const cleaned = name
         .replace(/[^\w\s.-]/g, '')
@@ -275,5 +282,5 @@ function safeFilename(name: string): string {
         .replace(/^-|-$/g, '');
 
     const base = cleaned || 'exam-paper';
-    return base.toLowerCase().endsWith('.pdf') ? base : `${base}.pdf`;
+    return formatByExtension(base) ? base : `${base}.pdf`;
 }

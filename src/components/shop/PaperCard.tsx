@@ -56,7 +56,13 @@ export default function PaperCard({
 
     // Facts fold into a single short line. Duration is deliberately left to the
     // detail page: on a card it only ever caused a wrap.
+    //
+    // The format earns its place on the card rather than waiting for the detail
+    // page: a teacher shopping for a scheme of work is shopping for something
+    // they can edit, and "Word" is the difference between a resource they can
+    // use and one they have to retype.
     const facts = [
+        paper.file_format ?? null,
         paper.total_marks > 0 ? `${paper.total_marks} marks` : null,
         paper.question_count > 0 ? `${paper.question_count} questions` : null,
         paper.has_marking_scheme ? '+ scheme' : null,

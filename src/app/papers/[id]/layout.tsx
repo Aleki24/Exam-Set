@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { publicSupabase, siteUrl } from '@/lib/publicSupabase';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG } from '@/lib/catalog';
+import { describeFormats } from '@/lib/uploadFormats';
 
 /**
  * Per-paper search metadata.
@@ -32,7 +33,7 @@ async function loadPaper(id: string): Promise<any | null> {
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         const { data } = await supabase
             .from('exams')
-            .select('id, slug, title, description, subject, grade_label, level_slug, exam_type, year, term_slug, total_marks, question_count, time_limit, price_cents, currency, has_marking_scheme, institution, created_at')
+            .select('id, slug, title, description, subject, grade_label, level_slug, exam_type, year, term_slug, total_marks, question_count, time_limit, price_cents, currency, has_marking_scheme, institution, created_at, pdf_storage_key, marking_scheme_storage_key')
             .eq(isUuid ? 'id' : 'slug', id)
             .maybeSingle();
 
@@ -55,14 +56,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const level = paper.level_slug ? LEVEL_BY_SLUG[paper.level_slug] : undefined;
     const context = [paper.grade_label || level?.short, paper.subject, paper.year].filter(Boolean).join(' ');
 
+    /*
+     * The format is read off the stored file, not assumed.
+     *
+     * "PDF" was hard-coded into the title, the description and the keywords of
+     * every paper in the shop. Now that a listing may be a Word document, that
+     * is a search result promising a format the download does not deliver —
+     * and "Word" is a term teachers search for on purpose, because a scheme of
+     * work they cannot edit is not the one they wanted.
+     */
+    const format = describeFormats([
+        paper.pdf_storage_key,
+        paper.has_marking_scheme ? paper.marking_scheme_storage_key : null,
+    ]);
+
     // Front-load the words people search with, and say the two things that
     // decide the click: whether answers are included, and what it costs.
-    const title = `${paper.title} — PDF with ${paper.has_marking_scheme ? 'marking scheme' : 'questions'}`;
+    const title = `${paper.title} — ${format} with ${paper.has_marking_scheme ? 'marking scheme' : 'questions'}`;
 
     const description =
         paper.description ||
         [
-            `Download the ${context} ${examTypeName(paper.exam_type).toLowerCase()} as a print-ready PDF.`,
+            `Download the ${context} ${examTypeName(paper.exam_type).toLowerCase()} as ${format}.`,
             paper.total_marks ? `${paper.total_marks} marks` : null,
             paper.question_count ? `${paper.question_count} questions` : null,
             paper.time_limit,
@@ -94,7 +109,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
             paper.year ? String(paper.year) : '',
             'exam paper',
             'marking scheme',
-            'PDF',
+            format,
             'Kenya',
             level?.curriculum === 'CBE' ? 'CBE' : 'KCSE',
         ].filter(Boolean) as string[],

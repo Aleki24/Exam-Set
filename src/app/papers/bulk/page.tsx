@@ -10,9 +10,15 @@ import TopNav from '@/components/shell/TopNav';
 import { useRole } from '@/lib/roles';
 import { EXAM_TYPES, LEVELS, TERMS, formatPrice } from '@/lib/catalog';
 import { RESOURCE_KINDS } from '@/lib/resources';
+import {
+    PAPER_FILE_ACCEPT,
+    PAPER_FORMAT_HINT,
+    resolvePaperFormat,
+    titleFromFilename,
+} from '@/lib/uploadFormats';
 
 /**
- * BULK LISTING — a folder of PDFs becomes a stocked shop.
+ * BULK LISTING — a folder of papers becomes a stocked shop.
  *
  * `/papers/new` lists one paper and asks for ten fields to do it. That is the
  * right shape for one paper and the reason the shop had two: stocking a hundred
@@ -55,6 +61,9 @@ interface Row {
 
 const DEFAULT_PRICE = 30;
 
+/** What the bucket enforces. Checked before the bytes leave, not after. */
+const MAX_BYTES = 25 * 1024 * 1024;
+
 export default function BulkUploadPage() {
     const { isAdmin, ready } = useRole();
     const inputRef = useRef<HTMLInputElement>(null);
@@ -65,18 +74,55 @@ export default function BulkUploadPage() {
     const [progress, setProgress] = useState({ done: 0, total: 0 });
     const [priceKes, setPriceKes] = useState(String(DEFAULT_PRICE));
     const [publishNow, setPublishNow] = useState(true);
+    /** Whether a drag is currently over the drop zone. Purely visual. */
+    const [dragging, setDragging] = useState(false);
 
     const papers = useMemo(() => rows.filter((r) => !r.is_marking_scheme), [rows]);
     const schemes = useMemo(() => rows.filter((r) => r.is_marking_scheme), [rows]);
     const unreadable = useMemo(() => rows.filter((r) => !r.ok), [rows]);
 
-    const pick = (list: FileList | null) => {
+    /**
+     * Whatever was dropped or chosen, filtered down to what can actually be
+     * listed — and said out loud when something is left out.
+     *
+     * A folder of papers is rarely only papers: there is a stray spreadsheet, a
+     * cover image, a 40 MB scan somebody never compressed. Silently dropping
+     * those means an admin publishes 58 of 60 files and finds out months later.
+     * The two reasons are counted separately because they need different
+     * answers — one is the wrong file, the other is the right file too big.
+     */
+    const pick = (list: FileList | ArrayLike<File> | null) => {
         if (!list) return;
-        const pdfs = Array.from(list).filter((f) => f.type === 'application/pdf');
-        const rejected = list.length - pdfs.length;
-        if (rejected > 0) toast.error(`${rejected} file${rejected === 1 ? '' : 's'} skipped — PDFs only`);
-        if (pdfs.length === 0) return;
-        setFiles((current) => [...current, ...pdfs].slice(0, 60));
+
+        const all = Array.from(list as ArrayLike<File>);
+        const wrongFormat = all.filter((f) => !resolvePaperFormat(f));
+        const tooBig = all.filter((f) => resolvePaperFormat(f) && f.size > MAX_BYTES);
+        const usable = all.filter((f) => resolvePaperFormat(f) && f.size <= MAX_BYTES);
+
+        if (wrongFormat.length > 0) {
+            toast.error(
+                `${wrongFormat.length} file${wrongFormat.length === 1 ? '' : 's'} skipped — ${PAPER_FORMAT_HINT} only`
+            );
+        }
+        if (tooBig.length > 0) {
+            toast.error(
+                `${tooBig.length} file${tooBig.length === 1 ? '' : 's'} skipped — over the 25 MB limit`
+            );
+        }
+        if (usable.length === 0) return;
+
+        // Dropping the same folder twice is easy to do and impossible to see
+        // afterwards: the duplicates upload, classify and list as separate
+        // papers at the same price. Compared against the current list here
+        // rather than inside the state updater, which React may run twice.
+        const seen = new Set(files.map((f) => `${f.name}:${f.size}`));
+        const fresh = usable.filter((f) => !seen.has(`${f.name}:${f.size}`));
+        if (fresh.length < usable.length) {
+            toast(`${usable.length - fresh.length} already in the list`);
+        }
+        if (fresh.length === 0) return;
+
+        setFiles((current) => [...current, ...fresh].slice(0, 60));
     };
 
     /** Sign, upload straight to storage, then ask the classifier to read them. */
@@ -95,14 +141,28 @@ export default function BulkUploadPage() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        stem: file.name.replace(/\.pdf$/i, ''),
-                        files: [{ kind: 'paper', contentType: file.type, size: file.size }],
+                        stem: file.name.replace(/\.[a-z0-9]+$/i, ''),
+                        // The filename goes too — a device that reports a .docx
+                        // as `application/octet-stream` is common enough that
+                        // the content type alone cannot be trusted. See
+                        // `lib/uploadFormats`.
+                        files: [
+                            {
+                                kind: 'paper',
+                                filename: file.name,
+                                contentType: file.type,
+                                size: file.size,
+                            },
+                        ],
                     }),
                 });
                 const signed = await signRes.json();
                 if (!signRes.ok) throw new Error(signed.error || `Could not authorise ${file.name}`);
 
                 const ticket = signed.tickets?.[0];
+                // The ticket's headers carry the canonical content type the key
+                // was signed for, which is not always the one the browser
+                // reported — so they win.
                 const put = await fetch(ticket.url, {
                     method: ticket.method || 'PUT',
                     headers: { 'Content-Type': file.type, ...(ticket.headers || {}) },
@@ -234,28 +294,50 @@ export default function BulkUploadPage() {
                     <p className="overline">Bulk listing</p>
                     <h1 className="display-2 mt-3">Stock the shop from a folder</h1>
                     <p className="lead mt-4">
-                        Drop the PDFs. Each cover is read for its subject, class, term and marks, and
-                        marking schemes are matched to their papers. You correct anything that is
-                        wrong, then list the lot.
+                        Drop the files — PDF or Word. Each cover is read for its subject, class, term
+                        and marks, and marking schemes are matched to their papers. You correct
+                        anything that is wrong, then list the lot.
                     </p>
                 </header>
 
                 {(stage === 'idle' || stage === 'uploading' || stage === 'classifying') && (
                     <section className="mt-10">
+                        {/* The heading has said "drop the files" since this page
+                            shipped, and until now dropping one did nothing —
+                            the browser navigated away to the PDF instead, which
+                            looks exactly like the app crashing. */}
                         <button
                             type="button"
                             onClick={() => inputRef.current?.click()}
                             disabled={stage !== 'idle'}
-                            className="ruled w-full rounded-[var(--radius)] border-2 border-dashed border-border p-12 text-center transition-colors hover:border-primary/40 disabled:opacity-60"
+                            onDragOver={(e) => {
+                                if (stage !== 'idle') return;
+                                e.preventDefault();
+                                setDragging(true);
+                            }}
+                            onDragLeave={() => setDragging(false)}
+                            onDrop={(e) => {
+                                if (stage !== 'idle') return;
+                                e.preventDefault();
+                                setDragging(false);
+                                pick(e.dataTransfer.files);
+                            }}
+                            className={`ruled w-full rounded-[var(--radius)] border-2 border-dashed p-12 text-center transition-colors disabled:opacity-60 ${
+                                dragging ? 'border-primary bg-primary/[0.04]' : 'border-border hover:border-primary/40'
+                            }`}
                         >
                             <Upload className="mx-auto h-7 w-7 text-muted-foreground" aria-hidden />
-                            <p className="heading-ui mt-4">Choose PDFs</p>
-                            <p className="meta mt-1">Papers and their marking schemes together · up to 60 · 25 MB each</p>
+                            <p className="heading-ui mt-4">
+                                {dragging ? 'Drop them here' : 'Choose or drop your files'}
+                            </p>
+                            <p className="meta mt-1">
+                                {PAPER_FORMAT_HINT} · papers and their marking schemes together · up to 60 · 25 MB each
+                            </p>
                         </button>
                         <input
                             ref={inputRef}
                             type="file"
-                            accept="application/pdf"
+                            accept={PAPER_FILE_ACCEPT}
                             multiple
                             className="hidden"
                             onChange={(e) => pick(e.target.files)}
@@ -274,9 +356,12 @@ export default function BulkUploadPage() {
                                 </div>
                                 <ul className="mt-4 max-h-52 space-y-1 overflow-y-auto scroll-panel">
                                     {files.map((f) => (
-                                        <li key={f.name} className="meta flex items-center gap-2">
+                                        <li key={`${f.name}:${f.size}`} className="meta flex items-center gap-2">
                                             <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
                                             <span className="truncate">{f.name}</span>
+                                            <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide">
+                                                {resolvePaperFormat(f)?.label}
+                                            </span>
                                         </li>
                                     ))}
                                 </ul>
@@ -522,7 +607,7 @@ function toRow(c: any): Row {
         error: c.error,
         is_marking_scheme: Boolean(c.is_marking_scheme),
         pairs_with: c.pairs_with ?? null,
-        title: c.title || c.filename?.replace(/\.pdf$/i, '') || '',
+        title: c.title || titleFromFilename(c.filename || '') || '',
         subject: c.subject || '',
         level_slug: c.level_slug || '',
         grade_label: c.grade_label || '',

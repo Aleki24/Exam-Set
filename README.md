@@ -202,6 +202,9 @@ the shop are:
 - `020_whatsapp.sql` — bot session state, message dedupe, and the fix that makes
   `handle_new_user` copy the phone number onto the profile (without it, an
   account created from a phone can never be found again)
+- `034_word_uploads.sql` — lets the paper bucket accept Word documents as well as
+  PDFs. Without it the app authorises a `.docx` upload and storage refuses it,
+  in the browser, where nothing here can explain why
 - `018_lock_down_settlement_functions.sql` — closes EXECUTE on the functions that
   settle payments. Postgres grants EXECUTE to PUBLIC by default and Supabase adds
   `anon`/`authenticated` on top, which left `confirm_order_payment` callable by
@@ -387,6 +390,23 @@ an admin check, and `GET /api/papers/[id]/download` verifies entitlement before
 minting a 15-minute signed URL. With neither backend configured those routes
 return 503 with a message naming the variables to set — the rest of the site
 (shop, setter, sign-up, admin) works normally.
+
+**What may be uploaded.** PDF, `.docx` and `.doc` — a scheme of work or a lesson
+plan is bought to be edited, so selling it locked in a PDF is selling half the
+thing. `src/lib/uploadFormats.ts` is the single list; the file picker, both
+upload routes, the bulk classifier and the shop's format badge all read it, and
+`supabase/migrations/034_word_uploads.sql` is the bucket's copy of the same list.
+Widen it in both or the browser is handed a signed URL for a file storage will
+then refuse, with nothing in this app able to explain why. `npm run
+verify:formats` checks the two agree, along with the devices that report a
+`.docx` as `application/octet-stream` — Android's picker, Chrome OS, and Windows
+without Office — which are the reason the filename travels with the content type
+and neither is trusted on its own.
+
+A paper's format is recorded in its storage key's extension and nowhere else, so
+`formatFromKey` is what the download filename, the WhatsApp document, the page
+metadata and the shop's card all read. Anything unrecognised is a PDF, because
+every paper stocked before Word was accepted was one.
 
 ### Switching to R2
 

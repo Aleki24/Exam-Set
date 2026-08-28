@@ -57,6 +57,19 @@ export interface PaperListing {
     has_marking_scheme: boolean;
     preview_pages: number;
 
+    /**
+     * What the buyer downloads — "PDF", "Word", or "PDF + Word" when the paper
+     * and its marking scheme differ.
+     *
+     * Derived from the storage keys rather than stored, because the key's
+     * extension is what actually decides the file that gets served. Absent when
+     * the row was read without its keys, which is why nothing treats a missing
+     * value as "unknown format" and shows a placeholder.
+     */
+    file_format?: string;
+    /** True when at least one of the files is a Word document the buyer can edit. */
+    editable?: boolean;
+
     /*
      * No `pdf_url` or `marking_scheme_url`. The `exams` row has both columns and
      * the server still reads them, but a listing is what unauthenticated
