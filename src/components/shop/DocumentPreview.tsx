@@ -39,18 +39,10 @@ export default function DocumentPreview({
     paper,
     owned,
     onBuy,
-    fallback,
 }: {
     paper: PaperListing;
     owned: boolean;
     onBuy?: () => void;
-    /**
-     * Shown when the document cannot be previewed — a legacy .doc, a scan in a
-     * filter this build does not read, a paper with no file yet. Rendering the
-     * typeset cover there keeps the page's shape and says something true, which
-     * an empty column would not.
-     */
-    fallback?: React.ReactNode;
 }) {
     const [data, setData] = useState<PreviewData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -114,25 +106,34 @@ export default function DocumentPreview({
 
     if (loading) {
         return (
-            <figure className="surface overflow-hidden">
-                <div className="flex aspect-[1/1.294] w-full items-center justify-center bg-paper">
+            <section className="mt-10">
+                <h2 className="overline mb-4">Look inside</h2>
+                <figure className="surface flex h-64 items-center justify-center overflow-hidden bg-paper">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
                     <span className="sr-only">Loading the preview</span>
-                </div>
-            </figure>
+                </figure>
+            </section>
         );
     }
 
-    // Nothing to show: the typeset cover takes the space rather than leaving a
-    // hole where a document should be.
-    if (!data || data.pages.length === 0) return <>{fallback ?? null}</>;
+    /*
+     * Nothing to show, so nothing is shown — heading included.
+     *
+     * A legacy .doc, a scan in a filter this build does not read, a paper whose
+     * file is generated on first download: all real, and all better served by
+     * the page simply not claiming to have a preview. The typeset cover in the
+     * buy rail is still there, doing the job it was always doing.
+     */
+    if (!data || data.pages.length === 0) return null;
 
     const shown = data.pages.length;
     const total = data.totalPages;
     const moreToCome = !owned && (total === null || total > shown);
 
     return (
-        <figure className="surface overflow-hidden">
+        <section className="mt-10">
+            <h2 className="overline mb-4">Look inside</h2>
+            <figure className="surface overflow-hidden">
             {/* Reader chrome. Page counter left, movement right — the
                 arrangement every document reader uses, so nobody has to learn
                 this one. */}
@@ -165,7 +166,7 @@ export default function DocumentPreview({
 
             <div
                 ref={scroller}
-                className="scroll-panel max-h-[70vh] space-y-4 overflow-y-auto bg-secondary/40 p-4"
+                className="scroll-panel max-h-[75vh] space-y-4 overflow-y-auto bg-secondary/40 p-4"
             >
                 {data.pages.map((page, index) => (
                     <div
@@ -173,7 +174,7 @@ export default function DocumentPreview({
                         ref={(el) => {
                             pageRefs.current[index] = el;
                         }}
-                        className="mx-auto w-full max-w-[520px] overflow-hidden rounded-sm bg-paper shadow-sm ring-1 ring-border"
+                        className="mx-auto w-full max-w-[680px] overflow-hidden rounded-sm bg-paper shadow-sm ring-1 ring-border"
                     >
                         <PageBody page={page} title={paper.title} index={index} />
                     </div>
@@ -181,7 +182,7 @@ export default function DocumentPreview({
 
                 {/* Where the preview stops. A closed door, not a cut cable. */}
                 {moreToCome && (
-                    <div className="mx-auto w-full max-w-[520px] rounded-sm bg-paper px-6 py-10 text-center shadow-sm ring-1 ring-border">
+                    <div className="mx-auto w-full max-w-[680px] rounded-sm bg-paper px-6 py-10 text-center shadow-sm ring-1 ring-border">
                         <Lock className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
                         <p className="heading-ui mt-3">
                             {total === null
@@ -201,7 +202,8 @@ export default function DocumentPreview({
                     </div>
                 )}
             </div>
-        </figure>
+            </figure>
+        </section>
     );
 }
 
@@ -223,7 +225,7 @@ function PageBody({ page, title, index }: { page: PreviewPage; title: string; in
     if (page.kind === 'html') {
         return (
             <div
-                className="preview-page px-6 py-7 font-serif text-[12px] leading-relaxed text-foreground"
+                className="preview-page px-8 py-8 font-serif text-[13px] leading-relaxed text-foreground"
                 /*
                  * Sanitised server-side down to an allowlist of tags with every
                  * attribute stripped — see `sanitiseHtml`. There is no `href`,
@@ -235,7 +237,7 @@ function PageBody({ page, title, index }: { page: PreviewPage; title: string; in
     }
 
     return (
-        <pre className="whitespace-pre-wrap break-words px-6 py-7 font-serif text-[12px] leading-relaxed text-foreground">
+        <pre className="whitespace-pre-wrap break-words px-8 py-8 font-serif text-[13px] leading-relaxed text-foreground">
             {page.text}
         </pre>
     );
