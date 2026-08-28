@@ -1,6 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
-import { resourceKindName } from '@/lib/resources';
+import { isSittable, resourceKindName } from '@/lib/resources';
 import { examTypeName, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
 
@@ -91,9 +91,14 @@ export default function PaperCover({ paper }: { paper: PaperListing }) {
                             </dl>
                         </div>
 
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                            Do not open this paper until told to do so
-                        </p>
+                        {/* An instruction to a candidate, so it belongs only on
+                            something a candidate sits. A scheme of work is read
+                            by the teacher who bought it. */}
+                        {isSittable(paper.resource_kind) && (
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                                Do not open this paper until told to do so
+                            </p>
+                        )}
                     </div>
                 )}
             </div>

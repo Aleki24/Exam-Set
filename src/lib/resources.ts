@@ -267,6 +267,24 @@ export function resourceKindName(slug?: string | null): string {
 }
 
 /** Every kind offered at a level, in taxonomy order. */
+/**
+ * Whether this kind is something a candidate sits, rather than a document a
+ * teacher works from.
+ *
+ * The distinction already existed on `ResourceKindDef.document`; this is it
+ * asked from a listing, where all anyone has is the slug. Three places need it
+ * for the same reason: a scheme of work was being described in exam language —
+ * "EXAM" over its title, "the full question paper", "do not open this paper
+ * until told to do so" — which was harmless while the shop sold only papers and
+ * is wrong now that Word documents are the point.
+ *
+ * Unknown kinds are treated as sittable, matching the column default.
+ */
+export function isSittable(slug?: string | null): boolean {
+    const kind = RESOURCE_KIND_BY_SLUG[String(slug ?? '')];
+    return kind ? !kind.document : true;
+}
+
 export function kindsForLevel(level?: LevelSlug | null): ResourceKindDef[] {
     if (!level) return RESOURCE_KINDS;
     return RESOURCE_KINDS.filter((k) => !k.levels || k.levels.includes(level));

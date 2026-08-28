@@ -12,6 +12,7 @@ import PaperCover from '@/components/shop/PaperCover';
 import DocumentPreview from '@/components/shop/DocumentPreview';
 import { useCart } from '@/lib/cart';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
+import { isSittable, resourceKindName } from '@/lib/resources';
 import type { PaperListing } from '@/types/shop';
 import { recordView, enqueueDownload } from '@/lib/recentlyViewed';
 
@@ -259,7 +260,16 @@ export default function PaperDetailPage() {
                                 {paper.set_name}
                             </Link>
                         ) : (
-                            <p className="overline mb-3">{examTypeName(paper.exam_type)}</p>
+                            /* What the artefact is, when it is not part of a
+                               sitting. `examTypeName` alone printed "EXAM" over
+                               a scheme of work, which is the one thing a scheme
+                               of work is not — and Word support makes those the
+                               common listing rather than the rare one. */
+                            <p className="overline mb-3">
+                                {paper.exam_type
+                                    ? examTypeName(paper.exam_type)
+                                    : resourceKindName(paper.resource_kind)}
+                            </p>
                         )}
                         <h1 className="display-2">{paper.title}</h1>
                         <p className="meta mt-3">
@@ -290,7 +300,10 @@ export default function PaperDetailPage() {
                                 <li className="flex items-start gap-3">
                                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                                     <span>
-                                        The full question paper
+                                        The full{' '}
+                                        {isSittable(paper.resource_kind)
+                                            ? 'question paper'
+                                            : resourceKindName(paper.resource_kind).toLowerCase()}
                                         {paper.file_format ? ` as a ${paper.file_format} file` : ''}
                                         {paper.institution ? ` (${paper.institution} format)` : ''}
                                     </span>
@@ -299,8 +312,8 @@ export default function PaperDetailPage() {
                                     <li className="flex items-start gap-3">
                                         <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                                         <span>
-                                            Editable in Word — change the school name, the date and the
-                                            questions before you print it
+                                            Editable in Word — put your own school name, dates and wording
+                                            on it before you use it
                                         </span>
                                     </li>
                                 )}
@@ -320,28 +333,33 @@ export default function PaperDetailPage() {
                         {paper.institution && (
                             <p className="mt-4 text-xs text-muted-foreground">Source: {paper.institution}</p>
                         )}
+
+                        {/* The document itself.
+                            
+                            This lives in the main column rather than beside the
+                            price, where it first went: a reader squeezed into a
+                            340px rail renders a scheme of work's table four
+                            words to a column, which is exactly the document
+                            somebody is trying to judge. The typeset cover stays
+                            in the rail, where a thumbnail is all that fits and
+                            all that is wanted. */}
+                        <DocumentPreview paper={paper} owned={owned} onBuy={() => cart.add(paper)} />
                     </div>
 
                     {/* Buy panel */}
                     <aside>
                         <div className="sticky top-24 space-y-4">
-                        {/* The real document where one can be read, the
-                            typeset cover where it cannot. A buyer choosing
-                            between four Grade 9 Mathematics papers cannot open
-                            any of them, and the cover — honest as it is — shows
-                            nothing of what is inside. */}
-                        <DocumentPreview
-                            paper={paper}
-                            owned={owned}
-                            onBuy={() => cart.add(paper)}
-                            fallback={<PaperCover paper={paper} />}
-                        />
+                        <PaperCover paper={paper} />
                         <div className="surface p-5">
-                            <div className="flex items-baseline justify-between">
-                                <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
-                                    {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
-                                </span>
-                                <span className="flex flex-wrap justify-end gap-1.5">
+                            {/* The price gets its own line. Sharing one with
+                                two badges wrapped "KES 30" onto two lines in a
+                                340px rail — the single number a buyer is
+                                looking for, broken in half. */}
+                            <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
+                                {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
+                            </span>
+                            {(paper.file_format || paper.has_marking_scheme) && (
+                                <div className="mt-2.5 flex flex-wrap gap-1.5">
                                     {paper.file_format && (
                                         <span className="badge-soft">
                                             {paper.editable ? (
@@ -358,8 +376,8 @@ export default function PaperDetailPage() {
                                             Scheme included
                                         </span>
                                     )}
-                                </span>
-                            </div>
+                                </div>
+                            )}
 
                             <div className="mt-5 space-y-2">
                                 {owned || isFree ? (
