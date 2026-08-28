@@ -5,6 +5,7 @@ import { EXAM_TYPE_BY_SLUG, LEVEL_BY_SLUG } from '@/lib/catalog';
 import { RESOURCE_KIND_BY_SLUG } from '@/lib/resources';
 import { toListing } from '@/lib/paperMapper';
 import { requireAdmin } from '@/utils/auth/guards';
+import { PAPER_FORMAT_HINT, formatByExtension, resolvePaperFormat } from '@/lib/uploadFormats';
 import {
     forgetStockedSets,
     setFingerprint,
@@ -14,14 +15,16 @@ import {
 } from '@/lib/examSets';
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB — comfortably more than any paper
-const ALLOWED = new Set(['application/pdf']);
 
 /**
  * POST /api/papers/upload — stock the shop with an existing paper.
  *
- * Multipart: `paper` (PDF, required), `scheme` (PDF, optional) and a `meta`
- * JSON blob. This is how past papers, county mocks and school exams get in;
- * papers assembled from the question bank go through POST /api/papers instead.
+ * Multipart: `paper` (required), `scheme` (optional) and a `meta` JSON blob.
+ * Both files may be a PDF or a Word document — see `lib/uploadFormats` for the
+ * one list of what that means and why the browser's own content type is not
+ * trusted on its own. This is how past papers, county mocks and school exams
+ * get in; papers assembled from the question bank go through POST /api/papers
+ * instead.
  */
 export async function POST(req: NextRequest) {
     try {
@@ -91,7 +94,29 @@ export async function POST(req: NextRequest) {
             }
 
             if (!claimed) {
-                return NextResponse.json({ error: 'Attach the question paper PDF' }, { status: 400 });
+                return NextResponse.json({ error: 'Attach the question paper' }, { status: 400 });
+            }
+
+            /*
+             * The key's extension is the only record of the file's format, and
+             * every reader downstream trusts it — the download filename, the
+             * WhatsApp document, the badge in the shop. A key with an extension
+             * this build does not know would be served as a PDF whatever it
+             * holds, so it is refused here rather than mislabelled forever.
+             *
+             * Keys are minted by the ticket route, so reaching this is a client
+             * that skipped it or a build that dropped a format.
+             */
+            for (const [label, key] of [
+                ['question paper', claimed],
+                ['marking scheme', claimedScheme],
+            ] as const) {
+                if (key && !formatByExtension(key)) {
+                    return NextResponse.json(
+                        { error: `That ${label} is not a ${PAPER_FORMAT_HINT} file` },
+                        { status: 400 }
+                    );
+                }
             }
 
             paperKey = claimed;
@@ -103,7 +128,7 @@ export async function POST(req: NextRequest) {
             const metaRaw = form.get('meta');
 
             if (!paperFile) {
-                return NextResponse.json({ error: 'Attach the question paper PDF' }, { status: 400 });
+                return NextResponse.json({ error: 'Attach the question paper' }, { status: 400 });
             }
             if (!metaRaw || typeof metaRaw !== 'string') {
                 return NextResponse.json({ error: 'Missing paper details' }, { status: 400 });
@@ -114,13 +139,21 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: 'A title and subject are required' }, { status: 400 });
             }
 
-            for (const [label, file] of [
-                ['question paper', paperFile],
-                ['marking scheme', schemeFile],
+            const paperFormat = resolvePaperFormat({ name: paperFile.name, type: paperFile.type });
+            const schemeFormat = schemeFile
+                ? resolvePaperFormat({ name: schemeFile.name, type: schemeFile.type })
+                : null;
+
+            for (const [label, file, format] of [
+                ['question paper', paperFile, paperFormat],
+                ['marking scheme', schemeFile, schemeFormat],
             ] as const) {
                 if (!file) continue;
-                if (!ALLOWED.has(file.type)) {
-                    return NextResponse.json({ error: `The ${label} must be a PDF` }, { status: 400 });
+                if (!format) {
+                    return NextResponse.json(
+                        { error: `The ${label} must be a ${PAPER_FORMAT_HINT} file` },
+                        { status: 400 }
+                    );
                 }
                 if (file.size > MAX_BYTES) {
                     return NextResponse.json(
@@ -136,18 +169,22 @@ export async function POST(req: NextRequest) {
                 slugify(`${meta.grade_label || ''} ${meta.year || ''} ${meta.title}`) || 'paper';
             const base = `papers/${actor.id}/${Date.now()}-${localStem}`;
 
+            // Stored under the canonical content type for the resolved format,
+            // never the one the browser volunteered: the bucket's mime list is
+            // the same list this app validates against, and it has never heard
+            // of `application/octet-stream`.
             const paperUpload = await putObject(
-                `${base}.pdf`,
+                `${base}${paperFormat!.extension}`,
                 Buffer.from(await paperFile.arrayBuffer()),
-                'application/pdf'
+                paperFormat!.contentType
             );
             paperKey = paperUpload.key;
 
             if (schemeFile && schemeFile.size > 0) {
                 const schemeUpload = await putObject(
-                    `${base}-marking-scheme.pdf`,
+                    `${base}-marking-scheme${schemeFormat!.extension}`,
                     Buffer.from(await schemeFile.arrayBuffer()),
-                    'application/pdf'
+                    schemeFormat!.contentType
                 );
                 schemeKey = schemeUpload.key;
             }

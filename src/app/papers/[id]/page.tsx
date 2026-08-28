@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, ClipboardCheck, Download, Infinity as InfinityIcon, Loader2, Plus, School, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ClipboardCheck, Download, FileText, Infinity as InfinityIcon, Loader2, Pencil, Plus, School, ShieldCheck, Zap } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import PaperCard from '@/components/shop/PaperCard';
@@ -281,13 +281,28 @@ export default function PaperDetailPage() {
                         <div className="mt-10">
                             <h2 className="overline mb-4">What you get</h2>
                             <ul className="space-y-3 text-sm">
+                                {/* The format is a promise, so it is read off
+                                    the stored file rather than asserted. This
+                                    line said "print-ready PDF" for every paper
+                                    in the shop, which stopped being true the day
+                                    Word documents were accepted. */}
                                 <li className="flex items-start gap-3">
                                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                                     <span>
-                                        The full question paper as a print-ready PDF
+                                        The full question paper
+                                        {paper.file_format ? ` as a ${paper.file_format} file` : ''}
                                         {paper.institution ? ` (${paper.institution} format)` : ''}
                                     </span>
                                 </li>
+                                {paper.editable && (
+                                    <li className="flex items-start gap-3">
+                                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                                        <span>
+                                            Editable in Word — change the school name, the date and the
+                                            questions before you print it
+                                        </span>
+                                    </li>
+                                )}
                                 {paper.has_marking_scheme && (
                                     <li className="flex items-start gap-3">
                                         <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
@@ -315,12 +330,24 @@ export default function PaperDetailPage() {
                                 <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
                                     {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
                                 </span>
-                                {paper.has_marking_scheme && (
-                                    <span className="badge-soft">
-                                        <ClipboardCheck className="h-3 w-3" />
-                                        Scheme included
-                                    </span>
-                                )}
+                                <span className="flex flex-wrap justify-end gap-1.5">
+                                    {paper.file_format && (
+                                        <span className="badge-soft">
+                                            {paper.editable ? (
+                                                <Pencil className="h-3 w-3" />
+                                            ) : (
+                                                <FileText className="h-3 w-3" />
+                                            )}
+                                            {paper.file_format}
+                                        </span>
+                                    )}
+                                    {paper.has_marking_scheme && (
+                                        <span className="badge-soft">
+                                            <ClipboardCheck className="h-3 w-3" />
+                                            Scheme included
+                                        </span>
+                                    )}
+                                </span>
                             </div>
 
                             <div className="mt-5 space-y-2">
@@ -401,6 +428,11 @@ export default function PaperDetailPage() {
                                 <Assurance icon={InfinityIcon}>
                                     Yours to download again, any time, from your library.
                                 </Assurance>
+                                {paper.editable && (
+                                    <Assurance icon={Pencil}>
+                                        A Word file, so you can edit it before you use it.
+                                    </Assurance>
+                                )}
                                 {paper.has_marking_scheme && (
                                     <Assurance icon={ClipboardCheck}>
                                         The marking scheme comes with it, with answers and mark

@@ -2,22 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { requireAdmin } from '@/utils/auth/guards';
 import { signedUploadTicket, storageUnavailableReason } from '@/utils/storage';
+import { PAPER_FORMAT_HINT, resolvePaperFormat } from '@/lib/uploadFormats';
 
 /**
  * 25 MB, because that is what the bucket itself enforces.
  *
  * Supabase Storage carries its own `file_size_limit` (25 MB on the `exam-papers`
- * bucket) and its own `allowed_mime_types` (PDF only). Letting this route
- * authorise more than the bucket accepts would just move the confusing failure
- * one layer down: the browser would upload happily for a minute and then be
- * refused by storage, with nothing in this app able to explain why. Raising the
- * ceiling means raising it in both places.
+ * bucket) and its own `allowed_mime_types`. Letting this route authorise more
+ * than the bucket accepts would just move the confusing failure one layer down:
+ * the browser would upload happily for a minute and then be refused by storage,
+ * with nothing in this app able to explain why. Raising the ceiling means
+ * raising it in both places, and so does adding a format — migration
+ * 034_word_uploads.sql is the bucket's half of `lib/uploadFormats`.
  *
  * It is still five times what a serverless request body allowed, which is the
  * point — a scanned past paper fits now.
  */
 const MAX_BYTES = 25 * 1024 * 1024;
-const ALLOWED = new Set(['application/pdf']);
 
 /**
  * POST /api/papers/upload/sign — permission to put a paper in the bucket.
@@ -34,7 +35,9 @@ const ALLOWED = new Set(['application/pdf']);
  *
  * The keys are minted here rather than accepted from the caller. A browser that
  * could name its own key could write over another seller's paper, or park a
- * file outside the prefix the finalising step trusts.
+ * file outside the prefix the finalising step trusts. Their extension is the
+ * only record of what format the file is in — see `formatFromKey` — so it is
+ * taken from the resolved format and never from the name the browser sent.
  */
 export async function POST(req: NextRequest) {
     try {
@@ -48,17 +51,32 @@ export async function POST(req: NextRequest) {
 
         const body = await req.json();
         const stem = slugify(String(body?.stem || '')) || 'paper';
-        const wants: { kind: string; contentType: string; size: number }[] = Array.isArray(body?.files)
-            ? body.files
-            : [];
+        const wants: { kind: string; contentType: string; size: number; filename?: string }[] =
+            Array.isArray(body?.files) ? body.files : [];
 
         if (wants.length === 0) {
             return NextResponse.json({ error: 'Nothing to upload' }, { status: 400 });
         }
 
-        for (const file of wants) {
-            if (!ALLOWED.has(file.contentType)) {
-                return NextResponse.json({ error: 'Papers and marking schemes must be PDFs' }, { status: 400 });
+        /*
+         * Resolved here as well as in the browser, and from the same module.
+         *
+         * The filename travels with the request precisely so this side can make
+         * the same decision the picker did: a device that reports a .docx as
+         * `application/octet-stream` would otherwise be refused by the server
+         * after the picker had accepted it, which is a rejection nobody can
+         * explain from either end.
+         */
+        const resolved = wants.map((file) =>
+            resolvePaperFormat({ name: file.filename, type: file.contentType })
+        );
+
+        for (const [index, file] of wants.entries()) {
+            if (!resolved[index]) {
+                return NextResponse.json(
+                    { error: `Papers and marking schemes must be ${PAPER_FORMAT_HINT} files` },
+                    { status: 400 }
+                );
             }
             if (Number(file.size) > MAX_BYTES) {
                 return NextResponse.json(
@@ -73,10 +91,14 @@ export async function POST(req: NextRequest) {
         const base = `papers/${actor.id}/${Date.now()}-${stem}`;
 
         const tickets = await Promise.all(
-            wants.map(async (file) => {
-                const key = file.kind === 'scheme' ? `${base}-marking-scheme.pdf` : `${base}.pdf`;
-                const ticket = await signedUploadTicket(key, file.contentType);
-                return { kind: file.kind, ...ticket };
+            wants.map(async (file, index) => {
+                const format = resolved[index]!;
+                const keyBase = file.kind === 'scheme' ? `${base}-marking-scheme` : base;
+                // The canonical content type, not the one the browser sent: the
+                // bucket's mime list and R2's signature both check this header,
+                // and neither has heard of `application/octet-stream`.
+                const ticket = await signedUploadTicket(`${keyBase}${format.extension}`, format.contentType);
+                return { kind: file.kind, format: format.format, ...ticket };
             })
         );
 

@@ -799,12 +799,30 @@ GRANT EXECUTE ON FUNCTION admin_sales_summary() TO authenticated;
 -- /api/papers/[id]/download after it has checked entitlement.
 -- ============================================================================
 
+-- Word documents are accepted alongside PDFs — a scheme of work is bought to be
+-- edited, not printed. This list is the bucket's copy of the one in
+-- `src/lib/uploadFormats.ts`; the two have to agree, or the app authorises an
+-- upload that storage then refuses with nothing able to explain it.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('exam-papers', 'exam-papers', FALSE, 26214400, ARRAY['application/pdf'])
+VALUES (
+    'exam-papers',
+    'exam-papers',
+    FALSE,
+    26214400,
+    ARRAY[
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword'
+    ]
+)
 ON CONFLICT (id) DO UPDATE
     SET public = FALSE,
         file_size_limit = 26214400,
-        allowed_mime_types = ARRAY['application/pdf'];
+        allowed_mime_types = ARRAY[
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/msword'
+        ];
 
 
 -- ============================================================================

@@ -6,6 +6,7 @@
  */
 
 import type { PaperListing } from '@/types/shop';
+import { describeFormats, formatFromKey } from '@/lib/uploadFormats';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function toListing(row: any): PaperListing {
@@ -48,11 +49,48 @@ export function toListing(row: any): PaperListing {
         // into it puts the file beside the price tag.
         has_marking_scheme: row.has_marking_scheme ?? false,
         preview_pages: row.preview_pages ?? 1,
+        /*
+         * The format, but never the link.
+         *
+         * The keys are read here and thrown away — what leaves is the word
+         * "PDF" or "Word". Teachers buying a scheme of work care a great deal
+         * which one it is (a scheme is bought to be edited), and it is the one
+         * fact about the file that was impossible to learn before paying.
+         *
+         * A row selected without its storage keys simply has no format, rather
+         * than a wrong one: `has_marking_scheme` says whether a scheme exists,
+         * so a scheme key is only consulted when it does.
+         */
+        file_format: formatsFor(row),
+        editable: editableFor(row),
         download_count: row.download_count ?? 0,
         purchase_count: row.purchase_count ?? 0,
         created_by: row.created_by ?? undefined,
         created_at: row.created_at,
         published_at: row.published_at ?? undefined,
     };
+}
+
+/**
+ * The storage keys this listing's files live at, paper first.
+ *
+ * `marking_scheme_storage_key` is only consulted when the row says there is a
+ * scheme: a generated paper's scheme key is written on first download, so a row
+ * can carry one for a scheme the shop does not advertise.
+ */
+function fileKeys(row: any): string[] {
+    return [row.pdf_storage_key, row.has_marking_scheme ? row.marking_scheme_storage_key : null].filter(
+        (key): key is string => typeof key === 'string' && key.length > 0
+    );
+}
+
+function formatsFor(row: any): string | undefined {
+    const keys = fileKeys(row);
+    return keys.length > 0 ? describeFormats(keys) : undefined;
+}
+
+function editableFor(row: any): boolean | undefined {
+    const keys = fileKeys(row);
+    return keys.length > 0 ? keys.some((key) => formatFromKey(key).editable) : undefined;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

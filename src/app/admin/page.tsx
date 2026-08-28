@@ -633,7 +633,7 @@ function CatalogTable({
                 <FileUp className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
                 <h2 className="title-2">No papers listed yet</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                    Drop a folder of PDFs and let the covers be read for you, upload one at a time,
+                    Drop a folder of papers — PDF or Word — and let the covers be read for you, upload one at a time,
                     or build a paper in the setter and publish it.
                 </p>
                 <div className="mt-5 flex flex-wrap justify-center gap-2">

@@ -4,11 +4,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, FileUp, Loader2, Lock, Upload, X } from 'lucide-react';
+import { ArrowLeft, FileUp, Layers, Loader2, Lock, Upload, X } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { useRole } from '@/lib/roles';
 import { EXAM_TYPES, EXAM_TYPE_GROUPS, LEVELS, TERMS, catalogYears, formatPrice } from '@/lib/catalog';
 import { canSuggestSet, describeSet, suggestSetName, type ExamSetSummary, type SetFields } from '@/lib/examSets';
+import {
+    PAPER_FILE_ACCEPT,
+    PAPER_FORMAT_HINT,
+    resolvePaperFormat,
+    titleFromFilename,
+    type PaperFormatSpec,
+} from '@/lib/uploadFormats';
 
 /**
  * Which sitting the paper being uploaded belongs to.
@@ -18,6 +25,10 @@ import { canSuggestSet, describeSet, suggestSetName, type ExamSetSummary, type S
  *   'new'         create one, named `newSetName`
  */
 type SetChoice = { mode: '' | 'new' | 'existing'; setId?: string; newSetName: string };
+
+/** What the bucket and both upload routes enforce. Checked here so a 20-minute
+ * upload on a Kenyan mobile connection is not how somebody finds out. */
+const MAX_BYTES = 25 * 1024 * 1024;
 
 /**
  * Upload a paper for sale. Admin and owner only — this is how the shop gets
@@ -60,10 +71,45 @@ export default function UploadPaperPage() {
 
     const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
 
+    /**
+     * Everything that happens when a file is chosen, wherever it came from.
+     *
+     * The format and the size are checked here rather than on submit. Both are
+     * refused later anyway — by the ticket route, and by the bucket after that —
+     * but "later" on this page means after the metadata has been filled in and,
+     * for the size, after the bytes have crossed a mobile connection. A picker
+     * that says no immediately costs nothing.
+     */
+    const choose = (kind: 'paper' | 'scheme') => (file: File | null) => {
+        const store = kind === 'paper' ? setPaperFile : setSchemeFile;
+        const label = kind === 'paper' ? 'question paper' : 'marking scheme';
+
+        if (!file) {
+            store(null);
+            return;
+        }
+        if (!resolvePaperFormat(file)) {
+            toast.error(`The ${label} must be a ${PAPER_FORMAT_HINT} file`);
+            return;
+        }
+        if (file.size > MAX_BYTES) {
+            toast.error(`That ${label} is ${(file.size / 1024 / 1024).toFixed(0)} MB — the limit is 25 MB`);
+            return;
+        }
+
+        store(file);
+
+        // The paper names itself, so the first required field can fill itself in.
+        if (kind === 'paper' && !form.title.trim()) {
+            const suggested = titleFromFilename(file.name);
+            if (suggested) set({ title: suggested });
+        }
+    };
+
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!paperFile) {
-            toast.error('Attach the question paper PDF');
+            toast.error(`Attach the question paper — ${PAPER_FORMAT_HINT}`);
             return;
         }
         if (!form.title.trim() || !form.subject.trim()) {
@@ -101,10 +147,30 @@ export default function UploadPaperPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     stem: `${form.grade_label || ''} ${form.year || ''} ${form.title}`,
+                    /*
+                     * The filename travels with the content type because on a
+                     * good number of devices the content type alone is
+                     * worthless: Android's picker and Windows without Office
+                     * both report a .docx as `application/octet-stream`. The
+                     * server resolves the pair with the same module this page
+                     * does, so the two never disagree about what was picked.
+                     */
                     files: [
-                        { kind: 'paper', contentType: paperFile.type, size: paperFile.size },
+                        {
+                            kind: 'paper',
+                            filename: paperFile.name,
+                            contentType: paperFile.type,
+                            size: paperFile.size,
+                        },
                         ...(schemeFile
-                            ? [{ kind: 'scheme', contentType: schemeFile.type, size: schemeFile.size }]
+                            ? [
+                                  {
+                                      kind: 'scheme',
+                                      filename: schemeFile.name,
+                                      contentType: schemeFile.type,
+                                      size: schemeFile.size,
+                                  },
+                              ]
                             : []),
                     ],
                 }),
@@ -236,9 +302,17 @@ export default function UploadPaperPage() {
                 <p className="overline mb-2">Admin</p>
                 <h1 className="display-2">Upload a paper for sale</h1>
                 <p className="lead mt-3 text-sm sm:text-base">
-                    The PDF is stored privately. Buyers only ever get a short-lived signed link, and only after they
-                    have paid.
+                    PDF or Word, stored privately. Buyers only ever get a short-lived signed link, and only after
+                    they have paid.
                 </p>
+
+                <Link
+                    href="/papers/bulk"
+                    className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+                >
+                    <Layers className="h-4 w-4" aria-hidden />
+                    Uploading a folder? Drop the whole stack instead
+                </Link>
 
                 <form onSubmit={submit} className="mt-8 space-y-8">
                     {/* Files */}
@@ -249,21 +323,24 @@ export default function UploadPaperPage() {
 
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
                             <FilePicker
-                                label="Question paper (PDF)"
+                                label="Question paper"
                                 required
                                 file={paperFile}
                                 inputRef={paperInput}
-                                onPick={setPaperFile}
+                                onPick={choose('paper')}
                             />
                             <FilePicker
-                                label="Marking scheme (PDF, optional)"
+                                label="Marking scheme (optional)"
                                 file={schemeFile}
                                 inputRef={schemeInput}
-                                onPick={setSchemeFile}
+                                onPick={choose('scheme')}
                             />
                         </div>
                         <p className="mt-3 text-xs text-muted-foreground">
-                            Papers that come with a marking scheme sell noticeably better — buyers filter for it.
+                            {PAPER_FORMAT_HINT}, up to 25 MB each. A Word file stays editable for the buyer, which
+                            is what a teacher wants from a scheme of work or a lesson plan; a past paper is usually
+                            better as a PDF. Papers that come with a marking scheme sell noticeably better — buyers
+                            filter for it.
                         </p>
                     </section>
 
@@ -662,6 +739,16 @@ function SetPicker({
     );
 }
 
+/**
+ * One file, chosen however the uploader finds it easiest.
+ *
+ * The button was the only way in, which on a desktop is the slow way: the file
+ * is usually already visible in a folder next to the browser. Dropping it is
+ * one gesture instead of four, and on a phone the button is untouched.
+ *
+ * `onPick` does the validating — see `choose` above — so this stays a picker
+ * and there is exactly one place that decides what is acceptable.
+ */
 function FilePicker({
     label,
     file,
@@ -675,13 +762,16 @@ function FilePicker({
     inputRef: React.RefObject<HTMLInputElement | null>;
     onPick: (file: File | null) => void;
 }) {
+    const [dragging, setDragging] = useState(false);
+    const format: PaperFormatSpec | null = file ? resolvePaperFormat(file) : null;
+
     return (
         <div>
             <span className="label">{label}</span>
             <input
                 ref={inputRef}
                 type="file"
-                accept="application/pdf"
+                accept={PAPER_FILE_ACCEPT}
                 className="hidden"
                 onChange={(e) => onPick(e.target.files?.[0] ?? null)}
             />
@@ -690,6 +780,9 @@ function FilePicker({
                 <div className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5">
                     <FileUp className="h-4 w-4 shrink-0 text-primary" />
                     <span className="min-w-0 flex-1 truncate text-sm">{file.name}</span>
+                    {format && (
+                        <span className="badge-soft shrink-0 text-[10px] uppercase">{format.label}</span>
+                    )}
                     <span className="figure shrink-0 text-[11px] text-muted-foreground">
                         {(file.size / 1024 / 1024).toFixed(1)} MB
                     </span>
@@ -709,10 +802,24 @@ function FilePicker({
                 <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
-                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 text-sm font-semibold text-muted-foreground transition-all duration-150 hover:border-primary hover:bg-primary/[0.03] hover:text-foreground"
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragging(true);
+                    }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        setDragging(false);
+                        onPick(e.dataTransfer.files?.[0] ?? null);
+                    }}
+                    className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-dashed px-3 text-sm font-semibold transition-all duration-150 ${
+                        dragging
+                            ? 'border-primary bg-primary/[0.06] text-foreground'
+                            : 'border-border text-muted-foreground hover:border-primary hover:bg-primary/[0.03] hover:text-foreground'
+                    }`}
                 >
                     <FileUp className="h-4 w-4" />
-                    Choose PDF{required ? '' : ' (optional)'}
+                    {dragging ? 'Drop it here' : `Choose or drop a file${required ? '' : ' (optional)'}`}
                 </button>
             )}
         </div>
