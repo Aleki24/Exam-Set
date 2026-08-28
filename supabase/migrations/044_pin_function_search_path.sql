@@ -1,3 +1,4 @@
+-- Migration 044.
 -- Pin the search_path on the three trigger functions that did not have one.
 --
 -- Supabase's security linter flags `function_search_path_mutable` on all three.
