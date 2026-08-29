@@ -1,6 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
-import { isSittable, resourceKindName } from '@/lib/resources';
+import { resourceKindName } from '@/lib/resources';
 import { examTypeName, LEVEL_BY_SLUG, TERMS } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
 
@@ -164,14 +164,24 @@ function CoverPage({ paper }: { paper: PaperListing }) {
                             </dl>
                         </div>
 
-                        {/* An instruction to a candidate, so it belongs only on
-                            something a candidate sits. A scheme of work is read
-                            by the teacher who bought it. */}
-                        {isSittable(paper.resource_kind) && (
-                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                                Do not open this paper until told to do so
-                            </p>
-                        )}
+                        {/*
+                          * No invigilation line here.
+                          *
+                          * "Do not open this paper until told to do so" is
+                          * addressed to a candidate in an exam hall, and nobody
+                          * standing in a shop is one. To a teacher deciding
+                          * whether to spend KES 30 it reads as a locked door —
+                          * a paper that is not yet theirs to open — which is the
+                          * opposite of what a cover is for.
+                          *
+                          * It was also a claim about a document nobody had read.
+                          * This cover is drawn when a paper has no thumbnail, so
+                          * every other line on it comes from the row: the title,
+                          * the class, the sitting, the marks. That sentence came
+                          * from nowhere, and printing invented front matter in
+                          * the place where the real first page belongs says the
+                          * document contains something it may not.
+                          */}
                     </div>
             )}
         </>
