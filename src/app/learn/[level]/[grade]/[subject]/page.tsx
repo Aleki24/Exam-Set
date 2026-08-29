@@ -5,7 +5,7 @@ import { ChevronRight, FileQuestion } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import { createClient } from '@/utils/supabase/server';
-import { LEVEL_BY_SLUG, formatPrice, examTypeName, type LevelSlug } from '@/lib/catalog';
+import { LEVEL_BY_SLUG, formatPrice, examTypeName, gradeFromSlug, gradeSlug, type LevelSlug } from '@/lib/catalog';
 import {
     RESOURCE_FAMILIES,
     RESOURCE_KIND_BY_SLUG,
@@ -17,18 +17,19 @@ import {
 } from '@/lib/resources';
 
 interface Params {
-    params: Promise<{ level: string; subject: string }>;
+    params: Promise<{ level: string; grade: string; subject: string }>;
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
-    const { level: levelSlug, subject: subjectSlug } = await params;
+    const { level: levelSlug, grade: gradeParam, subject: subjectSlug } = await params;
     const level = LEVEL_BY_SLUG[levelSlug];
+    const grade = level ? gradeFromSlug(level, gradeParam) : undefined;
     const subject = level ? subjectBySlug(level.slug as LevelSlug, subjectSlug) : undefined;
-    if (!level || !subject) return { title: 'Not found' };
+    if (!level || !grade || !subject) return { title: 'Not found' };
 
     return {
-        title: `${subject.name} — ${level.name} | Skulbase Exams`,
-        description: `${subject.name} papers, marking schemes, notes, schemes of work and lesson plans for ${level.grades.join(', ')}.`,
+        title: `${grade} ${subject.name} — papers, notes and schemes | Skulbase Exams`,
+        description: `${subject.name} papers, marking schemes, notes, schemes of work and lesson plans for ${grade}.`,
     };
 }
 
@@ -49,14 +50,25 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
  * catalogue from the people it is meant to attract.
  */
 export default async function SubjectPage({ params }: Params) {
-    const { level: levelSlug, subject: subjectSlug } = await params;
+    const { level: levelSlug, grade: gradeParam, subject: subjectSlug } = await params;
     const level = LEVEL_BY_SLUG[levelSlug];
     if (!level) notFound();
+
+    /*
+     * The class, not just the level.
+     *
+     * This page used to answer "Mathematics across Junior School", which is
+     * three years of curriculum in one list — a Grade 7 teacher had to read
+     * past Grade 9 papers to find theirs. The grade is now part of the path,
+     * so the shelf is the one a teacher actually stands in front of.
+     */
+    const grade = gradeFromSlug(level, gradeParam);
+    if (!grade) notFound();
 
     const subject = subjectBySlug(level.slug as LevelSlug, subjectSlug);
     if (!subject) notFound();
 
-    const resources = await loadResources(level.slug as LevelSlug, subjectQueryNames(subject));
+    const resources = await loadResources(level.slug as LevelSlug, grade, subjectQueryNames(subject));
 
     // Group by kind, then by family, dropping everything empty. What is left is
     // an honest picture of the shelf rather than a template with gaps in it.
@@ -82,17 +94,19 @@ export default async function SubjectPage({ params }: Params) {
             <TopNav />
 
             <main className="shell-width py-10 sm:py-14">
-                <Breadcrumb level={level} subject={subject.name} />
+                <Breadcrumb level={level} grade={grade} subject={subject.name} />
 
                 <header className="page-header mt-6">
                     <p className="overline">
-                        {level.name} · {level.short}
+                        {level.name} · {grade}
                     </p>
-                    <h1 className="display-2 mt-3">{subject.name}</h1>
+                    <h1 className="display-2 mt-3">
+                        {grade} {subject.name}
+                    </h1>
                     <p className="lead mt-4">
                         {resources.length > 0
-                            ? `${resources.length} resource${resources.length === 1 ? '' : 's'} for ${level.grades.join(', ')}.`
-                            : `Nothing stocked for ${level.name} yet — this is where it will appear.`}
+                            ? `${resources.length} resource${resources.length === 1 ? '' : 's'} for ${grade} ${subject.name}.`
+                            : `Nothing stocked for ${grade} ${subject.name} yet — this is where it will appear.`}
                     </p>
                 </header>
 
@@ -103,16 +117,19 @@ export default async function SubjectPage({ params }: Params) {
                         ))}
                     </div>
                 ) : (
-                    <EmptyShelf level={level.name} subject={subject.name} />
+                    <EmptyShelf level={grade} subject={subject.name} />
                 )}
 
                 {siblings.length > 0 && (
                     <nav aria-label="Other learning areas" className="mt-16 border-t border-border pt-8">
-                        <h2 className="overline">Other learning areas in {level.name}</h2>
+                        <h2 className="overline">Other learning areas in {grade}</h2>
                         <ul className="mt-3 flex flex-wrap gap-2">
                             {siblings.map((other) => (
                                 <li key={other.slug}>
-                                    <Link href={`/learn/${level.slug}/${other.slug}`} className="chip">
+                                    <Link
+                                        href={`/learn/${level.slug}/${gradeSlug(grade)}/${other.slug}`}
+                                        className="chip"
+                                    >
                                         {other.name}
                                     </Link>
                                 </li>
@@ -134,7 +151,7 @@ export default async function SubjectPage({ params }: Params) {
  * shelf to a teacher and two strings to Postgres. Matching only the current
  * name would show half the stock and look like the rest had been lost.
  */
-async function loadResources(level: LevelSlug, names: string[]): Promise<any[]> {
+async function loadResources(level: LevelSlug, grade: string, names: string[]): Promise<any[]> {
     try {
         const supabase = await createClient();
 
@@ -150,6 +167,13 @@ async function loadResources(level: LevelSlug, names: string[]): Promise<any[]> 
             .eq('source', 'catalog')
             .eq('is_published', true)
             .eq('level_slug', level)
+            /*
+             * `grade_label` is free text holding what a teacher wrote — "Grade
+             * 9" — so this matches the label rather than an id, and matches it
+             * case-insensitively because "GRADE 9" and "Grade 9" are the same
+             * class to everyone except Postgres.
+             */
+            .ilike('grade_label', grade)
             .or(`subject.in.(${quoted})`)
             .order('year', { ascending: false, nullsFirst: false })
             .order('created_at', { ascending: false })
@@ -293,7 +317,15 @@ function EmptyShelf({ level, subject }: { level: string; subject: string }) {
     );
 }
 
-function Breadcrumb({ level, subject }: { level: { slug: string; name: string }; subject: string }) {
+function Breadcrumb({
+    level,
+    grade,
+    subject,
+}: {
+    level: { slug: string; name: string };
+    grade: string;
+    subject: string;
+}) {
     return (
         <nav aria-label="Breadcrumb">
             <ol className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -309,7 +341,16 @@ function Breadcrumb({ level, subject }: { level: { slug: string; name: string };
                     </Link>
                 </li>
                 <ChevronRight className="h-3 w-3 shrink-0" aria-hidden />
-                <li aria-current="page" className="text-foreground">
+                <li>
+                    <Link
+                        href={`/learn/${level.slug}/${gradeSlug(grade)}`}
+                        className="transition-colors hover:text-foreground"
+                    >
+                        {grade}
+                    </Link>
+                </li>
+                <ChevronRight className="h-3 w-3 shrink-0" aria-hidden />
+                <li aria-current="page" className="font-semibold text-foreground">
                     {subject}
                 </li>
             </ol>

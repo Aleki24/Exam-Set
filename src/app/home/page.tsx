@@ -9,7 +9,7 @@ import { createClient } from '@/utils/supabase/server';
 import { homeShelves, type Shelf } from '@/services/discoveryService';
 import { loadLearnerProgress, EMPTY_PROGRESS, type LearnerProgress } from '@/services/progressService';
 import { toAccountProfile, EMPTY_ACCOUNT_PROFILE, ACCOUNT_TYPE_BY_SLUG, teaches, type AccountProfile } from '@/lib/accounts';
-import { LEVEL_BY_SLUG, type LevelSlug } from '@/lib/catalog';
+import { LEVEL_BY_SLUG, type LevelSlug, gradeSlug } from '@/lib/catalog';
 import { subjectsForLevel } from '@/lib/resources';
 
 export const metadata: Metadata = {
@@ -78,6 +78,10 @@ export default async function HomePage() {
     const needsSetup = !account.accountType || !account.level;
 
     const subjectList = account.level ? subjectsForLevel(account.level as LevelSlug) : [];
+    /* Only a grade this level actually contains: a stale profile could hold
+       "Grade 4" against Junior School, and that path would 404. */
+    const homeGrade =
+        level && account.grade && level.grades.includes(account.grade) ? account.grade : null;
     const subjects =
         account.subjects.length > 0
             ? subjectList.filter((s) => account.subjects.includes(s.name))
@@ -169,8 +173,23 @@ export default async function HomePage() {
                             {subjects.map((s, index) => (
                                 <li key={s.slug}>
                                     <Link
-                                        href={`/learn/${level.slug}/${s.slug}`}
-                                        className="sheet settle-in group flex items-center justify-between gap-3 p-4"
+                                        /*
+                                         * The class is part of a subject's path
+                                         * now, so a link that names only the
+                                         * level no longer resolves. This
+                                         * account usually knows its own class —
+                                         * that is the whole point of the
+                                         * onboarding — so it goes straight to
+                                         * the shelf; without one, the level page
+                                         * asks which class first rather than
+                                         * guessing.
+                                         */
+                                        href={
+                                            homeGrade
+                                                ? `/learn/${level.slug}/${gradeSlug(homeGrade)}/${s.slug}`
+                                                : `/learn/${level.slug}`
+                                        }
+                                        className="tile settle-in group flex items-center justify-between gap-3 p-4"
                                         style={{ '--i': index % 12 } as React.CSSProperties}
                                     >
                                         <span className="heading-ui transition-colors group-hover:text-primary">

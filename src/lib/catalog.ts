@@ -120,6 +120,27 @@ export const LEVEL_BY_SLUG: Record<string, LevelDef> = Object.fromEntries(
 /** Every grade/form label the catalog knows about, in order. */
 export const ALL_GRADES: string[] = LEVELS.flatMap((l) => l.grades);
 
+/**
+ * A grade's URL form: "Grade 9" becomes "grade-9", "PP1" becomes "pp1".
+ *
+ * Grades are stored as the label a Kenyan teacher writes — `exams.grade_label`
+ * holds "Grade 9", not an id — so the slug is derived rather than stored. That
+ * keeps one source of truth: adding a grade to `LEVELS` is all it takes for its
+ * page to exist, and there is no second list to fall out of step with the
+ * first.
+ */
+export function gradeSlug(grade: string): string {
+    return grade
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+/** The grade a slug names within a level, or undefined when it names none. */
+export function gradeFromSlug(level: LevelDef, slug: string): string | undefined {
+    return level.grades.find((grade) => gradeSlug(grade) === slug);
+}
+
 export function levelForGrade(grade?: string | null): LevelDef | undefined {
     if (!grade) return undefined;
     return LEVELS.find((l) => l.grades.some((g) => g.toLowerCase() === grade.toLowerCase()));
