@@ -104,9 +104,36 @@ export interface PaperFilters {
     /** 'free' | 'paid' | undefined for both */
     price?: 'free' | 'paid';
     search?: string;
+    /**
+     * Search the words literally instead of reading them as filters.
+     *
+     * Off by default: "form 4 maths term 3" is a request, and treating it as a
+     * substring finds nothing. Set when somebody is hunting an exact phrase, or
+     * disagrees with how their sentence was read.
+     */
+    raw?: boolean;
     sort?: 'newest' | 'popular' | 'price-asc' | 'price-desc' | 'title';
     limit?: number;
     offset?: number;
+}
+
+/**
+ * How a typed search was read — see services/paperSearch.ts.
+ *
+ * Sent back with the results so the page can show its work. Search that
+ * silently rewrites itself is search nobody can correct.
+ */
+export interface SearchInterpretation {
+    /** The sentence as typed. */
+    query: string;
+    /** "Form 4 · Mathematics · Term 3" — what was recognised. */
+    label: string;
+    /** The filters the sentence supplied. */
+    applied: { key: string; label: string }[];
+    /** Whatever was left over, searched as free text. */
+    text?: string;
+    /** Filters given up, in order, because nothing matched as asked. */
+    relaxed: string[];
 }
 
 export interface PaperListResponse {
@@ -123,6 +150,11 @@ export interface PaperListResponse {
         /** Keyed by set slug, valued `{ name, count }` — see lib/examSets.ts. */
         sets?: Record<string, { name: string; count: number }>;
     };
+    /**
+     * How the search box was read, when it was read as a request rather than
+     * searched literally. Absent when nothing in it was recognised.
+     */
+    understood?: SearchInterpretation;
 }
 
 // ============================================================================

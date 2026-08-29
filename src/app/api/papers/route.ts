@@ -5,7 +5,13 @@ import { LEVEL_BY_SLUG } from '@/lib/catalog';
 import type { PaperListing } from '@/types/shop';
 import { requireAdmin } from '@/utils/auth/guards';
 import { toListing } from '@/lib/paperMapper';
-import { applyPaperFilters } from '@/services/paperSearch';
+import {
+    applyPaperFilters,
+    interpretSearch,
+    relaxFilters,
+    type CatalogFilters,
+    type SearchInterpretation,
+} from '@/services/paperSearch';
 
 /**
  * GET /api/papers — the shop listing.
@@ -50,39 +56,83 @@ export async function GET(req: NextRequest) {
             setIds = [setRow?.id ?? '00000000-0000-0000-0000-000000000000'];
         }
 
-        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-        let query: any = supabase
-            .from('exams')
-            .select('*, exam_sets (id, name, slug)', { count: 'exact' })
-            .eq('source', 'catalog')
-            .eq('is_published', true);
-
-        // Shared with the WhatsApp bot, so the shop and the chat cannot end up
-        // disagreeing about which papers match a request.
-        query = applyPaperFilters(query, {
+        let filters: CatalogFilters = {
             level, grade, subject, subjectAliases, examType, kind, term, year, setIds, price, search,
-        });
+        };
 
-        switch (sort) {
-            case 'popular':
-                query = query.order('purchase_count', { ascending: false }).order('download_count', { ascending: false });
-                break;
-            case 'price-asc':
-                query = query.order('price_cents', { ascending: true });
-                break;
-            case 'price-desc':
-                query = query.order('price_cents', { ascending: false });
-                break;
-            case 'title':
-                query = query.order('title', { ascending: true });
-                break;
-            default:
-                query = query.order('year', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+        /*
+         * Read the search box as a request, not as a substring.
+         *
+         * "form 4 mathematics term 3" used to become `title ILIKE '%form 4
+         * mathematics term 3%'` and match nothing, because no title is written
+         * that way — the most natural thing anybody can type was the one thing
+         * the shop could not answer. It now becomes the three filters it plainly
+         * describes, using the parser the WhatsApp bot has always used.
+         *
+         * `raw=1` turns it off. Somebody hunting a literal phrase, or correcting
+         * a reading they disagree with, needs a way back to plain text search,
+         * and the response says what was understood so the page can offer it.
+         */
+        let understood: SearchInterpretation | null = null;
+        if (searchParams.get('raw') !== '1') {
+            const read = await interpretSearch(supabase, filters);
+            filters = read.filters;
+            understood = read.understood;
         }
 
-        query = query.range(offset, offset + limit - 1);
+        const run = async (active: CatalogFilters) => {
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            let query: any = supabase
+                .from('exams')
+                .select('*, exam_sets (id, name, slug)', { count: 'exact' })
+                .eq('source', 'catalog')
+                .eq('is_published', true);
 
-        const { data, error, count } = await query;
+            // Shared with the WhatsApp bot, so the shop and the chat cannot end
+            // up disagreeing about which papers match a request.
+            query = applyPaperFilters(query, active);
+
+            switch (sort) {
+                case 'popular':
+                    query = query.order('purchase_count', { ascending: false }).order('download_count', { ascending: false });
+                    break;
+                case 'price-asc':
+                    query = query.order('price_cents', { ascending: true });
+                    break;
+                case 'price-desc':
+                    query = query.order('price_cents', { ascending: false });
+                    break;
+                case 'title':
+                    query = query.order('title', { ascending: true });
+                    break;
+                default:
+                    query = query.order('year', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+            }
+
+            return query.range(offset, offset + limit - 1);
+        };
+
+        let { data, error, count } = await run(filters);
+
+        /*
+         * Nothing matched what the sentence asked for, so ask for less.
+         *
+         * Only ever gives up filters the sentence itself supplied, and only on
+         * the first page — widening mid-scroll would shuffle the results under
+         * somebody's thumb. The response names every filter dropped, because a
+         * search that quietly answers a different question is worse than one
+         * that finds nothing.
+         */
+        const guessed = (understood?.applied ?? []).map((a) => a.key);
+        while (understood && !error && (count ?? 0) === 0 && offset === 0) {
+            const step = relaxFilters(filters, guessed);
+            if (!step) break;
+
+            filters = step.filters;
+            understood.relaxed.push(step.dropped);
+            ({ data, error, count } = await run(filters));
+        }
+
         if (error) {
             console.error('GET /api/papers failed:', error.message);
             return NextResponse.json({ error: error.message }, { status: 500 });
@@ -145,6 +195,7 @@ export async function GET(req: NextRequest) {
             total: count ?? papers.length,
             hasMore: offset + papers.length < (count ?? 0),
             facets,
+            ...(understood ? { understood } : {}),
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error';
