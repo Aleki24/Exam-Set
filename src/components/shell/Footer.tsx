@@ -49,7 +49,7 @@ export default function Footer() {
 
     return (
         <footer className="mt-16 border-t border-border bg-card">
-            <div className="shell-width py-10 sm:py-14">
+            <div className="shell-bar py-10 sm:py-14">
                 {/* Who this is. Its own row, so its prose cannot set the height
                     of a column of links. */}
                 <div className="flex flex-wrap items-end justify-between gap-5 pb-8">
