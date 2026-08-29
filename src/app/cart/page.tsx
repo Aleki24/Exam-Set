@@ -8,6 +8,7 @@ import { ArrowLeft, ClipboardCheck, Infinity as InfinityIcon, LifeBuoy, Loader2,
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import PaymentPending from '@/components/checkout/PaymentPending';
+import GuestDownloads from '@/components/checkout/GuestDownloads';
 import { useCart } from '@/lib/cart';
 import { BUNDLE_TIERS, examTypeName, formatPrice } from '@/lib/catalog';
 import { durationLabel, type SubscriptionPlan } from '@/lib/plans';
@@ -61,9 +62,13 @@ export default function CartPage() {
                 if (data.order?.status === 'paid') {
                     setOrder(data.order);
                     cart.clear();
-                    toast.success('Payment received — your papers are in your library');
                     clearInterval(timer);
-                    router.push('/library');
+                    if (signedIn) {
+                        toast.success('Payment received — your papers are in your library');
+                        router.push('/library');
+                    } else {
+                        toast.success('Payment received — your papers are ready below');
+                    }
                 } else if (data.order?.status === 'failed') {
                     setOrder(data.order);
                     setStatusMessage('That payment did not go through. Try again or pay to the paybill.');
@@ -84,8 +89,18 @@ export default function CartPage() {
     }, [order?.id, order?.status]);
 
     const checkout = async () => {
-        if (!signedIn) {
-            router.push('/auth/login?next=/cart');
+        /*
+         * No detour through /auth/login.
+         *
+         * This used to bounce anybody without a session to a sign-in form. The
+         * cart survived the trip; the intention usually did not — a teacher who
+         * has decided to spend KES 30 should not first have to decide on a
+         * password. The number they are about to pay from is enough to hold
+         * their purchase, and the server makes the account from it.
+         */
+        if (!signedIn && !phone.trim()) {
+            setStatusMessage('Enter the M-Pesa number you will pay with.');
+            document.getElementById('phone')?.focus();
             return;
         }
         setSubmitting(true);
@@ -109,7 +124,10 @@ export default function CartPage() {
             if (data.granted) {
                 cart.clear();
                 toast.success(data.message || 'Added to your library');
-                router.push('/library');
+                // A guest has no library page to be sent to — their downloads
+                // are on the order in front of them. Pushing them to /library
+                // would land them on a sign-in wall holding a paid receipt.
+                if (!data.guest) router.push('/library');
             }
         } catch {
             toast.error('Checkout failed. Check your connection and try again.');
@@ -345,19 +363,26 @@ export default function CartPage() {
 
                                     {signedIn === false && (
                                         <p className="mt-3 text-xs text-muted-foreground">
-                                            You will be asked to sign in first — your cart is kept.
+                                            No account needed — this number becomes yours, and your
+                                            papers are ready to download the moment payment lands.
                                         </p>
                                     )}
                                 </div>
                             ) : (
-                                <PaymentPending
-                                    order={order}
-                                    statusMessage={statusMessage}
-                                    receipt={receipt}
-                                    setReceipt={setReceipt}
-                                    onSubmitReceipt={submitReceipt}
-                                    submitting={submitting}
-                                />
+                                order.status === 'paid' && signedIn === false ? (
+                                    // A guest has nowhere else to be sent. Their
+                                    // papers are here, on the screen they paid from.
+                                    <GuestDownloads order={order} />
+                                ) : (
+                                    <PaymentPending
+                                        order={order}
+                                        statusMessage={statusMessage}
+                                        receipt={receipt}
+                                        setReceipt={setReceipt}
+                                        onSubmitReceipt={submitReceipt}
+                                        submitting={submitting}
+                                    />
+                                )
                             )}
 
                             <ul className="mt-5 space-y-2.5 border-t border-border pt-4">
