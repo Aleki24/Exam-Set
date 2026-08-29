@@ -259,7 +259,7 @@ export default function TopNav() {
                         href="/library"
                         title="My library"
                         aria-label="My library"
-                        className={`hidden min-h-11 items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors xl:flex ${
+                        className={`hidden min-h-11 items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors md:flex lg:hidden xl:flex ${
                             pathname.startsWith('/library')
                                 ? 'text-foreground'
                                 : 'text-muted-foreground hover:text-foreground'
@@ -279,34 +279,52 @@ export default function TopNav() {
                     Uploading a paper is the owner's main job and was buried two
                     clicks inside the admin console, so it gets its own control.
 
-                    WHY THESE ARE `xl:` AND NOT `sm:`
+                    WHY `md:flex lg:hidden xl:flex`, WHICH LOOKS ODD
 
-                    They used to appear from 640px, while the hamburger that
-                    replaces them only disappears at 1024px — so for the whole
-                    range between, a signed-in admin got both at once: brand,
-                    cart, My library, Upload paper, Admin, theme, avatar, sign
-                    out AND the menu button, in a row with no space for them.
-                    "My library" and "Upload paper" each wrapped onto two lines.
+                    Because the space available to this row is not monotonic.
+                    The four primary links switch on at `lg` and off again
+                    below it, so the widest gap in the row is *underneath*
+                    1024px, not above it:
 
-                    Nothing is lost by hiding them: the collapsing menu below
-                    already carries My library, Upload a paper, Admin and Sign
-                    out, so this is the same set in the place that has room for
-                    it — and the menu button stays on screen until `xl` for a
-                    signed-in account precisely so it is still reachable. */}
+                      < 768   phone. Everything lives in the menu.
+                      768-1023 the links are hidden, so the row is brand, cart
+                              and these — acres of room.
+                      1024-1279 the links appear. Brand, four links, cart, and
+                              these no longer fit: this is where "My library"
+                              and "Upload paper" wrapped onto two lines.
+                      >= 1280  the tagline and the wider band buy the space back.
+
+                    An earlier fix hid them below `xl` altogether, which stopped
+                    the wrapping and took the upload button off the screen of
+                    every admin on a 1000px laptop — the one control the owner
+                    uses most. Showing them exactly where they fit is the honest
+                    rule, even though the breakpoints read strangely.
+
+                    Nothing is unreachable in the gap: the collapsing menu
+                    carries My library, Upload a paper, Admin and Sign out, and
+                    its button stays on screen until `xl` for a signed-in
+                    account precisely so that band is covered. */}
                 {isAdmin && (
                     <>
                         <Link
                             href="/papers/new"
-                            className="hidden min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition-colors hover:border-primary/40 hover:bg-primary/[0.04] xl:flex"
+                            title="Upload a paper"
+                            aria-label="Upload a paper"
+                            className="hidden min-h-11 items-center gap-2 rounded-md border border-border px-2.5 xl:px-3 text-sm font-semibold transition-colors hover:border-primary/40 hover:bg-primary/[0.04] md:flex"
                         >
                             <Upload className="h-4 w-4" aria-hidden />
-                            Upload paper
+                            {/* The label goes in the band where the four nav
+                                links are also on screen and nothing else fits;
+                                the button itself never does. Stocking the shop
+                                is the owner's job, and hunting for it in a menu
+                                on a 1100px laptop is the wrong trade. */}
+                            <span className="lg:hidden xl:inline">Upload paper</span>
                         </Link>
                         <Link
                             href="/admin"
                             title="Admin"
                             aria-label="Admin"
-                            className={`hidden min-h-11 items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors xl:flex ${
+                            className={`hidden min-h-11 items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors md:flex lg:hidden xl:flex ${
                                 pathname.startsWith('/admin')
                                     ? 'text-foreground'
                                     : 'text-muted-foreground hover:text-foreground'
@@ -331,7 +349,7 @@ export default function TopNav() {
 
                 {/* Account */}
                 {email ? (
-                    <div className="hidden items-center gap-2 xl:flex">
+                    <div className="hidden items-center gap-2 md:flex lg:hidden xl:flex">
                         <Link
                             href="/account"
                             className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary transition-colors hover:bg-primary/20"
