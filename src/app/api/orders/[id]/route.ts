@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { ORDER_TOKEN_COOKIE, orderTokenSecret, verifyOrderToken } from '@/lib/orderAccess';
 
 /**
  * GET /api/orders/:id — order status, polled by the checkout page while the
@@ -10,14 +12,40 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const { id } = await params;
         const supabase = await createClient();
         const { data: auth } = await supabase.auth.getUser();
-        if (!auth?.user) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
 
-        const { data, error } = await supabase
-            .from('orders')
-            .select('*, order_items(*)')
-            .eq('id', id)
-            .eq('user_id', auth.user.id)
-            .maybeSingle();
+        /*
+         * A guest is polling their own order.
+         *
+         * They have no session — that is the point of guest checkout — so the
+         * cookie naming this one order stands in for one. It proves nothing
+         * about any other order and nothing about an account: the token must
+         * verify, and it must name this exact id.
+         *
+         * Without that, a guest's checkout page would poll forever against a
+         * 401 while their payment settled behind it.
+         */
+        let guest = false;
+        if (!auth?.user) {
+            const secret = orderTokenSecret();
+            const token = req.cookies.get(ORDER_TOKEN_COOKIE)?.value;
+            const named = secret ? verifyOrderToken(token, secret) : null;
+
+            if (named !== id) {
+                return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+            }
+            guest = true;
+        }
+
+        // The service role only for the guest, whose rows RLS has no session to
+        // match. The `id` filter below is the same one either way; a signed-in
+        // buyer is still restricted to their own orders by `user_id`.
+        const db = guest ? createAdminClient() : supabase;
+        if (!db) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+
+        let query = db.from('orders').select('*, order_items(*)').eq('id', id);
+        if (!guest) query = query.eq('user_id', auth!.user!.id);
+
+        const { data, error } = await query.maybeSingle();
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         if (!data) return NextResponse.json({ error: 'Order not found' }, { status: 404 });

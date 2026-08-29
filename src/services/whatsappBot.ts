@@ -31,6 +31,7 @@ import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
 import { ensurePaperFile, paperFilename } from './paperFiles';
 import { describeQuery, parsePaperQuery } from './paperQuery';
 import { findPapersRelaxing, stockedSubjects } from './paperSearch';
+import { findOrCreateBuyerForPhone } from './buyerAccounts';
 import { createPlanOrder } from './planOrders';
 
 // How many messages one number may send per hour. Generous for a person,
@@ -501,35 +502,21 @@ export async function deliverAfterPayment(phone: string, planName?: string): Pro
  * Entitlements are per user, so the bot needs one to ask `can_download_paper`.
  * Creating it silently means a buyer's papers are waiting for them in /library
  * if they ever visit the website, rather than living in a parallel universe.
+ *
+ * The resolving itself now lives in services/buyerAccounts, because the shop's
+ * guest checkout answers the same question about the same numbers. A teacher
+ * who buys here on Monday and on the website on Tuesday is one customer with
+ * one library, and two lookups is how they quietly become two.
  */
 async function findOrCreateUserForPhone(admin: any, phone: string, session?: any): Promise<string | null> {
     if (session?.user_id) return session.user_id;
 
-    const { data: existing } = await admin
-        .from('profiles')
-        .select('id')
-        .eq('phone', phone)
-        .maybeSingle();
+    const userId = await findOrCreateBuyerForPhone(admin, phone, 'whatsapp');
+    if (!userId) return null;
 
-    if (existing?.id) {
-        await admin.from('whatsapp_sessions').update({ user_id: existing.id }).eq('phone', phone);
-        return existing.id;
-    }
-
-    const { data: created, error } = await admin.auth.admin.createUser({
-        phone,
-        phone_confirm: true,
-        user_metadata: { source: 'whatsapp' },
-    });
-
-    if (error || !created?.user) {
-        console.error('Could not create an account for a WhatsApp number:', error?.message);
-        return null;
-    }
-
-    // The signup trigger writes the profile, phone included since migration 020.
-    await admin.from('whatsapp_sessions').update({ user_id: created.user.id }).eq('phone', phone);
-    return created.user.id;
+    // Remembering it on the session saves the lookup on every later message.
+    await admin.from('whatsapp_sessions').update({ user_id: userId }).eq('phone', phone);
+    return userId;
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { signedDownloadUrl, storageUnavailableReason } from '@/utils/storage';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { ensurePaperFile, paperFilename } from '@/services/paperFiles';
+import { ORDER_TOKEN_COOKIE, orderTokenSecret, verifyOrderToken } from '@/lib/orderAccess';
 
 /**
  * GET /api/papers/:id/download?asset=paper|scheme
@@ -28,12 +29,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         if (!paper) return NextResponse.json({ error: 'Paper not found' }, { status: 404 });
 
         const { data: auth } = await supabase.auth.getUser();
-        const userId = auth?.user?.id;
+
+        /*
+         * Who is asking — a session, or a receipt.
+         *
+         * A guest who paid without signing in holds a signed cookie naming the
+         * one order they placed. It is not a session and cannot become one: it
+         * resolves to a user id only for the papers on that order, and only
+         * while the order is paid.
+         *
+         * The paywall below is untouched by any of this. `can_download_paper`
+         * still decides; this answers the earlier question of who is at the
+         * door, and answering it two ways is not the same as opening it twice.
+         */
+        // Only when there is no session. A signed-in buyer is answered as
+        // themselves and nothing else, so a stale guest cookie left over from an
+        // earlier purchase can never widen what their account may open.
+        const guest = auth?.user ? null : await guestOrderAccess(req, id);
+        const userId = auth?.user?.id ?? guest?.userId;
 
         const isFree = paper.price_cents === 0;
         const isAuthor = Boolean(userId) && paper.created_by === userId;
 
-        let entitled = isFree || isAuthor;
+        // A paid, settled order naming this paper is a purchase, which is what
+        // an entitlement records. The order is read with the service role
+        // because a guest has no session for RLS to key on — the check itself
+        // is no weaker: the order must be paid, and must contain this paper.
+        const boughtOnThisOrder = Boolean(guest);
+
+        let entitled = isFree || isAuthor || boughtOnThisOrder;
         if (!entitled && userId) {
             // One question, answered in the database: bought it, wrote it, it is
             // free, or a live subscription covers it. Asking SQL rather than
@@ -122,4 +146,62 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         console.error('download route error:', message);
         return NextResponse.json({ error: message }, { status: 500 });
     }
+}
+
+/**
+ * The guest behind an order cookie, if the cookie really covers this paper.
+ *
+ * Everything here is a reason to say no. The token must verify against the
+ * server's own key; the order it names must exist; it must be settled, because
+ * an unpaid order is a cart; and it must actually contain the paper being asked
+ * for, because otherwise one KES 30 purchase would open the catalogue.
+ *
+ * Read with the service role, which is the only way to read an order belonging
+ * to a buyer who has no session for row level security to key on. That is a
+ * wider client, not a wider rule: every condition above still has to hold, and
+ * the user id it returns is the one already stored on the order rather than
+ * anything the caller supplied.
+ */
+async function guestOrderAccess(
+    req: NextRequest,
+    examId: string
+): Promise<{ userId: string; orderId: string } | null> {
+    const token = req.cookies.get(ORDER_TOKEN_COOKIE)?.value;
+    if (!token) return null;
+
+    const secret = orderTokenSecret();
+    if (!secret) return null;
+
+    const orderId = verifyOrderToken(token, secret);
+    if (!orderId) return null;
+
+    const admin = createAdminClient();
+    if (!admin) return null;
+
+    const { data: order, error } = await admin
+        .from('orders')
+        .select('id, user_id, status')
+        .eq('id', orderId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('guest order lookup failed:', error.message);
+        return null;
+    }
+    if (!order?.user_id || order.status !== 'paid') return null;
+
+    const { data: line, error: lineError } = await admin
+        .from('order_items')
+        .select('exam_id')
+        .eq('order_id', orderId)
+        .eq('exam_id', examId)
+        .maybeSingle();
+
+    if (lineError) {
+        console.error('guest order item lookup failed:', lineError.message);
+        return null;
+    }
+    if (!line) return null;
+
+    return { userId: order.user_id as string, orderId };
 }
