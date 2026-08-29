@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Check, Download, Plus } from 'lucide-react';
 import type { PaperListing } from '@/types/shop';
 import { examTypeName, formatPrice, LEVEL_BY_SLUG } from '@/lib/catalog';
+import { PaperThumb } from './PaperCover';
+import { resourceKindName } from '@/lib/resources';
 
 interface PaperCardProps {
     paper: PaperListing;
@@ -57,12 +59,10 @@ export default function PaperCard({
     // Facts fold into a single short line. Duration is deliberately left to the
     // detail page: on a card it only ever caused a wrap.
     //
-    // The format earns its place on the card rather than waiting for the detail
-    // page: a teacher shopping for a scheme of work is shopping for something
-    // they can edit, and "Word" is the difference between a resource they can
-    // use and one they have to retype.
+    // The format is not in here — it sits on the thumbnail, the way every
+    // document site tags one, so the line keeps to what the document contains
+    // rather than what it is stored as.
     const facts = [
-        paper.file_format ?? null,
         paper.total_marks > 0 ? `${paper.total_marks} marks` : null,
         paper.question_count > 0 ? `${paper.question_count} questions` : null,
         paper.has_marking_scheme ? '+ scheme' : null,
@@ -81,17 +81,41 @@ export default function PaperCard({
                 <span className="sr-only">{paper.title}</span>
             </Link>
 
-            {/* The sitting, when there is one. It replaces the exam type rather
-                than joining it: "Kabras Mock End Term 2 2025" already says the
-                exam type, and a card in a grid of thirty has room for one
-                eyebrow, not two. */}
-            <p className="overline truncate" title={paper.set_name || undefined}>
-                {(!hideSet && paper.set_name) || examTypeName(paper.exam_type)}
-            </p>
+            {/* Picture of the page, then what it is — the order every document
+                site puts them in, because the picture is what the eye lands on
+                and it answers "typed or photocopied?" before a word is read. */}
+            <div className="flex gap-3">
+                <div className="relative shrink-0">
+                    <PaperThumb paper={paper} />
+                    {paper.file_format && (
+                        <span className="absolute inset-x-0 bottom-0 truncate bg-foreground/75 px-1 py-[1.5px] text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-background">
+                            {paper.file_format}
+                        </span>
+                    )}
+                </div>
 
-            <h3 className="heading-ui mt-2 transition-colors group-hover:text-primary">{paper.title}</h3>
+                <div className="min-w-0 flex-1">
+                    {/* The sitting, when there is one. It replaces the exam type
+                        rather than joining it: "Kabras Mock End Term 2 2025"
+                        already says the exam type, and a card in a grid of
+                        thirty has room for one eyebrow, not two. */}
+                    <p className="overline truncate" title={paper.set_name || undefined}>
+                        {/* `examTypeName` alone printed "EXAM" over a scheme of
+                            work — the same fault the detail page had, and the
+                            card is where it is seen thirty times at once. */}
+                        {(!hideSet && paper.set_name) ||
+                            (paper.exam_type
+                                ? examTypeName(paper.exam_type)
+                                : resourceKindName(paper.resource_kind))}
+                    </p>
 
-            <p className="meta mt-1.5">{meta}</p>
+                    <h3 className="heading-ui mt-1.5 transition-colors group-hover:text-primary">
+                        {paper.title}
+                    </h3>
+
+                    <p className="meta mt-1.5">{meta}</p>
+                </div>
+            </div>
 
             <div className="flex-1" />
 
@@ -153,10 +177,15 @@ export default function PaperCard({
 export function PaperCardSkeleton({ index = 0 }: { index?: number }) {
     return (
         <div className="surface fade-in p-4" style={{ '--i': index } as React.CSSProperties}>
-            <div className="skeleton h-2.5 w-20" />
-            <div className="skeleton mt-3 h-4 w-full" />
-            <div className="skeleton mt-2 h-4 w-3/5" />
-            <div className="skeleton mt-3 h-3 w-40" />
+            <div className="flex gap-3">
+                <div className="skeleton h-[75px] w-[58px] shrink-0 rounded-[3px]" />
+                <div className="min-w-0 flex-1">
+                    <div className="skeleton h-2.5 w-20" />
+                    <div className="skeleton mt-2.5 h-4 w-full" />
+                    <div className="skeleton mt-2 h-4 w-3/5" />
+                    <div className="skeleton mt-2.5 h-3 w-40" />
+                </div>
+            </div>
             <div className="skeleton mt-6 h-3 w-52" />
             <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
                 <div className="skeleton h-4 w-16" />

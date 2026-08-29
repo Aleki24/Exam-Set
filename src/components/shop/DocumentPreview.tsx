@@ -142,7 +142,7 @@ export default function DocumentPreview({
                     Page {current} of {total ?? shown}
                     {total !== null && total > shown ? ` · previewing ${shown}` : ''}
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="hidden items-center gap-1 sm:flex">
                     <button
                         type="button"
                         onClick={() => go(Math.max(1, current - 1))}
@@ -166,7 +166,7 @@ export default function DocumentPreview({
 
             <div
                 ref={scroller}
-                className="scroll-panel max-h-[75vh] space-y-4 overflow-y-auto bg-secondary/40 p-4"
+                className="scroll-panel max-h-[60vh] space-y-3 overflow-y-auto overscroll-contain bg-secondary/40 p-2 sm:max-h-[75vh] sm:space-y-4 sm:p-4"
             >
                 {data.pages.map((page, index) => (
                     <div
@@ -174,7 +174,7 @@ export default function DocumentPreview({
                         ref={(el) => {
                             pageRefs.current[index] = el;
                         }}
-                        className="mx-auto w-full max-w-[680px] overflow-hidden rounded-sm bg-paper shadow-sm ring-1 ring-border"
+                        className="mx-auto w-full max-w-full overflow-hidden rounded-sm bg-paper shadow-sm ring-1 ring-border sm:max-w-[680px]"
                     >
                         <PageBody page={page} title={paper.title} index={index} />
                     </div>
@@ -182,7 +182,7 @@ export default function DocumentPreview({
 
                 {/* Where the preview stops. A closed door, not a cut cable. */}
                 {moreToCome && (
-                    <div className="mx-auto w-full max-w-[680px] rounded-sm bg-paper px-6 py-10 text-center shadow-sm ring-1 ring-border">
+                    <div className="mx-auto w-full max-w-full rounded-sm bg-paper px-5 py-8 text-center shadow-sm ring-1 ring-border sm:max-w-[680px] sm:px-6 sm:py-10">
                         <Lock className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
                         <p className="heading-ui mt-3">
                             {total === null
@@ -225,7 +225,7 @@ function PageBody({ page, title, index }: { page: PreviewPage; title: string; in
     if (page.kind === 'html') {
         return (
             <div
-                className="preview-page px-8 py-8 font-serif text-[13px] leading-relaxed text-foreground"
+                className="preview-page px-4 py-5 font-serif text-[12px] leading-relaxed text-foreground sm:px-8 sm:py-8 sm:text-[13px]"
                 /*
                  * Sanitised server-side down to an allowlist of tags with every
                  * attribute stripped — see `sanitiseHtml`. There is no `href`,
@@ -237,7 +237,7 @@ function PageBody({ page, title, index }: { page: PreviewPage; title: string; in
     }
 
     return (
-        <pre className="whitespace-pre-wrap break-words px-8 py-8 font-serif text-[13px] leading-relaxed text-foreground">
+        <pre className="whitespace-pre-wrap break-words px-4 py-5 font-serif text-[12px] leading-relaxed text-foreground sm:px-8 sm:py-8 sm:text-[13px]">
             {page.text}
         </pre>
     );

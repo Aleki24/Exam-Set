@@ -894,6 +894,25 @@
 
     :where(.preview-page) th { font-weight: 700; }
 
+    /*
+     * A wide table on a narrow screen.
+     *
+     * A scheme of work is mostly table, and four columns of it do not fit a
+     * 360px phone at any font size worth reading. Letting the table scroll
+     * inside its own box is the only option that keeps the columns intact —
+     * squeezing them to fit turns every cell into one word per line, and
+     * letting the page scroll sideways breaks the whole layout rather than the
+     * one element that is too wide.
+     */
+    @media (max-width: 640px) {
+        :where(.preview-page) table {
+            display: block;
+            max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    }
+
     :where(.preview-page) blockquote {
         margin: 0 0 0.65em 0.8em;
         padding-left: 0.8em;
