@@ -68,7 +68,7 @@ export default async function KindPage({ params }: { params: Promise<{ kind: str
                     Every resource
                 </Link>
 
-                <header className="mt-6 max-w-2xl">
+                <header className="page-header mt-6">
                     <p className="overline">{kind.family}</p>
                     <h1 className="display-2 mt-3">{kind.plural}</h1>
                     <p className="lead mt-4">

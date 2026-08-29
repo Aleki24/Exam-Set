@@ -23,7 +23,7 @@ export default async function AboutPage() {
             <TopNav />
 
             <main className="shell-width py-10 sm:py-16">
-                <header className="max-w-2xl">
+                <header className="page-header">
                     <p className="overline">About us</p>
                     <h1 className="display-2 mt-3">Built for the Sunday night before the week starts</h1>
                     <p className="lead mt-5">

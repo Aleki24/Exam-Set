@@ -36,7 +36,7 @@ import { AuthProvider } from '@/lib/roles';
  */
 const sans = Inter_Tight({
     subsets: ['latin'],
-    weight: ['300', '400', '500'],
+    weight: ['300', '400', '500', '600'],
     variable: '--font-sans-face',
     display: 'swap',
 });

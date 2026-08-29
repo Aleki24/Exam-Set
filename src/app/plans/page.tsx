@@ -155,7 +155,7 @@ export default function PlansPage() {
                     Back to the shop
                 </Link>
 
-                <header className="max-w-xl">
+                <header className="page-header">
                     <h1 className="title-1">Every paper, one payment</h1>
                     <p className="mt-2 text-muted-foreground">
                         A term needs eight or ten papers. Buying them one at a time means one M-Pesa prompt each.

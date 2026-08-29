@@ -15,13 +15,23 @@
            near-white ground, blue primary, green counterpart. */
         --paper: oklch(0.984 0.003 247.858);
         --background: oklch(0.984 0.003 247.858);
-        --foreground: oklch(0.208 0.042 265.755);
+        /*
+         * Ink, not blue-grey.
+         *
+         * This was 0.208 lightness at 0.042 chroma on a blue hue — dark enough
+         * to pass any contrast check, and visibly *blue* at paragraph size, so
+         * body copy read as slightly faded rather than printed. Deeper, and
+         * with most of the cast taken out: enough hue left that it still sits
+         * in the same family as the borders and the brand, not so much that
+         * text looks like it was set in navy.
+         */
+        --foreground: oklch(0.185 0.021 265.755);
 
         --card: oklch(1 0 0);
-        --card-foreground: oklch(0.208 0.042 265.755);
+        --card-foreground: oklch(0.185 0.021 265.755);
 
         --popover: oklch(1 0 0);
-        --popover-foreground: oklch(0.208 0.042 265.755);
+        --popover-foreground: oklch(0.185 0.021 265.755);
 
         /* Skulbase blue — the brand action colour, identical to the sibling app. */
         --primary: oklch(0.546 0.245 262.881);
@@ -34,7 +44,16 @@
         --secondary-foreground: oklch(0.279 0.041 260.031);
 
         --muted: oklch(0.955 0.008 247.896);
-        --muted-foreground: oklch(0.478 0.033 256.802);
+        /*
+         * Secondary copy — the lead line, the metadata under a title.
+         *
+         * At 0.478 it cleared AA (6.3:1) and still looked washed out, because
+         * more than half the page's words are set in it: every card's metadata,
+         * every lead, every caption. Darkened to about 7.6:1 and de-blued to
+         * match the ink above, so it reads as quieter text rather than as text
+         * that has faded.
+         */
+        --muted-foreground: oklch(0.432 0.021 256.802);
 
         /* Amber is reserved for commerce only: prices, add-to-cart, pay, publish.
            Deep enough to sit beside the blue without shouting. */
@@ -149,7 +168,8 @@
         --secondary-foreground: oklch(0.968 0.007 247.896);
 
         --muted: oklch(0.315 0.04 258);
-        --muted-foreground: oklch(0.735 0.028 256.802);
+        /* Brighter and less blue, for the same reason as the light theme. */
+        --muted-foreground: oklch(0.775 0.019 256.802);
 
         --accent: oklch(0.735 0.145 60);
         --accent-foreground: oklch(0.18 0.03 60);
@@ -323,14 +343,30 @@
        line up.
        ------------------------------------------------------------------------ */
 
+    /*
+     * THE TWO DISPLAY SIZES CARRY 600, EVERYTHING ELSE STAYS AT 500
+     *
+     * The weight ceiling — only 300/400/500 loaded, `font-synthesis-weight:
+     * none` so the browser cannot fake the rest — was introduced deliberately,
+     * and it is still what governs the interface: buttons, card headings, form
+     * labels and the ~279 `font-bold` classes in the markup all resolve to 500.
+     *
+     * The two page-title sizes are the exception, and only they. At 36-60px,
+     * 500 is not a quiet heading, it is a heading that looks like it failed to
+     * load — the larger the type, the lighter a given weight appears, which is
+     * why display faces are cut heavier than text faces at the same nominal
+     * weight. 600 gives a page title the authority its size is already
+     * claiming. Nothing below `display-2` changes, so the ceiling still does
+     * its job everywhere the density argument for it applies.
+     */
     :where(.display-1) {
         font-family: var(--font-display);
-        @apply text-4xl font-medium leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-6xl;
+        @apply text-4xl font-semibold leading-[1.02] tracking-[-0.042em] sm:text-5xl lg:text-6xl;
     }
 
     :where(.display-2) {
         font-family: var(--font-display);
-        @apply text-3xl font-medium leading-[1.1] tracking-[-0.035em] sm:text-4xl;
+        @apply text-3xl font-semibold leading-[1.08] tracking-[-0.037em] sm:text-4xl;
     }
 
     :where(.title-1) {
@@ -644,8 +680,38 @@
        LAYOUT
        ------------------------------------------------------------------------ */
 
+    /*
+     * The band every page is laid out in.
+     *
+     * It was 1440px, which on a desktop was wider than anything in it. A page
+     * header is set to a reading measure of about 670px, so at 1440 it occupied
+     * the left half of the band and the right half was empty — the whole site
+     * read as shoved against the left edge, which is exactly what it was.
+     *
+     * 1200px is the narrowest the top navigation survives: below about 1160 the
+     * sign-in link wraps onto two lines. So this is the tightest the band can be
+     * without the chrome breaking, and at that width the content column is
+     * visibly centred on a laptop screen instead of hugging one side.
+     */
     :where(.shell-width) {
-        @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8;
+        @apply mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8;
+    }
+
+    /*
+     * A page's title block: eyebrow, heading, one line of lead.
+     *
+     * Left-aligned, on the same edge as everything below it. Centring the title
+     * over left-aligned content was tried and is worse: it puts the heading's
+     * first letter in the middle of the band and the first card's first letter
+     * at the edge, so the eye starts each block in a different place and the
+     * page reads as two designs stacked on each other.
+     *
+     * What makes it feel composed is the band being narrow enough to sit
+     * centred in the viewport — see `.shell-width` — not the text inside it
+     * being centred. One left edge, all the way down.
+     */
+    :where(.page-header) {
+        @apply max-w-2xl;
     }
 
     /* Section label with a rule running off to the right — the editorial

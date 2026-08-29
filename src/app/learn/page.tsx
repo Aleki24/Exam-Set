@@ -34,7 +34,7 @@ export default function LearnHubPage() {
             <TopNav />
 
             <main className="shell-width py-10 sm:py-14">
-                <header className="max-w-2xl">
+                <header className="page-header">
                     <p className="overline">The library</p>
                     <h1 className="display-2 mt-3">Everything a Kenyan classroom needs</h1>
                     <p className="lead mt-4">

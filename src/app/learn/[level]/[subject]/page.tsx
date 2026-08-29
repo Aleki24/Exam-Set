@@ -84,7 +84,7 @@ export default async function SubjectPage({ params }: Params) {
             <main className="shell-width py-10 sm:py-14">
                 <Breadcrumb level={level} subject={subject.name} />
 
-                <header className="mt-6 max-w-2xl">
+                <header className="page-header mt-6">
                     <p className="overline">
                         {level.name} · {level.short}
                     </p>

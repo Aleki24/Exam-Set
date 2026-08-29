@@ -91,7 +91,7 @@ export default async function HomePage() {
             <TopNav />
 
             <main className="shell-width py-10 sm:py-14">
-                <header className="max-w-2xl">
+                <header className="page-header">
                     <p className="overline">
                         {level
                             ? `${level.name}${account.grade ? ` · ${account.grade}` : ''}`

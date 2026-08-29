@@ -31,7 +31,7 @@ export default function ContactPage() {
             <TopNav />
 
             <main className="shell-width py-10 sm:py-16">
-                <header className="max-w-2xl">
+                <header className="page-header">
                     <p className="overline">Contact &amp; help</p>
                     <h1 className="display-2 mt-3">Something not working? Tell us.</h1>
                     <p className="lead mt-5">
