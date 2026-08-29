@@ -51,7 +51,7 @@ export default async function LevelPage({ params }: Params) {
             <main className="shell-width py-10 sm:py-14">
                 <Breadcrumb level={level.name} />
 
-                <header className="mt-6 max-w-2xl">
+                <header className="page-header mt-6">
                     <p className="overline">{level.curriculum} · {level.short}</p>
                     <h1 className="display-2 mt-3">{level.name}</h1>
                     <p className="lead mt-4">{level.blurb}.</p>
