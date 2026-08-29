@@ -4,8 +4,8 @@ import { notFound } from 'next/navigation';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
-import { LEVELS, LEVEL_BY_SLUG, type LevelSlug } from '@/lib/catalog';
-import { kindFamiliesForLevel, subjectsForLevel } from '@/lib/resources';
+import { LEVELS, LEVEL_BY_SLUG, gradeSlug, type LevelSlug } from '@/lib/catalog';
+import { kindFamiliesForLevel } from '@/lib/resources';
 
 interface Params {
     params: Promise<{ level: string }>;
@@ -28,20 +28,22 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 /**
- * ONE LEVEL — subjects first, then what exists for each.
+ * ONE LEVEL — the classes in it.
  *
- * Subjects come from the curriculum, not from stock. That is deliberate and it
- * is the difference between a library and a shelf: a subject with nothing
- * behind it still belongs on this page, because its absence is information. A
- * list assembled from inventory would quietly hide half the curriculum and give
- * a teacher no way to tell that it had.
+ * This page used to jump straight to learning areas, which skipped the step a
+ * teacher actually starts from. Nobody teaches Junior School; they teach Grade
+ * 8. Picking the class first means every list after it is the one class's, so
+ * "Mathematics" is a shelf a teacher can use rather than three years of it to
+ * read past.
+ *
+ * Three or four choices, each of them large, because this is a fork in the road
+ * and not a menu to scan.
  */
 export default async function LevelPage({ params }: Params) {
     const { level: slug } = await params;
     const level = LEVEL_BY_SLUG[slug];
     if (!level) notFound();
 
-    const subjects = subjectsForLevel(level.slug as LevelSlug);
     const families = kindFamiliesForLevel(level.slug as LevelSlug);
 
     return (
@@ -60,24 +62,31 @@ export default async function LevelPage({ params }: Params) {
                     </p>
                 </header>
 
-                <section aria-labelledby="subjects-heading" className="mt-12">
-                    <h2 id="subjects-heading" className="overline">
-                        Learning areas
-                    </h2>
+                <section aria-labelledby="grades-heading" className="mt-12">
+                    <div className="rule-heading">
+                        <h2 id="grades-heading" className="overline">
+                            Choose a class
+                        </h2>
+                    </div>
 
-                    <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {subjects.map((subject, index) => (
-                            <li key={subject.slug}>
+                    <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {level.grades.map((grade, index) => (
+                            <li key={grade}>
                                 <Link
-                                    href={`/learn/${level.slug}/${subject.slug}`}
-                                    className="sheet settle-in group flex items-center justify-between gap-3 p-4"
+                                    href={`/learn/${level.slug}/${gradeSlug(grade)}`}
+                                    className="tile settle-in group flex h-full items-center justify-between gap-3 p-5"
                                     style={{ '--i': index % 12 } as React.CSSProperties}
                                 >
-                                    <span className="heading-ui transition-colors group-hover:text-primary">
-                                        {subject.name}
+                                    <span className="min-w-0">
+                                        <span className="title-2 block transition-colors group-hover:text-primary">
+                                            {grade}
+                                        </span>
+                                        <span className="meta mt-1 block">
+                                            Papers, notes, schemes and plans
+                                        </span>
                                     </span>
                                     <ArrowRight
-                                        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
+                                        className="h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
                                         aria-hidden
                                     />
                                 </Link>
@@ -109,7 +118,7 @@ export default async function LevelPage({ params }: Params) {
                                         <li key={kind.slug}>
                                             <Link
                                                 href={`/catalog?level=${level.slug}&kind=${kind.slug}`}
-                                                className="surface group block h-full p-4 transition-colors duration-200 hover:border-primary/40"
+                                                className="tile group block h-full p-4"
                                             >
                                                 <h4 className="heading-ui transition-colors group-hover:text-primary">
                                                     {kind.plural}

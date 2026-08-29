@@ -440,6 +440,41 @@
     }
 
     /*
+     * A NAVIGATION TILE — a box you can see, and click with confidence.
+     *
+     * `surface` and `sheet` are quiet on purpose: they hold content, and a
+     * hairline is the right weight for something you read rather than aim at.
+     * A tile is different — it is a choice. Grade 7, Grade 8, Grade 9; sixteen
+     * learning areas. At a hairline they read as a list that happens to have
+     * lines near it, and on the dense grids that carry them nobody could tell
+     * where one target ended and the next began.
+     *
+     * So the border is two pixels of real colour rather than one of near-white,
+     * it darkens to the brand on hover, and the whole tile lifts. The intent is
+     * the same as the ruled margin on `sheet`: say what kind of thing this is
+     * before it is read.
+     */
+    :where(.tile) {
+        @apply relative bg-card;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius);
+        transition:
+            border-color 180ms ease-out,
+            box-shadow 180ms ease-out,
+            transform 180ms ease-out;
+    }
+
+    :where(.tile):hover {
+        border-color: color-mix(in oklch, var(--primary) 55%, var(--border));
+        box-shadow: var(--shadow-sm);
+        transform: translateY(-1px);
+    }
+
+    :where(.tile):active {
+        transform: translateY(0);
+    }
+
+    /*
      * The workhorse card. A "sheet": white paper on the warm ground, with a
      * hairline ruled margin down the left edge that inks in on hover — the one
      * detail that ties the whole shop back to a real exam script.
