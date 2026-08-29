@@ -5,7 +5,7 @@ import { ChevronRight, FileQuestion } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import { createClient } from '@/utils/supabase/server';
-import { LEVEL_BY_SLUG, formatPrice, examTypeName, gradeFromSlug, gradeSlug, type LevelSlug } from '@/lib/catalog';
+import { LEVEL_BY_SLUG, TERMS, formatPrice, examTypeName, gradeFromSlug, gradeSlug, type LevelSlug } from '@/lib/catalog';
 import { PaperThumb } from '@/components/shop/PaperCover';
 import { describeFormats } from '@/lib/uploadFormats';
 import type { PaperListing } from '@/types/shop';
@@ -197,6 +197,65 @@ async function loadResources(level: LevelSlug, grade: string, names: string[]): 
     }
 }
 
+/**
+ * The rows of one kind, split into the terms they belong to.
+ *
+ * Ordered by the school year rather than by how many are in each: Term 1 before
+ * Term 2 before Term 3 is the only order a teacher reads them in. Papers with
+ * no term come last, under a heading that says so, because "no term" is a real
+ * answer for a past paper and not a gap to hide.
+ */
+function groupByTerm(rows: any[]): { term: (typeof TERMS)[number] | null; rows: any[] }[] {
+    const groups: { term: (typeof TERMS)[number] | null; rows: any[] }[] = [];
+
+    for (const term of TERMS) {
+        const matching = rows.filter((row) => row.term_slug === term.slug);
+        if (matching.length > 0) groups.push({ term, rows: matching });
+    }
+
+    const untermed = rows.filter((row) => !TERMS.some((t) => t.slug === row.term_slug));
+    if (untermed.length > 0) groups.push({ term: null, rows: untermed });
+
+    return groups;
+}
+
+/**
+ * One kind's rows, laid out term by term.
+ *
+ * A shelf sorted only by date interleaves the terms, so a teacher setting Term 2
+ * work reads past Term 1 and Term 3 to assemble their own list. The school year
+ * is the strongest grouping a Kenyan teacher has and it is already on every row.
+ *
+ * The headings only appear when they earn their place: one group is not a
+ * grouping, so a kind whose papers all sit in Term 2 — or carry no term at all,
+ * as plenty of past papers do — stays a plain grid.
+ */
+function TermGroups({ rows }: { rows: any[] }) {
+    const groups = groupByTerm(rows);
+    const labelled = groups.length > 1;
+
+    return (
+        <>
+            {groups.map(({ term, rows: termRows }, group) => (
+                <div key={term?.slug ?? 'untermed'} className={group === 0 ? 'mt-4' : 'mt-7'}>
+                    {labelled && (
+                        <div className="rule-heading mb-3">
+                            <h4 className="overline">{term ? term.name : 'Any term'}</h4>
+                        </div>
+                    )}
+                    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {termRows.map((row, index) => (
+                            <li key={row.id}>
+                                <ResourceCard row={row} index={index} />
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ))}
+        </>
+    );
+}
+
 function FamilySection({
     family,
     kinds,
@@ -221,13 +280,7 @@ function FamilySection({
                         </div>
                         <p className="meta mt-1">{def.description}</p>
 
-                        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {rows.map((row, index) => (
-                                <li key={row.id}>
-                                    <ResourceCard row={row} index={index} />
-                                </li>
-                            ))}
-                        </ul>
+                        <TermGroups rows={rows} />
                     </div>
                 ))}
             </div>
