@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, ClipboardCheck, Download, FileText, Infinity as InfinityIcon, Loader2, Pencil, Plus, School, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ClipboardCheck, Download, FileText, Loader2, Pencil, Plus, School, ShieldCheck, Zap } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import PaperCard from '@/components/shop/PaperCard';
@@ -233,6 +233,13 @@ export default function PaperDetailPage() {
     const level = paper.level_slug ? LEVEL_BY_SLUG[paper.level_slug] : undefined;
     const isFree = paper.price_cents === 0;
     const owned = Boolean(paper.owned);
+
+    const facts = [
+        paper.total_marks > 0 ? { label: 'Total marks', value: paper.total_marks } : null,
+        paper.question_count > 0 ? { label: 'Questions', value: paper.question_count } : null,
+        paper.time_limit ? { label: 'Duration', value: paper.time_limit } : null,
+        paper.purchase_count > 0 ? { label: 'Bought', value: paper.purchase_count } : null,
+    ].filter(Boolean) as { label: string; value: React.ReactNode }[];
     const inCart = cart.has(paper.id);
     const term = TERMS.find((t) => t.slug === paper.term_slug);
 
@@ -281,12 +288,25 @@ export default function PaperDetailPage() {
                         {paper.description && <p className="lead mt-6 max-w-2xl">{paper.description}</p>}
 
                         {/* Facts. A quiet row, not four boxes. */}
-                        <dl className="mt-10 flex flex-wrap gap-x-10 gap-y-5 border-y border-border py-5">
-                            <Fact label="Total marks" value={paper.total_marks || '—'} />
-                            <Fact label="Questions" value={paper.question_count || '—'} />
-                            <Fact label="Duration" value={paper.time_limit || '—'} />
-                            <Fact label="Bought" value={paper.purchase_count} />
-                        </dl>
+                        {/*
+                          * Only the facts this paper actually has.
+                          *
+                          * Every missing value printed an em dash, so a paper
+                          * uploaded without a duration or a question count —
+                          * which is most of them, because the uploader is not
+                          * asked to count questions — showed a row of four
+                          * headings over three dashes. That is a wide band of
+                          * page saying "we do not know" three times. What is
+                          * known is worth showing; what is not is worth the
+                          * space it frees.
+                          */}
+                        {facts.length > 0 && (
+                            <dl className="mt-8 flex flex-wrap gap-x-10 gap-y-4 border-y border-border py-4">
+                                {facts.map((fact) => (
+                                    <Fact key={fact.label} label={fact.label} value={fact.value} />
+                                ))}
+                            </dl>
+                        )}
 
                         {/* What's included */}
                         <div className="mt-10">
@@ -328,58 +348,22 @@ export default function PaperDetailPage() {
                                     <span>Unlimited re-downloads — it stays in your library</span>
                                 </li>
                             </ul>
-                        </div>
 
-                        {paper.institution && (
-                            <p className="mt-4 text-xs text-muted-foreground">Source: {paper.institution}</p>
-                        )}
-
-                        {/* The document itself.
-                            
-                            This lives in the main column rather than beside the
-                            price, where it first went: a reader squeezed into a
-                            340px rail renders a scheme of work's table four
-                            words to a column, which is exactly the document
-                            somebody is trying to judge. The typeset cover stays
-                            in the rail, where a thumbnail is all that fits and
-                            all that is wanted. */}
-                        <DocumentPreview paper={paper} owned={owned} onBuy={() => cart.add(paper)} />
-                    </div>
-
-                    {/* Buy panel */}
-                    <aside>
-                        <div className="sticky top-24 space-y-4">
-                        <PaperCover paper={paper} />
-                        <div className="surface p-5">
-                            {/* The price gets its own line. Sharing one with
-                                two badges wrapped "KES 30" onto two lines in a
-                                340px rail — the single number a buyer is
-                                looking for, broken in half. */}
-                            <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
-                                {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
-                            </span>
-                            {(paper.file_format || paper.has_marking_scheme) && (
-                                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                    {paper.file_format && (
-                                        <span className="badge-soft">
-                                            {paper.editable ? (
-                                                <Pencil className="h-3 w-3" />
-                                            ) : (
-                                                <FileText className="h-3 w-3" />
-                                            )}
-                                            {paper.file_format}
-                                        </span>
-                                    )}
-                                    {paper.has_marking_scheme && (
-                                        <span className="badge-soft">
-                                            <ClipboardCheck className="h-3 w-3" />
-                                            Scheme included
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-
-                            <div className="mt-5 space-y-2">
+                            {/*
+                              * The action, next to what it gets you.
+                              *
+                              * It used to live only in the price rail, so the
+                              * list of what the download contains and the
+                              * button that produces it were in different
+                              * columns — and on a stacked layout, several
+                              * screens apart. Reading the description and then
+                              * having to go looking is the wrong order.
+                              *
+                              * It is here and nowhere else: a second copy in
+                              * the rail is how the page ended up saying
+                              * everything twice.
+                              */}
+                            <div className="mt-6 flex flex-col gap-2 sm:max-w-md">
                                 {owned || isFree ? (
                                     <>
                                         <button
@@ -445,29 +429,73 @@ export default function PaperDetailPage() {
                                     </>
                                 )}
                             </div>
+                        </div>
 
-                            {/* Every line here is a claim the code honours.
-                                Nothing about review or verification, because
-                                nobody performs either. */}
-                            <ul className="mt-5 space-y-2.5 border-t border-border pt-4">
+                        {paper.institution && (
+                            <p className="mt-4 text-xs text-muted-foreground">Source: {paper.institution}</p>
+                        )}
+
+                        {/* The document itself.
+                            
+                            This lives in the main column rather than beside the
+                            price, where it first went: a reader squeezed into a
+                            340px rail renders a scheme of work's table four
+                            words to a column, which is exactly the document
+                            somebody is trying to judge. The typeset cover stays
+                            in the rail, where a thumbnail is all that fits and
+                            all that is wanted. */}
+                        <DocumentPreview paper={paper} owned={owned} onBuy={() => cart.add(paper)} />
+                    </div>
+
+                    {/* Buy panel */}
+                    <aside>
+                        <div className="sticky top-24 space-y-4">
+                        <PaperCover paper={paper} />
+                        <div className="surface p-5">
+                            {/* The price gets its own line. Sharing one with
+                                two badges wrapped "KES 30" onto two lines in a
+                                340px rail — the single number a buyer is
+                                looking for, broken in half. */}
+                            <span className={isFree ? 'display-2 text-success' : 'figure text-3xl font-bold text-accent'}>
+                                {isFree ? 'Free' : formatPrice(paper.price_cents, paper.currency)}
+                            </span>
+                            {(paper.file_format || paper.has_marking_scheme) && (
+                                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                    {paper.file_format && (
+                                        <span className="badge-soft">
+                                            {paper.editable ? (
+                                                <Pencil className="h-3 w-3" />
+                                            ) : (
+                                                <FileText className="h-3 w-3" />
+                                            )}
+                                            {paper.file_format}
+                                        </span>
+                                    )}
+                                    {paper.has_marking_scheme && (
+                                        <span className="badge-soft">
+                                            <ClipboardCheck className="h-3 w-3" />
+                                            Scheme included
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/*
+                              * Only what "What you get" does not already say.
+                              *
+                              * This list and that one were four-fifths the same
+                              * sentence twice on one screen: the Word file, the
+                              * marking scheme and the re-downloads were all
+                              * stated in both, which is most of why the page
+                              * felt heavy. What is left is the part that
+                              * belongs beside a price — how you pay, and who
+                              * sat it.
+                              */}
+                            <ul className="mt-4 space-y-2.5 border-t border-border pt-4">
                                 <Assurance icon={ShieldCheck}>
                                     Pay with M-Pesa. Your download unlocks the moment payment is
                                     confirmed.
                                 </Assurance>
-                                <Assurance icon={InfinityIcon}>
-                                    Yours to download again, any time, from your library.
-                                </Assurance>
-                                {paper.editable && (
-                                    <Assurance icon={Pencil}>
-                                        A Word file, so you can edit it before you use it.
-                                    </Assurance>
-                                )}
-                                {paper.has_marking_scheme && (
-                                    <Assurance icon={ClipboardCheck}>
-                                        The marking scheme comes with it, with answers and mark
-                                        allocation.
-                                    </Assurance>
-                                )}
                                 {paper.institution && (
                                     <Assurance icon={School}>Sat at {paper.institution}.</Assurance>
                                 )}

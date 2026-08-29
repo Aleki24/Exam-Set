@@ -166,7 +166,21 @@ export default function DocumentPreview({
 
             <div
                 ref={scroller}
-                className="scroll-panel max-h-[60vh] space-y-3 overflow-y-auto overscroll-contain bg-secondary/40 p-2 sm:max-h-[75vh] sm:space-y-4 sm:p-4"
+                /*
+                 * `overscroll-auto`, overriding `.scroll-panel`.
+                 *
+                 * The shared utility contains the scroll, which is right for
+                 * the panels it was written for — a file list inside a form
+                 * should not drag the page. It is wrong here: reaching the last
+                 * page of the preview stopped the scroll dead, and the reader
+                 * had to lift their finger and find a margin to carry on down
+                 * the page. Chaining is what people expect of a document
+                 * embedded in a page: scroll the thing, then scroll past it.
+                 *
+                 * A plain utility beats `.scroll-panel` because that rule is
+                 * written inside `:where()`, which has no specificity.
+                 */
+                className="scroll-panel overscroll-auto max-h-[65vh] space-y-3 overflow-y-auto bg-secondary/40 p-2 sm:max-h-[78vh] sm:space-y-4 sm:p-3"
             >
                 {data.pages.map((page, index) => (
                     <div

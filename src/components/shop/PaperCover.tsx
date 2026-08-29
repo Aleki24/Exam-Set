@@ -20,7 +20,19 @@ import type { PaperListing } from '@/types/shop';
  */
 export default function PaperCover({ paper }: { paper: PaperListing }) {
     return (
-        <figure className="surface overflow-hidden">
+        /*
+         * Capped, and centred when it is capped.
+         *
+         * The cover keeps A4's 1:1.294 ratio, which is right in the 340px buy
+         * rail it was designed for. Below `lg` the page's two columns stack and
+         * the rail becomes the full width of the content — so on a laptop that
+         * is a cover about 930px wide and 1200px tall, most of it the blank
+         * middle of a page. It read as a rendering fault rather than a cover.
+         *
+         * 320px is the width it is drawn at everywhere else, so this changes
+         * nothing above `lg` and stops it inflating below.
+         */
+        <figure className="surface mx-auto max-w-[320px] overflow-hidden lg:max-w-none">
             <div className="relative aspect-[1/1.294] w-full bg-paper">
                 <CoverPage paper={paper} />
             </div>
