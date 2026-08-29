@@ -6,6 +6,9 @@ import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import { createClient } from '@/utils/supabase/server';
 import { LEVEL_BY_SLUG, formatPrice, examTypeName, gradeFromSlug, gradeSlug, type LevelSlug } from '@/lib/catalog';
+import { PaperThumb } from '@/components/shop/PaperCover';
+import { describeFormats } from '@/lib/uploadFormats';
+import type { PaperListing } from '@/types/shop';
 import {
     RESOURCE_FAMILIES,
     RESOURCE_KIND_BY_SLUG,
@@ -160,7 +163,8 @@ async function loadResources(level: LevelSlug, grade: string, names: string[]): 
         const { data, error } = await supabase
             .from('exams')
             .select(
-                'id, slug, title, subject, grade_label, exam_type, resource_kind, term_slug, year, ' +
+                'id, slug, title, subject, grade_label, level_slug, exam_type, resource_kind, term_slug, year, ' +
+                    'time_limit, paper_number, pdf_storage_key, marking_scheme_storage_key, ' +
                     'total_marks, question_count, price_cents, currency, has_marking_scheme, ' +
                     'institution, download_count, created_at'
             )
@@ -253,17 +257,56 @@ function ResourceCard({ row, index }: { row: any; index: number }) {
         .filter(Boolean)
         .join(' · ');
 
+    /*
+     * The thumbnail wants a listing, and this page reads rows.
+     *
+     * `PaperThumb` draws the same cover the shop card draws, from the same
+     * fields — so rather than a second miniature that could drift from it, the
+     * row is shaped into the listing it already almost is. Everything it needs
+     * is now in the select; `level_slug` and the storage keys were added for
+     * exactly this.
+     */
+    const listing = {
+        ...row,
+        level_slug: row.level_slug ?? undefined,
+        total_marks: row.total_marks ?? 0,
+        question_count: row.question_count ?? 0,
+        has_marking_scheme: Boolean(row.has_marking_scheme),
+    } as PaperListing;
+
+    const format = row.pdf_storage_key
+        ? describeFormats([
+              row.pdf_storage_key,
+              row.has_marking_scheme ? row.marking_scheme_storage_key : null,
+          ])
+        : null;
+
     return (
         <Link
             href={href}
             className="sheet settle-in group flex h-full flex-col p-4"
             style={{ '--i': index % 12 } as React.CSSProperties}
         >
-            {row.exam_type && <p className="overline">{examTypeName(row.exam_type)}</p>}
+            <div className="flex gap-3">
+                <div className="relative shrink-0">
+                    <PaperThumb paper={listing} />
+                    {format && (
+                        <span className="absolute inset-x-0 bottom-0 truncate bg-foreground/75 px-1 py-[1.5px] text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-background">
+                            {format}
+                        </span>
+                    )}
+                </div>
 
-            <h4 className="title-2 mt-3 transition-colors group-hover:text-primary">{row.title}</h4>
+                <div className="min-w-0 flex-1">
+                    {row.exam_type && <p className="overline truncate">{examTypeName(row.exam_type)}</p>}
 
-            {meta && <p className="meta mt-2">{meta}</p>}
+                    <h4 className="heading-ui mt-1.5 transition-colors group-hover:text-primary">
+                        {row.title}
+                    </h4>
+
+                    {meta && <p className="meta mt-1.5">{meta}</p>}
+                </div>
+            </div>
 
             <div className="flex-1" />
 
