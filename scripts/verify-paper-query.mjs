@@ -257,6 +257,37 @@ section('A matched set name is not also read as filters');
     check('term kept', q.term, 'term-3');
 }
 
+section('A school is recognised by the name people call it');
+{
+    // Nobody types "Kabras High School" — they type "kabras". Until this
+    // matched, the shortest and commonest way to name a school found nothing.
+    const q = parsePaperQuery('kabras form 4 maths', SUBJECTS, SETS);
+    check('both sittings matched', q.setIds?.length, 2);
+    check('the school is named back', q.setLabel, 'Kabras High School');
+    check('the rest still parses', q.grade, 'Form 4');
+    check('nothing left over', q.leftover, '');
+}
+{
+    // The words every school shares identify none of them. Answering "high" or
+    // "school" with whichever institution sorted first is a wrong paper
+    // delivered confidently, which is worse than no match at all.
+    for (const generic of ['high school papers', 'girls school', 'mock']) {
+        const q = parsePaperQuery(generic, SUBJECTS, SETS);
+        check(`"${generic}" names no school`, q.setIds, undefined);
+    }
+}
+{
+    // Two schools sharing a distinctive word is the ambiguous case. Neither is
+    // picked; the word falls through to the free-text search, where it belongs.
+    const shared = [
+        { id: 'a', name: 'Nyeri Mock 2025', institution: 'Nyeri Boys' },
+        { id: 'b', name: 'Nyeri Joint 2025', institution: 'Nyeri Girls' },
+    ];
+    const q = parsePaperQuery('nyeri maths', SUBJECTS, shared);
+    check('an ambiguous school is not guessed', q.setIds, undefined);
+    check('and the word survives to be searched', q.leftover, 'nyeri');
+}
+
 section('describeQuery leads with the sitting');
 {
     const q = parsePaperQuery('kabras mock end term 2 2025 mathematics', SUBJECTS, SETS);

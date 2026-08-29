@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReadonlyURLSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion, Upload } from 'lucide-react';
+import { Search, SlidersHorizontal, X, PenSquare, Loader2, FileQuestion, Upload, Sparkles } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import Footer from '@/components/shell/Footer';
 import { useRole } from '@/lib/roles';
@@ -15,7 +15,12 @@ import FilterRail from '@/components/shop/FilterRail';
 import { useCart } from '@/lib/cart';
 import { LEVELS, examTypeName } from '@/lib/catalog';
 import { RESOURCE_KIND_BY_SLUG } from '@/lib/resources';
-import type { PaperFilters, PaperListing, PaperListResponse } from '@/types/shop';
+import type {
+    PaperFilters,
+    PaperListing,
+    PaperListResponse,
+    SearchInterpretation,
+} from '@/types/shop';
 import { usePresence } from '@/lib/usePresence';
 
 const PAGE_SIZE = 24;
@@ -80,9 +85,12 @@ function Catalog() {
     // Debounce the search box so typing does not hammer the API.
     useEffect(() => {
         const timer = setTimeout(() => {
-            setFilters((f) =>
-                f.search === (searchDraft || undefined) ? f : { ...f, search: searchDraft || undefined }
-            );
+            setFilters((f) => {
+                if (f.search === (searchDraft || undefined)) return f;
+                // A new sentence deserves a fresh reading: `raw` is a correction
+                // to one particular search, not a mode the box stays stuck in.
+                return { ...f, search: searchDraft || undefined, raw: undefined };
+            });
         }, 300);
         return () => clearTimeout(timer);
     }, [searchDraft]);
@@ -100,6 +108,7 @@ function Catalog() {
             if (filters.set) params.set('set', filters.set);
             if (filters.price) params.set('price', filters.price);
             if (filters.search) params.set('search', filters.search);
+            if (filters.raw) params.set('raw', '1');
             if (filters.sort) params.set('sort', filters.sort);
             params.set('limit', String(PAGE_SIZE));
             params.set('offset', String(from));
@@ -296,6 +305,17 @@ function Catalog() {
                         />
                     </div>
 
+                    {!loading && response?.understood && (
+                        <SearchReading
+                            reading={response.understood}
+                            onSearchWords={() => patchFilters({ raw: true })}
+                        />
+                    )}
+
+                    {!loading && filters.raw && filters.search && (
+                        <LiteralSearchNotice onReadAsFilters={() => patchFilters({ raw: undefined })} />
+                    )}
+
                     <AppliedFilters
                         filters={filters}
                         facets={response?.facets}
@@ -446,6 +466,85 @@ function Catalog() {
  * The rail folds groups away, so this is the honest record of what is narrowing
  * the list — and the one place to undo any of it.
  */
+/**
+ * What the search box was understood to ask for.
+ *
+ * "form 4 maths term 3" is a request, and the shop now reads it as one — three
+ * filters rather than a substring no title contains. But a search that rewrites
+ * itself and says nothing is a search nobody can correct, so the reading is
+ * shown, and the words are always one press away from being searched literally.
+ *
+ * When nothing matched as asked, the line also names what was given up. A grid
+ * that quietly answers a wider question than the one on screen is the failure
+ * this is here to prevent.
+ */
+function SearchReading({
+    reading,
+    onSearchWords,
+}: {
+    reading: SearchInterpretation;
+    onSearchWords: () => void;
+}) {
+    return (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-[var(--radius)] border border-border bg-secondary/40 px-3 py-2 text-xs">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+
+            <span className="text-muted-foreground">Showing</span>
+            <span className="font-semibold text-foreground">{reading.label}</span>
+
+            {reading.text && (
+                <>
+                    <span className="text-muted-foreground">matching</span>
+                    <span className="font-semibold text-foreground">“{reading.text}”</span>
+                </>
+            )}
+
+            {reading.relaxed.length > 0 && (
+                <span className="text-muted-foreground">
+                    — nothing matched that exactly, so the {listWords(reading.relaxed)} was widened
+                </span>
+            )}
+
+            <button
+                type="button"
+                onClick={onSearchWords}
+                className="ml-auto shrink-0 font-semibold text-primary underline-offset-2 hover:underline"
+            >
+                Search the words instead
+            </button>
+        </div>
+    );
+}
+
+/**
+ * The way back from a literal search.
+ *
+ * Turning the reading off has to be as reversible as turning it on, or the
+ * first person who presses "search the words instead" is stuck with an empty
+ * grid and no idea why the shop got worse.
+ */
+function LiteralSearchNotice({ onReadAsFilters }: { onReadAsFilters: () => void }) {
+    return (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-[var(--radius)] border border-border px-3 py-2 text-xs">
+            <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="text-muted-foreground">Searching for these words exactly.</span>
+            <button
+                type="button"
+                onClick={onReadAsFilters}
+                className="ml-auto shrink-0 font-semibold text-primary underline-offset-2 hover:underline"
+            >
+                Read it as filters instead
+            </button>
+        </div>
+    );
+}
+
+/** "term", "term and year", "year, term and exam type". */
+function listWords(items: string[]): string {
+    if (items.length <= 1) return items[0] ?? '';
+    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 function AppliedFilters({
     filters,
     facets,
@@ -593,6 +692,7 @@ function filtersFromParams(params: URLSearchParams | ReadonlyURLSearchParams): P
         set: get('set'),
         price: price === 'free' || price === 'paid' ? price : undefined,
         search: get('search'),
+        raw: params.get('raw') === '1' || undefined,
         sort: SORTS.some((s) => s.value === sort) ? (sort as PaperFilters['sort']) : 'newest',
     };
 }
@@ -610,6 +710,7 @@ function paramsFromFilters(filters: PaperFilters): URLSearchParams {
     if (filters.set) params.set('set', filters.set);
     if (filters.price) params.set('price', filters.price);
     if (filters.search) params.set('search', filters.search);
+    if (filters.raw) params.set('raw', '1');
     // The default ordering is the absence of a sort, not `?sort=newest`.
     if (filters.sort && filters.sort !== 'newest') params.set('sort', filters.sort);
     return params;

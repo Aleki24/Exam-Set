@@ -448,7 +448,57 @@ function matchSet(
             return;
         }
     }
+
+    /*
+     * Finally the name a school is actually called.
+     *
+     * Nobody types "Kabras High School". They type "kabras", which is the whole
+     * point of recognising schools at all — and until now it matched nothing,
+     * because the passes above want the registered name in full.
+     *
+     * Matching on any word would be worse than not matching: "high", "school"
+     * and "st" belong to half the institutions in the country, and answering
+     * "st marys" with whichever school sorted first is a wrong paper delivered
+     * confidently. So a word only counts when it is distinctive — not one of
+     * the words every school shares — and only when exactly one school in the
+     * catalogue owns it. A word two schools share stays unmatched and falls
+     * through to the free-text search, where an ambiguous word belongs.
+     */
+    const owners = new Map<string, { label: string; ids: string[] }[]>();
+    for (const [key, entry] of institutions) {
+        for (const word of new Set(key.split(' '))) {
+            if (word.length < 4 || GENERIC_SCHOOL_WORDS.has(word)) continue;
+            owners.set(word, [...(owners.get(word) ?? []), entry]);
+        }
+    }
+
+    for (const word of words) {
+        const holders = owners.get(word);
+        if (!holders || holders.length !== 1) continue;
+
+        const [{ label, ids }] = holders;
+        result.setIds = ids;
+        result.setLabel = label;
+        // Only the word that was typed is claimed. Claiming the school's full
+        // name would strike out "high" and "school" wherever else they appear.
+        const i = words.indexOf(word);
+        if (i >= 0) consumed.add(i);
+        return;
+    }
 }
+
+/**
+ * The words nearly every Kenyan school shares, so none of them identifies one.
+ *
+ * Kept separate from STOP_WORDS: these are meaningful inside a school's name
+ * and meaningless as a way of picking it out of a list.
+ */
+const GENERIC_SCHOOL_WORDS = new Set([
+    'high', 'school', 'schools', 'secondary', 'primary', 'junior', 'senior',
+    'academy', 'college', 'institute', 'centre', 'center', 'education',
+    'boys', 'girls', 'mixed', 'day', 'boarding', 'national', 'county',
+    'sub', 'sec', 'saint', 'group', 'complex', 'comprehensive', 'integrated',
+]);
 
 /**
  * A short, human description of what was understood, for the bot to echo back.
