@@ -693,8 +693,43 @@
      * without the chrome breaking, and at that width the content column is
      * visibly centred on a laptop screen instead of hugging one side.
      */
+    /*
+     * THE CONTENT COLUMN, WITH A REAL MARGIN EITHER SIDE
+     *
+     * A fixed 32px gutter is not a margin on a 1000px-wide window — it is the
+     * text touching the edge of the screen, which is what this looked like. And
+     * a max-width alone does not help below the cap: at 1000px nothing is
+     * centred because the band already fits, so every page ran edge to edge.
+     *
+     * So the gutter scales with the window instead. `clamp` keeps it honest at
+     * both ends: never less than 20px on a phone, never more than 104px on a
+     * large screen, and 8vw in between — about 80px on a 1000px laptop, which
+     * reads as a margin rather than as padding.
+     *
+     * The max-width then does the rest above 1140px, so a wide screen gets the
+     * gutter *and* the centred band, and the column never grows past a width
+     * that is comfortable to read a line in.
+     */
     :where(.shell-width) {
-        @apply mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8;
+        @apply mx-auto w-full max-w-[1140px];
+        padding-inline: clamp(1.25rem, 8vw, 6.5rem);
+    }
+
+    /*
+     * The chrome that sits above and below it: the navigation bar and footer.
+     *
+     * These want the opposite of a margin. Measured, an admin's row — brand,
+     * four links, cart, library, upload, admin, theme, avatar, sign out — needs
+     * about 1020px before it starts wrapping, which is what the screenshot of
+     * "My library" broken over two lines was. Giving it the content's gutters
+     * would guarantee that wrap on any laptop.
+     *
+     * So the bar spans wider and keeps a tight gutter. It is chrome: it is
+     * meant to feel attached to the top of the window, and a navigation that is
+     * wider than the article beneath it is what almost every site does.
+     */
+    :where(.shell-bar) {
+        @apply mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-8;
     }
 
     /*

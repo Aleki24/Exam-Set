@@ -182,7 +182,7 @@ export default function TopNav() {
 
     return (
         <header className="sticky top-0 z-50 border-b border-border/60 bar-blur">
-            <div className="shell-width flex h-16 items-center gap-3">
+            <div className="shell-bar flex h-16 items-center gap-2 xl:gap-3">
                 {/* Brand */}
                 <Link
                     href="/"
@@ -217,7 +217,7 @@ export default function TopNav() {
                                 key={href}
                                 href={href}
                                 aria-current={active ? 'page' : undefined}
-                                className={`relative flex min-h-11 items-center gap-2 whitespace-nowrap px-2.5 text-sm font-semibold transition-colors xl:px-3.5 ${
+                                className={`relative flex min-h-11 items-center gap-2 whitespace-nowrap px-2 text-sm font-semibold transition-colors xl:px-3 ${
                                     active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                                 }`}
                             >
@@ -257,39 +257,62 @@ export default function TopNav() {
                 {email && (
                     <Link
                         href="/library"
-                        className={`hidden min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors sm:flex ${
+                        title="My library"
+                        aria-label="My library"
+                        className={`hidden min-h-11 items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors xl:flex ${
                             pathname.startsWith('/library')
                                 ? 'text-foreground'
                                 : 'text-muted-foreground hover:text-foreground'
                         }`}
                     >
                         <Library className="h-4 w-4" aria-hidden />
-                        My library
+                        {/* Icon only, with no breakpoint that brings the label
+                            back — the row is capped at 1200px by `shell-bar`,
+                            so it never gets wider no matter how large the
+                            screen is, and an admin's full set of controls is
+                            91px over with these two labelled. `title` and the
+                            accessible name carry the meaning instead. */}
                     </Link>
                 )}
 
                 {/* Admin — only the owner and admins ever see these two.
                     Uploading a paper is the owner's main job and was buried two
-                    clicks inside the admin console, so it gets its own control. */}
+                    clicks inside the admin console, so it gets its own control.
+
+                    WHY THESE ARE `xl:` AND NOT `sm:`
+
+                    They used to appear from 640px, while the hamburger that
+                    replaces them only disappears at 1024px — so for the whole
+                    range between, a signed-in admin got both at once: brand,
+                    cart, My library, Upload paper, Admin, theme, avatar, sign
+                    out AND the menu button, in a row with no space for them.
+                    "My library" and "Upload paper" each wrapped onto two lines.
+
+                    Nothing is lost by hiding them: the collapsing menu below
+                    already carries My library, Upload a paper, Admin and Sign
+                    out, so this is the same set in the place that has room for
+                    it — and the menu button stays on screen until `xl` for a
+                    signed-in account precisely so it is still reachable. */}
                 {isAdmin && (
                     <>
                         <Link
                             href="/papers/new"
-                            className="hidden min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition-colors hover:border-primary/40 hover:bg-primary/[0.04] sm:flex"
+                            className="hidden min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition-colors hover:border-primary/40 hover:bg-primary/[0.04] xl:flex"
                         >
                             <Upload className="h-4 w-4" aria-hidden />
                             Upload paper
                         </Link>
                         <Link
                             href="/admin"
-                            className={`hidden min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors sm:flex ${
+                            title="Admin"
+                            aria-label="Admin"
+                            className={`hidden min-h-11 items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors xl:flex ${
                                 pathname.startsWith('/admin')
                                     ? 'text-foreground'
                                     : 'text-muted-foreground hover:text-foreground'
                             }`}
                         >
                             <ShieldCheck className="h-4 w-4" aria-hidden />
-                            Admin
                         </Link>
                     </>
                 )}
@@ -308,7 +331,7 @@ export default function TopNav() {
 
                 {/* Account */}
                 {email ? (
-                    <div className="hidden items-center gap-2 sm:flex">
+                    <div className="hidden items-center gap-2 xl:flex">
                         <Link
                             href="/account"
                             className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary transition-colors hover:bg-primary/20"
@@ -343,7 +366,7 @@ export default function TopNav() {
                 <button
                     type="button"
                     onClick={() => setMobileOpen((v) => !v)}
-                    className="btn-icon lg:hidden"
+                    className={`btn-icon ${email ? 'xl:hidden' : 'lg:hidden'}`}
                     aria-label="Menu"
                     aria-expanded={mobileOpen}
                 >
@@ -362,7 +385,7 @@ export default function TopNav() {
                 links are gone and nothing says why. */}
             {staleSession && (
                 <div className="border-t border-amber-500/30 bg-amber-500/10">
-                    <div className="shell-width flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-xs">
+                    <div className="shell-bar flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-xs">
                         <span className="font-semibold">Your session has expired.</span>
                         <span className="text-muted-foreground">
                             You are seeing the site as a signed-out visitor until you sign in again.
@@ -387,12 +410,12 @@ export default function TopNav() {
                 while it is folded away, which the old conditional render got
                 for free by not existing. */}
             <div
-                className="sheet-collapse lg:hidden"
+                className={`sheet-collapse ${email ? 'xl:hidden' : 'lg:hidden'}`}
                 data-state={mobileOpen ? 'open' : 'closed'}
             >
                 <div className="bg-card">
                     <nav
-                        className="shell-width flex flex-col gap-1 border-t border-border py-3"
+                        className="shell-bar flex flex-col gap-1 border-t border-border py-3"
                         inert={!mobileOpen}
                     >
                         {/* Which account this is. The desktop bar shows initials
