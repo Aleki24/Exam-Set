@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { isSignedOut, reportRequestFailure } from '@/lib/apiErrors';
 import { ClipboardCheck, Download, FileText, Loader2, PenSquare, Receipt, Trash2 } from 'lucide-react';
 import TopNav from '@/components/shell/TopNav';
 import { examTypeName, formatPrice } from '@/lib/catalog';
@@ -46,11 +47,20 @@ export default function LibraryPage() {
     useEffect(() => {
         fetch('/api/library')
             .then(async (res) => {
-                if (res.status === 401) {
+                // Only a session the server actually refused sends somebody to
+                // sign in. A session it could not check comes back 503, and
+                // redirecting on that would throw a signed-in reader out of
+                // their own library and onto a form with nothing to fix.
+                if (isSignedOut(res)) {
                     router.push('/auth/login?next=/library');
                     return null;
                 }
-                return res.json();
+                const payload = await res.json();
+                if (!res.ok) {
+                    reportRequestFailure(res, payload, 'Could not load your library');
+                    return null;
+                }
+                return payload;
             })
             .then((payload) => payload && setData(payload))
             .catch(() => toast.error('Could not load your library'))
@@ -75,7 +85,7 @@ export default function LibraryPage() {
             const payload = await res.json();
 
             if (!res.ok) {
-                toast.error(payload.error || 'Could not delete this paper');
+                reportRequestFailure(res, payload, 'Could not delete this paper');
                 return;
             }
 
@@ -98,7 +108,7 @@ export default function LibraryPage() {
             const res = await fetch(`/api/papers/${paper.id}/download?asset=${asset}`);
             const payload = await res.json();
             if (!res.ok) {
-                toast.error(payload.error || 'Download failed');
+                reportRequestFailure(res, payload, 'Download failed');
                 return;
             }
             window.open(payload.url, '_blank', 'noopener');
@@ -297,7 +307,7 @@ function PurchasedPapers({
             });
             const data = await res.json();
             if (!res.ok) {
-                toast.error(data.error || 'Could not build the download');
+                reportRequestFailure(res, data, 'Could not build the download');
                 return;
             }
             // Spaced out rather than fired at once: a browser silently drops a

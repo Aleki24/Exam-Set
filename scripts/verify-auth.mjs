@@ -173,13 +173,18 @@ function fakeClient({
     authThrows = false,
 } = {}) {
     const calls = { getUser: 0, profiles: 0 };
+    let failing = authThrows;
 
     return {
         calls,
+        /** Lets one client be a dropped request and then a healthy one. */
+        recover() {
+            failing = false;
+        },
         auth: {
             async getClaims() {
                 calls.getUser++;
-                if (authThrows) throw new Error('network down');
+                if (failing) throw new Error('network down');
                 if (!user) return { data: null, error: null };
                 const claims = { sub: user.id, email: user.email };
                 if (claimedRole !== undefined) claims.user_role = claimedRole;
@@ -269,12 +274,55 @@ section('A failed verification is an answer, not a crash');
     check('the throw becomes a result', result.claims, null);
     assert('carrying the error', Boolean(result.error), 'reported');
 
-    check('so the guard reports signed out', await getSignedInUser(client), null);
-    check('and the route gets a clean 401', (await requireUser(client)).failure?.status, 401);
+    check('there is nobody to name', await getSignedInUser(client), null);
 
     // Confined to the request that saw it: the next one asks again.
     const later = fakeClient();
     check('a later request is unaffected', (await getSignedInUser(later))?.id, 'u1');
+}
+
+section('A session that could not be checked is not a session that was refused');
+{
+    /*
+     * The bug: a signed-in owner, three panels loading at once, and three red
+     * "Sign in to continue" toasts stacked over a page that was showing their
+     * own initials. Nothing had ended their session. Verifying a token is a
+     * network call on a cold instance — fetching the project's public keys, or
+     * renewing an expired one — and every guard read that call falling over as
+     * proof that nobody was signed in.
+     *
+     * `middleware.ts` had this right already and fails open on silence. These
+     * are the same rule, one layer down: silence is a 503 the browser can
+     * retry, and only a verdict is a 401 that asks somebody to sign in.
+     */
+    const down = () => fakeClient({ authThrows: true });
+
+    const user = await requireUser(down());
+    check('requireUser does not call it a sign-out', user.failure?.status, 503);
+    assert('and says so in a way a client can read', user.failure?.unverified === true, 'flagged');
+    assert(
+        'without telling a signed-in person to sign in',
+        !/sign in/i.test(user.failure?.error ?? ''),
+        user.failure?.error
+    );
+
+    check('requireAdmin agrees', (await requireAdmin(down())).failure?.status, 503);
+    check('so does the fresh path', (await requireAdmin(down(), { fresh: true })).failure?.status, 503);
+    check('and requireOwner', (await requireOwner(down())).failure?.status, 503);
+
+    // The other half of the same rule: when the check does complete and finds
+    // nobody, that is a verdict and must still be a 401.
+    const empty = () => fakeClient({ user: null });
+    check('a real sign-out is still 401', (await requireUser(empty())).failure?.status, 401);
+    check('with the sentence that fits it', (await requireUser(empty())).failure?.error, 'Sign in to continue');
+    check('and requireAdmin says the same', (await requireAdmin(empty())).failure?.status, 401);
+
+    // A blip is not cached: the guards drop a silent read so a route that asks
+    // again gets another chance to be told, rather than inheriting the failure.
+    const flaky = fakeClient({ authThrows: true });
+    check('the blip fails', (await requireUser(flaky)).failure?.status, 503);
+    flaky.recover();
+    check('the recovery does not', (await requireUser(flaky)).user?.id, 'u1');
 }
 
 section('An auth server that never answers does not hang the middleware');

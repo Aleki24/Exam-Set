@@ -5,6 +5,7 @@ import {
     readVerifiedClaims,
     type VerifiedClaims,
 } from '@/utils/supabase/claims';
+import { authErrorMessage, isSessionRejected } from '@/utils/supabase/authFailure';
 
 /**
  * SERVER-SIDE GUARDS FOR API ROUTES
@@ -51,6 +52,24 @@ import {
  * The exception is a route holding a service-role client, which bypasses row
  * level security and therefore has no wall behind it. Those pass `fresh: true`,
  * and are the only places that still pay for a round trip.
+ *
+ * "SIGN IN TO CONTINUE" IS A VERDICT, NOT A SHRUG
+ *
+ * Verifying a token is local in the happy case, and a network call in three
+ * others: fetching the project's public keys on a cold process, renewing an
+ * expired token, and every call at all on a project still signing with the
+ * legacy shared secret. `readVerifiedClaims` gives all of that five seconds,
+ * and every guard here used to read the deadline being reached as "nobody is
+ * signed in" — a 401 reading "Sign in to continue", sent to somebody who was
+ * signed in and could see their own name in the navigation while it arrived.
+ *
+ * On a page that loads three things at once it arrived three times, because
+ * three parallel requests are three chances to hit it. That is the screenshot
+ * this section exists because of.
+ *
+ * So the two are told apart here the same way `middleware.ts` already tells
+ * them apart, using the same `isSessionRejected`: a verdict is a 401, silence
+ * is a 503 the browser can retry and must never turn into a sign-in prompt.
  *
  * WHY THE MEMO IS KEYED ON THE CLIENT
  *
@@ -101,7 +120,7 @@ function isRole(value: unknown): value is Role {
 const userByClient = new WeakMap<SupabaseClient, Promise<SignedInUser | null>>();
 const actorByClient = new WeakMap<SupabaseClient, Promise<Actor | null>>();
 const freshActorByClient = new WeakMap<SupabaseClient, Promise<Actor | null>>();
-const claimsByClient = new WeakMap<SupabaseClient, Promise<VerifiedClaims | null>>();
+const claimsByClient = new WeakMap<SupabaseClient, Promise<SessionRead>>();
 
 /**
  * Runs `resolve` once per client and hands every later caller the same promise.
@@ -127,17 +146,66 @@ function memoise<T>(
     return pending;
 }
 
-/** The verified claims in this request's access token, or null when signed out. */
-function getClaims(supabase: SupabaseClient): Promise<VerifiedClaims | null> {
+/**
+ * What this request's access token turned out to be.
+ *
+ * `unverified` is the difference between "there is nobody here" and "nobody
+ * answered" — see `utils/supabase/authFailure`, which spells out why collapsing
+ * the two signs live users out. Verifying a token is usually local, but it is
+ * not free: the public keys have to be fetched once per process, an expired
+ * token has to be renewed, and `readVerifiedClaims` gives both of those five
+ * seconds before it gives up. On a cold serverless instance that deadline is
+ * reachable, and every guard below used to read reaching it as "signed out".
+ */
+interface SessionRead {
+    claims: VerifiedClaims | null;
+    /** True when the session could not be checked at all. Never a verdict. */
+    unverified: boolean;
+}
+
+/** Reads and verifies this request's access token. Never throws. */
+function readSession(supabase: SupabaseClient): Promise<SessionRead> {
     return memoise(claimsByClient, supabase, async () => {
         const { claims, error } = await readVerifiedClaims(supabase);
-        return error ? null : claims;
+        if (!error) return { claims, unverified: false };
+
+        // Settled: there is no session, or the token itself rules one out.
+        if (isSessionRejected(error)) return { claims: null, unverified: false };
+
+        // Nobody answered.
+        console.warn('Could not verify the session:', authErrorMessage(error));
+        return { claims: null, unverified: true };
     });
+}
+
+/** The verified claims in this request's access token, or null when signed out. */
+async function getClaims(supabase: SupabaseClient): Promise<VerifiedClaims | null> {
+    return (await readSession(supabase)).claims;
+}
+
+/**
+ * The failure to send when the session could not be checked, and nothing when
+ * it could. Every guard below opens with this.
+ *
+ * Clearing the memo on the way out is what stops one blip answering for a whole
+ * request — the same reason `memoise` refuses to keep a rejection. It is done
+ * here rather than inside `readSession` so that the several reads within one
+ * guard still share a single attempt, and only the *next* guard pays for a
+ * retry.
+ */
+async function unverified(supabase: SupabaseClient): Promise<GuardFailure | undefined> {
+    if (!(await readSession(supabase)).unverified) return undefined;
+    claimsByClient.delete(supabase);
+    return UNVERIFIED;
 }
 
 /**
  * The signed-in user, or null. One verification per request, no round trip once
  * the project signs its tokens asymmetrically.
+ *
+ * Null covers both "signed out" and "could not tell", so a caller that has to
+ * act differently on the second — every guard below does — reads `readSession`
+ * instead.
  */
 export function getSignedInUser(supabase: SupabaseClient): Promise<SignedInUser | null> {
     return memoise(userByClient, supabase, async () => {
@@ -207,8 +275,31 @@ export function getFreshActor(supabase: SupabaseClient): Promise<Actor | null> {
 
 export interface GuardFailure {
     error: string;
-    status: 401 | 403;
+    status: 401 | 403 | 503;
+    /**
+     * True when the session could not be checked, as opposed to refused.
+     *
+     * Sent to the browser as a 503 so the client can tell the two apart without
+     * reading the sentence. Telling a signed-in person to sign in because a
+     * verification timed out is the bug this flag exists to prevent: they are
+     * already signed in, signing in again fixes nothing, and the site has just
+     * called them a stranger.
+     */
+    unverified?: true;
 }
+
+/**
+ * The answer when the session could not be checked.
+ *
+ * A 503 rather than a 401, because it is this service that is struggling, not
+ * the caller's credentials — and because the browser has to be able to tell
+ * "your session ended" from "ask me again in a moment" without parsing English.
+ */
+const UNVERIFIED: GuardFailure = {
+    error: 'We could not check your session just now. Try again in a moment.',
+    status: 503,
+    unverified: true,
+};
 
 export interface GuardOptions {
     /**
@@ -231,9 +322,32 @@ export interface GuardOptions {
 export async function requireUser(
     supabase: SupabaseClient
 ): Promise<{ user: SignedInUser; failure?: never } | { user?: never; failure: GuardFailure }> {
+    const silence = await unverified(supabase);
+    if (silence) return { failure: silence };
+
     const user = await getSignedInUser(supabase);
     if (!user) return { failure: { error: 'Sign in to continue', status: 401 } };
     return { user };
+}
+
+/**
+ * Requires any signed-in account, and hands back its role too.
+ *
+ * For the routes that let anybody through but then decide differently for an
+ * admin — deleting a paper you did not write, say. `requireUser` deliberately
+ * cannot answer that question, and reaching past the guards to `getActor` to
+ * answer it by hand is how one route ended up with its own 401 and none of the
+ * session handling the others share.
+ */
+export async function requireActor(
+    supabase: SupabaseClient
+): Promise<{ actor: Actor; failure?: never } | { actor?: never; failure: GuardFailure }> {
+    const silence = await unverified(supabase);
+    if (silence) return { failure: silence };
+
+    const actor = await getActor(supabase);
+    if (!actor) return { failure: { error: 'Sign in to continue', status: 401 } };
+    return { actor };
 }
 
 /**
@@ -244,6 +358,9 @@ export async function requireAdmin(
     supabase: SupabaseClient,
     options: GuardOptions = {}
 ): Promise<{ actor: Actor; failure?: never } | { actor?: never; failure: GuardFailure }> {
+    const silence = await unverified(supabase);
+    if (silence) return { failure: silence };
+
     const actor = options.fresh ? await getFreshActor(supabase) : await getActor(supabase);
     if (!actor) return { failure: { error: 'Sign in to continue', status: 401 } };
     if (!actor.isAdmin) {
@@ -267,6 +384,9 @@ export async function requireAdmin(
 export async function requireOwner(
     supabase: SupabaseClient
 ): Promise<{ actor: Actor; failure?: never } | { actor?: never; failure: GuardFailure }> {
+    const silence = await unverified(supabase);
+    if (silence) return { failure: silence };
+
     const actor = await getFreshActor(supabase);
     if (!actor) return { failure: { error: 'Sign in to continue', status: 401 } };
     if (!actor.isOwner) {
